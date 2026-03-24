@@ -1,0 +1,35 @@
+/* CSS reset simplificado */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: "Montserrat", sans-serif;
+  background: #f3e6df;
+  color: #71594e;
+}
+
+a {
+  color: inherit;
+}
+
+.ql-container {
+  border: none !important;
+}
+
+.ql-editor {
+  min-height: 220px;
+  font-family: "Montserrat", sans-serif;
+  color: #71594e;
+  background: #fdfaf7;
+}
