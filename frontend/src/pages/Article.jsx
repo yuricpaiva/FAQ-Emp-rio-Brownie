@@ -136,12 +136,26 @@ function Article() {
           fontSize: "1rem",
           overflow: "hidden",
           width: "100%",
+          whiteSpace: "pre-wrap",
+          tabSize: 4,
         }}
         className="prose prose-slate max-w-none"
         dangerouslySetInnerHTML={{ __html: article.content }}
       />
       <style>
         {`
+          .prose {
+            white-space: pre-wrap;
+            tab-size: 4;
+          }
+
+          .prose p,
+          .prose li,
+          .prose blockquote,
+          .prose pre {
+            white-space: inherit;
+          }
+
           .prose img {
             max-width: 100%;
             height: auto;
