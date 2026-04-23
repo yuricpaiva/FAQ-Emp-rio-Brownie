@@ -12,20 +12,55 @@ model User {
   name         String
   email        String  @unique
   passwordHash String
-  role         String  @default("admin")
+  role         String  @default("reader")
   photoUrl     String  @default("")
   active       Boolean @default(true)
 }
 
-model Article {
+model Category {
   id        Int      @id @default(autoincrement())
-  title     String
+  name      String   @unique
   slug      String   @unique
-  category  String
-  content   String
-  author    String   @default("Admin")
-  authorPhoto String @default("")
-  updatedBy String   @default("Admin")
+  iconKey   String   @default("default")
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Article {
+  id          Int               @id @default(autoincrement())
+  title       String
+  slug        String            @unique
+  summary     String            @default("")
+  category    String
+  content     String
+  status      String            @default("published")
+  sortOrder   Int               @default(0)
+  tags        String            @default("")
+  author      String            @default("Admin")
+  authorPhoto String            @default("")
+  updatedBy   String            @default("Admin")
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  revisions   ArticleRevision[]
+
+  @@index([status, sortOrder, updatedAt])
+  @@index([category])
+}
+
+model ArticleRevision {
+  id        Int      @id @default(autoincrement())
+  articleId Int
+  title     String
+  summary   String   @default("")
+  category  String
+  content   String
+  status    String
+  tags      String   @default("")
+  updatedBy String   @default("Admin")
+  createdAt DateTime @default(now())
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId, createdAt])
 }

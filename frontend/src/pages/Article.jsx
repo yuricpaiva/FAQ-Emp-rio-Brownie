@@ -1,22 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import DOMPurify from "dompurify";
 import api from "../services/api";
 
 function Article() {
   const { slug } = useParams();
   const [article, setArticle] = useState(null);
   const [notFound, setNotFound] = useState(false);
-  const initials =
-    article?.author
-      ?.split(" ")
-      .filter(Boolean)
-      .map((word) => word[0]?.toUpperCase())
-      .join("")
-      .slice(0, 2) || "AU";
 
   useEffect(() => {
     api
-      .get(`/articles/${slug}`)
+      .get(`/knowledge/articles/${slug}`)
       .then((res) => {
         setArticle(res.data);
         setNotFound(false);
@@ -27,144 +21,66 @@ function Article() {
       });
   }, [slug]);
 
+  const articleMeta = useMemo(() => {
+    if (!article) return null;
+
+    const createdAt = new Date(article.createdAt);
+    const updatedAt = new Date(article.updatedAt);
+    const wasUpdated = createdAt.getTime() !== updatedAt.getTime();
+
+    return {
+      label: wasUpdated ? "Atualizado por" : "Criado por",
+      name: article.updatedBy || article.author,
+      photoUrl: article.authorPhoto || "",
+      dateLabel: (wasUpdated ? "Em " : "Em ") + updatedAt.toLocaleDateString("pt-BR"),
+      initials:
+        (article.updatedBy || article.author || "US")
+          .split(" ")
+          .filter(Boolean)
+          .map((part) => part[0]?.toUpperCase())
+          .join("")
+          .slice(0, 2) || "US",
+    };
+  }, [article]);
+
   if (notFound) {
-    return <p>Artigo não encontrado.</p>;
+    return <p className="empty-state">Artigo não encontrado.</p>;
   }
 
-  if (!article) {
-    return <p>Carregando...</p>;
+  if (!article || !articleMeta) {
+    return <div className="surface-card">Carregando artigo...</div>;
   }
 
   return (
-    <article
-      style={{
-        background: "#fff",
-        border: "1px solid #e3d6cb",
-        borderRadius: "18px",
-        padding: "2.5rem",
-        boxShadow: "0 12px 28px rgba(0,0,0,0.08)",
-        maxWidth: "1100px",
-        margin: "0 auto",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          marginBottom: "0.75rem",
-        }}
-      >
-        <span
-          style={{
-            display: "inline-block",
-            padding: "0.35rem 0.75rem",
-            borderRadius: "999px",
-            background: "#71594E",
-            color: "#f3e6df",
-            fontWeight: 700,
-            fontSize: "0.9rem",
-          }}
-        >
-          {article.category}
-        </span>
-        <span style={{ fontSize: "0.9rem", color: "#8b7468" }}>
-          Atualizado em{" "}
-          {new Date(article.updatedAt).toLocaleDateString("pt-BR")}
-          {article.updatedBy ? ` por ${article.updatedBy}` : ""}
-        </span>
-      </div>
+    <article className="article-detail">
+      <div className="article-detail__header">
+        <div className="article-detail__badges">
+          <span>{article.category}</span>
+          <span>{article.status === "draft" ? "Rascunho" : "Publicado"}</span>
+        </div>
+        <h1>{article.title}</h1>
+        {article.summary && <p className="article-detail__summary">{article.summary}</p>}
 
-      <h1
-        style={{
-          fontSize: "2.2rem",
-          fontWeight: 800,
-          margin: "0 0 1rem",
-          color: "#4a372f",
-        }}
-      >
-        {article.title}
-      </h1>
-
-      {article.author && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            marginBottom: "1.5rem",
-          }}
-        >
-          {article.authorPhoto ? (
-            <img
-              src={article.authorPhoto}
-              alt={article.author}
-              style={{
-                width: "44px",
-                height: "44px",
-                borderRadius: "50%",
-                objectFit: "cover",
-                border: "1px solid #e3d6cb",
-              }}
-            />
+        <div className="article-detail__author">
+          {articleMeta.photoUrl ? (
+            <img src={articleMeta.photoUrl} alt={articleMeta.name} className="article-detail__author-avatar" />
           ) : (
-            <div
-              style={{
-                width: "44px",
-                height: "44px",
-                borderRadius: "50%",
-                background: "#71594E",
-                color: "#f3e6df",
-                display: "grid",
-                placeItems: "center",
-                fontWeight: 800,
-              }}
-            >
-              {initials}
+            <div className="article-detail__author-avatar article-detail__author-avatar--fallback">
+              {articleMeta.initials}
             </div>
           )}
-          <p style={{ margin: 0, color: "#71594E", fontWeight: 700 }}>
-            {article.author}
-          </p>
+          <div className="article-detail__author-copy">
+            <span>{articleMeta.label}</span>
+            <strong>{articleMeta.name}</strong>
+          </div>
+          <span className="article-detail__author-date">{articleMeta.dateLabel}</span>
         </div>
-      )}
+      </div>
 
       <div
-        style={{
-          color: "#4a372f",
-          lineHeight: 1.7,
-          fontSize: "1rem",
-          overflow: "hidden",
-          width: "100%",
-          whiteSpace: "pre-wrap",
-          tabSize: 4,
-        }}
-        className="prose prose-slate max-w-none"
-        dangerouslySetInnerHTML={{ __html: article.content }}
+        className="article-detail__content prose"
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content) }}
       />
-      <style>
-        {`
-          .prose {
-            white-space: pre-wrap;
-            tab-size: 4;
-          }
-
-          .prose p,
-          .prose li,
-          .prose blockquote,
-          .prose pre {
-            white-space: inherit;
-          }
-
-          .prose img {
-            max-width: 100%;
-            height: auto;
-            display: block;
-            margin: 1rem auto;
-            border-radius: 12px;
-          }
-        `}
-      </style>
     </article>
   );
 }

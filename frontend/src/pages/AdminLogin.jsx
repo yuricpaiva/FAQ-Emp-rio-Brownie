@@ -1,157 +1,87 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../services/api";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 function AdminLogin() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@admin.com");
-  const [password, setPassword] = useState("admin123");
+  const location = useLocation();
+  const { user, login, consumeAuthMessage } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const authMessage = consumeAuthMessage();
+    if (authMessage) {
+      setError(authMessage);
+    }
+  }, [consumeAuthMessage]);
+
+  useEffect(() => {
+    if (user) {
+      navigate("/", { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
     try {
-      const res = await api.post("/login", { email, password });
-      const { name, photoUrl } = res.data || {};
-      localStorage.setItem("faqAdmin", email);
-      localStorage.setItem(
-        "faqAdminData",
-        JSON.stringify({ email, name: name || email, photoUrl: photoUrl || "" })
-      );
-      navigate("/admin/dashboard");
+      await login(email, password);
+      const nextPath = location.state?.from || "/";
+      navigate(nextPath, { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || "Falha no login");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <section
-      style={{
-        maxWidth: "520px",
-        margin: "0 auto",
-        background: "#fff",
-        border: "1px solid #e3d6cb",
-        borderRadius: "16px",
-        padding: "2rem",
-        boxShadow: "0 14px 40px rgba(0,0,0,0.12)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div
-          style={{
-            width: "56px",
-            height: "56px",
-            borderRadius: "16px",
-            background: "#71594E",
-            display: "grid",
-            placeItems: "center",
-            color: "#f3e6df",
-            fontWeight: 800,
-            fontSize: "1.2rem",
-          }}
-        >
-          🛡️
+    <section className="login-screen">
+      <div className="login-screen__backdrop" />
+      <div className="login-card">
+        <div className="login-card__brand">
+          <div>
+            <h1>FAQ Empório Brownie</h1>
+          </div>
         </div>
-        <div>
-          <p style={{ margin: 0, color: "#71594E", fontWeight: 700 }}>
-            Área Administrativa
-          </p>
-          <p style={{ margin: 0, color: "#8b7468", fontSize: "0.9rem" }}>
-            Faça login para gerenciar o FAQ
-          </p>
-        </div>
-      </div>
 
-      <form onSubmit={handleSubmit} style={{ display: "grid", gap: "1rem" }}>
-        <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: "0.95rem",
-              color: "#71594E",
-              marginBottom: "0.35rem",
-              fontWeight: 700,
-            }}
-          >
-            Email
+        <p className="login-card__copy">
+          Faça login para acessar a base interna de conhecimento, navegar pelas categorias e gerenciar conteúdos.
+        </p>
+
+        <form onSubmit={handleSubmit} className="form-grid">
+          <label>
+            <span>Email</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
           </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{
-              width: "100%",
-              padding: "0.9rem 1rem",
-              borderRadius: "12px",
-              border: "1px solid #d7c7bc",
-              fontSize: "1rem",
-              outline: "none",
-              color: "#71594E",
-              background: "#fdfaf7",
-            }}
-          />
-        </div>
-        <div>
-          <label
-            style={{
-              display: "block",
-              fontSize: "0.95rem",
-              color: "#71594E",
-              marginBottom: "0.35rem",
-              fontWeight: 700,
-            }}
-          >
-            Senha
+          <label>
+            <span>Senha</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+            />
           </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{
-              width: "100%",
-              padding: "0.9rem 1rem",
-              borderRadius: "12px",
-              border: "1px solid #d7c7bc",
-              fontSize: "1rem",
-              outline: "none",
-              color: "#71594E",
-              background: "#fdfaf7",
-            }}
-          />
-        </div>
-        {error && (
-          <p style={{ color: "#c0392b", fontSize: "0.95rem", margin: 0 }}>
-            {error}
-          </p>
-        )}
-        <button
-          type="submit"
-          style={{
-            width: "100%",
-            padding: "0.9rem",
-            borderRadius: "12px",
-            border: "none",
-            background: "#71594E",
-            color: "#f3e6df",
-            fontWeight: 800,
-            fontSize: "1rem",
-            cursor: "pointer",
-            boxShadow: "0 10px 20px rgba(0,0,0,0.1)",
-          }}
-        >
-          Entrar
-        </button>
-      </form>
+
+          {error && <p className="form-message form-message--error">{error}</p>}
+
+          <button type="submit" className="button login-card__submit" disabled={loading}>
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+      </div>
     </section>
   );
 }

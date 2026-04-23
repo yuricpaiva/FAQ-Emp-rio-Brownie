@@ -1,0 +1,7 @@
+<svg width="260" height="110" viewBox="0 0 260 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="260" height="110" rx="8" fill="#F3E6DF"/>
+  <rect x="1" y="1" width="258" height="108" rx="7" stroke="#D7C7BC" stroke-width="2" stroke-dasharray="8 6"/>
+  <circle cx="130" cy="44" r="18" fill="#D7C7BC"/>
+  <path d="M104 83C109 70 118 64 130 64C142 64 151 70 156 83" stroke="#523528" stroke-width="5" stroke-linecap="round"/>
+  <text x="130" y="101" text-anchor="middle" fill="#523528" font-family="Montserrat, Arial, sans-serif" font-size="12" font-weight="700">Substituir logo</text>
+</svg>

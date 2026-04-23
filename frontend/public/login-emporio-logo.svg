@@ -1,0 +1,13 @@
+<svg width="260" height="110" viewBox="0 0 260 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="260" height="110" rx="8" fill="#523528"/>
+  <g stroke="#F1E3C8" stroke-width="3">
+    <path d="M57 35L83 61L57 87L31 61L57 35Z"/>
+    <path d="M48 51H69C74 51 77 54 77 58C77 62 74 65 69 65H48V51Z"/>
+    <path d="M48 65H71C76 65 80 68 80 72C80 77 76 80 71 80H48V65Z"/>
+    <path d="M48 48V83"/>
+  </g>
+  <g fill="#F1E3C8" font-family="Montserrat, Arial, sans-serif" font-weight="800" font-size="14" letter-spacing="8">
+    <text x="112" y="55">EMPORIO</text>
+    <text x="112" y="76">BROWNIE</text>
+  </g>
+</svg>

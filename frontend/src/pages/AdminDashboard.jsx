@@ -1,16 +1,26 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
+
+const roleLabels = {
+  reader: "Leitor",
+  creator: "Criador",
+  admin: "Administrador",
+};
 
 function AdminDashboard() {
-  const navigate = useNavigate();
+  const { hasRole } = useAuth();
+  const canManageUsers = hasRole(["admin"]);
   const [articles, setArticles] = useState([]);
   const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [showUserForm, setShowUserForm] = useState(false);
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [userPassword, setUserPassword] = useState("");
+  const [userRole, setUserRole] = useState("reader");
   const [userPhoto, setUserPhoto] = useState(null);
   const [userMessage, setUserMessage] = useState("");
   const [users, setUsers] = useState([]);
@@ -18,22 +28,85 @@ function AdminDashboard() {
 
   const loadArticles = async () => {
     try {
-      const res = await api.get("/articles");
+      const res = await api.get("/knowledge/articles", {
+        params: {
+          q: query.trim() || undefined,
+          status: status || undefined,
+        },
+      });
       setArticles(res.data);
       setError("");
-    } catch (err) {
+    } catch {
       setError("Não foi possível carregar artigos.");
     }
   };
 
-  useEffect(() => {
-    const logged = localStorage.getItem("faqAdmin");
-    if (!logged) {
-      navigate("/admin/login");
-      return;
+  const loadUsers = async () => {
+    if (!canManageUsers) return;
+    try {
+      const res = await api.get("/admin/users");
+      setUsers(res.data);
+    } catch {
+      setUserMessage("Não foi possível carregar usuários.");
     }
+  };
+
+  useEffect(() => {
     loadArticles();
-  }, []);
+  }, [query, status]);
+
+  useEffect(() => {
+    loadUsers();
+  }, [canManageUsers]);
+
+  const resetUserForm = () => {
+    setEditingUserId(null);
+    setUserName("");
+    setUserEmail("");
+    setUserPassword("");
+    setUserRole("reader");
+    setUserPhoto(null);
+    setUserMessage("");
+  };
+
+  const articleStats = useMemo(() => {
+    const published = articles.filter((article) => article.status === "published").length;
+    const draft = articles.filter((article) => article.status === "draft").length;
+
+    return [
+      {
+        label: "Artigos encontrados",
+        value: articles.length,
+        helper: "Resultado com os filtros atuais",
+      },
+      {
+        label: "Publicados",
+        value: published,
+        helper: "Conteúdos visíveis para a equipe",
+      },
+      {
+        label: "Rascunhos",
+        value: draft,
+        helper: "Itens ainda em preparação",
+      },
+      {
+        label: "Usuários ativos",
+        value: canManageUsers ? users.filter((user) => user.active).length : "--",
+        helper: canManageUsers ? "Pessoas com acesso liberado" : "Visível para administradores",
+      },
+    ];
+  }, [articles, canManageUsers, users]);
+
+  const userStats = useMemo(() => {
+    const activeUsers = users.filter((user) => user.active).length;
+    const admins = users.filter((user) => user.role === "admin").length;
+
+    return [
+      { label: "Usuários", value: users.length },
+      { label: "Ativos", value: activeUsers },
+      { label: "Admins", value: admins },
+    ];
+  }, [users]);
 
   const handleDelete = async (id) => {
     if (!window.confirm("Deseja remover este artigo?")) return;
@@ -45,24 +118,13 @@ function AdminDashboard() {
     }
   };
 
-  const filtered = articles.filter((article) =>
-    article.title.toLowerCase().includes(query.trim().toLowerCase())
-  );
-
-  const loadUsers = async () => {
-    try {
-      const res = await api.get("/admin/users");
-      setUsers(res.data);
-    } catch {
-      setUserMessage("Não foi possível carregar usuários.");
-    }
-  };
-
-  const handleCreateUser = async (e) => {
-    e.preventDefault();
+  const handleSaveUser = async (event) => {
+    event.preventDefault();
+    if (!canManageUsers) return;
     setUserMessage("");
+
     try {
-      let photoUrl = "";
+      let photoUrl;
       if (userPhoto) {
         const formData = new FormData();
         formData.append("file", userPhoto);
@@ -72,32 +134,31 @@ function AdminDashboard() {
         photoUrl = upload.data.url;
       }
 
+      const payload = {
+        name: userName,
+        email: userEmail,
+        role: userRole,
+      };
+
+      if (userPassword) payload.password = userPassword;
+      if (photoUrl !== undefined) payload.photoUrl = photoUrl;
+
       if (editingUserId) {
-        await api.put(`/admin/users/${editingUserId}`, {
-          name: userName,
-          email: userEmail,
-          password: userPassword || undefined,
-          photoUrl,
-        });
+        await api.put(`/admin/users/${editingUserId}`, payload);
         setUserMessage("Usuário atualizado com sucesso.");
       } else {
         await api.post("/admin/users", {
-          name: userName,
-          email: userEmail,
+          ...payload,
           password: userPassword,
-          photoUrl,
+          photoUrl: photoUrl || "",
         });
         setUserMessage("Usuário criado com sucesso.");
       }
-      loadUsers();
-      setUserName("");
-      setUserEmail("");
-      setUserPassword("");
-      setUserPhoto(null);
-      setEditingUserId(null);
-      setShowUserForm(false);
+
+      await loadUsers();
+      resetUserForm();
     } catch (err) {
-      setUserMessage(err.response?.data?.error || "Não foi possível criar o usuário.");
+      setUserMessage(err.response?.data?.error || "Não foi possível salvar o usuário.");
     }
   };
 
@@ -106,7 +167,7 @@ function AdminDashboard() {
       await api.put(`/admin/users/${id}`, { active });
       loadUsers();
     } catch {
-      setUserMessage("Não foi possível atualizar status do usuário.");
+      setUserMessage("Não foi possível atualizar o status do usuário.");
     }
   };
 
@@ -114,460 +175,260 @@ function AdminDashboard() {
     setEditingUserId(user.id);
     setUserName(user.name);
     setUserEmail(user.email);
+    setUserRole(user.role || "reader");
     setUserPassword("");
     setUserPhoto(null);
     setUserMessage("");
-    setShowUserForm(true);
   };
 
   return (
-    <section
-      style={{
-        maxWidth: "1100px",
-        margin: "0 auto",
-        color: "#71594E",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "1rem",
-          marginBottom: "1.5rem",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0, fontSize: "1.9rem", fontWeight: 800, letterSpacing: "0.01em" }}>
-            Painel de Controle
-          </h1>
-          <p style={{ margin: "0.2rem 0 0", color: "#8b7468" }}>
-            Gerencie os artigos do FAQ.
+    <section className="page-stack">
+      <div className="admin-dashboard-hero">
+        <div className="surface-card admin-dashboard-hero__intro">
+          <p className="eyebrow">Painel</p>
+          <h1>Painel de controle</h1>
+          <p className="section-copy">
+            Organize o acervo, acompanhe o que está publicado e acesse as ações principais sem
+            precisar ficar alternando entre várias telas.
           </p>
-        </div>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <input
-            type="text"
-            placeholder="Buscar artigo..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            style={{
-              padding: "0.7rem 0.9rem",
-              borderRadius: "12px",
-              border: "1px solid #d7c7bc",
-              background: "#fdfaf7",
-              color: "#71594E",
-              minWidth: "220px",
-              fontWeight: 600,
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              setShowUserForm(true);
-              loadUsers();
-              setEditingUserId(null);
-              setUserName("");
-              setUserEmail("");
-              setUserPassword("");
-              setUserPhoto(null);
-              setUserMessage("");
-            }}
-            style={{
-              padding: "0.85rem 1.1rem",
-              borderRadius: "12px",
-              background: "#fdfaf7",
-              color: "#71594E",
-              fontWeight: 800,
-              border: "1px solid #d7c7bc",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Usuários
-          </button>
-          <Link
-            to="/admin/artigos/novo"
-            style={{
-              padding: "0.85rem 1.2rem",
-              borderRadius: "12px",
-              background: "#71594E",
-              color: "#f3e6df",
-              fontWeight: 800,
-              textDecoration: "none",
-              boxShadow: "0 10px 20px rgba(0,0,0,0.12)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Novo Artigo
-          </Link>
-        </div>
-      </div>
 
-      {error && (
-        <p style={{ color: "#c0392b", fontSize: "0.95rem", marginBottom: "1rem" }}>{error}</p>
-      )}
-
-      {showUserForm && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            display: "grid",
-            placeItems: "center",
-            zIndex: 50,
-            padding: "1rem",
-          }}
-          onClick={() => setShowUserForm(false)}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: "16px",
-              padding: "1rem",
-              maxWidth: "960px",
-              width: "100%",
-              border: "1px solid #e3d6cb",
-              boxShadow: "0 18px 40px rgba(0,0,0,0.2)",
-              maxHeight: "90vh",
-              overflow: "auto",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <h3 style={{ margin: 0, color: "#71594E" }}>Usuários</h3>
+          <div className="admin-dashboard-actions">
+            <Link to="/admin/artigos/novo" className="button">
+              Novo artigo
+            </Link>
+            {canManageUsers && (
               <button
                 type="button"
+                className="button button--ghost"
                 onClick={() => {
-                  setShowUserForm(false);
-                  setEditingUserId(null);
-                  setUserMessage("");
-                }}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  fontSize: "1.1rem",
-                  cursor: "pointer",
-                  color: "#71594E",
+                  setShowUserForm(true);
+                  resetUserForm();
+                  loadUsers();
                 }}
               >
-                ✕
+                Gerenciar usuários
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="admin-stats-grid">
+          {articleStats.map((item) => (
+            <div key={item.label} className="admin-stat-card">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.helper}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="surface-card">
+        <div className="section-heading section-heading--split">
+          <div>
+            <p className="eyebrow">Acervo</p>
+            <h2>Artigos e publicações</h2>
+            <p className="section-copy">
+              Filtre o conteúdo, encontre rascunhos rapidamente e entre direto na edição do artigo.
+            </p>
+          </div>
+        </div>
+
+        {error && <p className="form-message form-message--error">{error}</p>}
+
+        <div className="admin-filter-panel">
+          <label className="admin-filter-field">
+            <span>Buscar artigo</span>
+            <input
+              className="search-input"
+              type="text"
+              placeholder="Título, resumo, autor ou categoria"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+
+          <label className="admin-filter-field admin-filter-field--compact">
+            <span>Status</span>
+            <select className="select-input" value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">Todos</option>
+              <option value="published">Publicados</option>
+              <option value="draft">Rascunhos</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="admin-list">
+          {articles.map((article) => (
+            <div key={article.id} className="admin-list__item">
+              <div className="admin-list__content">
+                <div className="article-list__meta admin-list__badges">
+                  <span>{article.category}</span>
+                  <span>{article.status === "draft" ? "Rascunho" : "Publicado"}</span>
+                </div>
+                <strong>{article.title}</strong>
+                <p>{article.summary || "Sem resumo cadastrado."}</p>
+                <div className="admin-list__meta-row">
+                  <small>Ordem {article.sortOrder}</small>
+                  <small>Atualizado em {new Date(article.updatedAt).toLocaleDateString("pt-BR")}</small>
+                  <small>Por {article.author}</small>
+                </div>
+              </div>
+
+              <div className="admin-list__actions">
+                <Link to={`/admin/artigos/${article.id}/editar`} className="button button--ghost">
+                  Editar
+                </Link>
+                <button type="button" className="button button--danger" onClick={() => handleDelete(article.id)}>
+                  Remover
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {!articles.length && (
+            <p className="empty-state">Nenhum artigo encontrado com os filtros atuais.</p>
+          )}
+        </div>
+      </div>
+
+      {showUserForm && canManageUsers && (
+        <div className="modal-backdrop" onClick={() => setShowUserForm(false)}>
+          <div className="modal-card modal-card--wide" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-card__header">
+              <div>
+                <h3>Controle de usuários</h3>
+                <p className="section-copy">
+                  Gerencie acessos, permissões e cadastros sem sair do painel.
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowUserForm(false)}>
+                x
               </button>
             </div>
 
-            <div style={{ marginBottom: "1rem", overflowX: "auto" }}>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "2fr 2fr 1fr 1fr",
-                  gap: "0.5rem",
-                  padding: "0.75rem",
-                  background: "#f8f1ec",
-                  borderRadius: "12px",
-                  border: "1px solid #e3d6cb",
-                  fontWeight: 700,
-                  color: "#5d4a42",
-                }}
-              >
-                <span>Nome</span>
-                <span>Email</span>
-                <span>Status</span>
-                <span style={{ textAlign: "right" }}>Ações</span>
-              </div>
-              <div>
-                {users.map((user) => (
-                  <div
-                    key={user.id}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "2fr 2fr 1fr 1fr",
-                      gap: "0.5rem",
-                      padding: "0.75rem",
-                      borderBottom: "1px solid #f0e6df",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      {user.photoUrl ? (
-                        <img
-                          src={user.photoUrl}
-                          alt={user.name}
-                          style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            width: "32px",
-                            height: "32px",
-                            borderRadius: "50%",
-                            background: "#f3e6df",
-                            color: "#71594E",
-                            display: "grid",
-                            placeItems: "center",
-                            fontWeight: 800,
-                          }}
-                        >
-                          {(user.name || "US")
-                            .split(" ")
-                            .filter(Boolean)
-                            .map((w) => w[0]?.toUpperCase())
-                            .join("")
-                            .slice(0, 2)}
+            <div className="user-management-layout">
+              <div className="user-management-panel">
+                <div className="user-management-summary">
+                  {userStats.map((item) => (
+                    <div key={item.label} className="user-summary-card">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="user-grid">
+                  {users.map((item) => (
+                    <div key={item.id} className="user-grid__item">
+                      <div className="user-grid__content">
+                        <div className="user-grid__topline">
+                          <strong>{item.name}</strong>
+                          <span className={`user-status-pill ${item.active ? "" : "user-status-pill--inactive"}`}>
+                            {item.active ? "Ativo" : "Inativo"}
+                          </span>
                         </div>
-                      )}
-                      <span>{user.name}</span>
+                        <p>{item.email}</p>
+                        <div className="article-list__meta">
+                          <span>{roleLabels[item.role] || item.role}</span>
+                        </div>
+                      </div>
+                      <div className="admin-list__actions">
+                        <button type="button" className="button button--ghost" onClick={() => handleEditUser(item)}>
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className={item.active ? "button button--danger" : "button"}
+                          onClick={() => handleToggleActive(item.id, !item.active)}
+                        >
+                          {item.active ? "Inativar" : "Ativar"}
+                        </button>
+                      </div>
                     </div>
-                    <span>{user.email}</span>
-                    <span style={{ fontWeight: 800, color: user.active ? "#2c7a38" : "#c0392b" }}>
-                      {user.active ? "Ativo" : "Inativo"}
-                    </span>
-                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.35rem", flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        onClick={() => handleEditUser(user)}
-                        style={{
-                          padding: "0.55rem 0.75rem",
-                          borderRadius: "10px",
-                          border: "1px solid #d7c7bc",
-                          background: "#fdfaf7",
-                          color: "#71594E",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                        }}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleActive(user.id, !user.active)}
-                        style={{
-                          padding: "0.55rem 0.75rem",
-                          borderRadius: "10px",
-                          border: "none",
-                          background: user.active ? "#c0392b" : "#2c7a38",
-                          color: "#fff",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
-                        }}
-                      >
-                        {user.active ? "Inativar" : "Ativar"}
-                      </button>
-                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="user-form-panel">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">{editingUserId ? "Edição" : "Novo cadastro"}</p>
+                    <h4>{editingUserId ? "Editar usuário" : "Criar usuário"}</h4>
                   </div>
-                ))}
-                {users.length === 0 && <p style={{ padding: "0.75rem" }}>Nenhum usuário encontrado.</p>}
+                  {editingUserId && (
+                    <button type="button" className="button button--ghost" onClick={resetUserForm}>
+                      Novo cadastro
+                    </button>
+                  )}
+                </div>
+
+                <form className="form-grid" onSubmit={handleSaveUser}>
+                  <label>
+                    <span>Nome</span>
+                    <input value={userName} onChange={(event) => setUserName(event.target.value)} required />
+                  </label>
+                  <label>
+                    <span>Email</span>
+                    <input
+                      type="email"
+                      value={userEmail}
+                      onChange={(event) => setUserEmail(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Permissão</span>
+                    <select value={userRole} onChange={(event) => setUserRole(event.target.value)}>
+                      <option value="reader">Leitor</option>
+                      <option value="creator">Criador</option>
+                      <option value="admin">Administrador</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>{editingUserId ? "Senha (opcional)" : "Senha"}</span>
+                    <input
+                      type="password"
+                      value={userPassword}
+                      onChange={(event) => setUserPassword(event.target.value)}
+                      required={!editingUserId}
+                    />
+                  </label>
+                  <label className="form-grid__full">
+                    <span>Foto</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => setUserPhoto(event.target.files?.[0] || null)}
+                    />
+                  </label>
+
+                  {userMessage && (
+                    <p
+                      className={`form-message ${
+                        userMessage.toLowerCase().includes("sucesso")
+                          ? "form-message--success"
+                          : "form-message--error"
+                      }`}
+                    >
+                      {userMessage}
+                    </p>
+                  )}
+
+                  <div className="form-actions">
+                    <button type="button" className="button button--ghost" onClick={() => setShowUserForm(false)}>
+                      Fechar
+                    </button>
+                    <button type="submit" className="button">
+                      {editingUserId ? "Salvar alterações" : "Criar usuário"}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
-
-            <h4 style={{ margin: "0 0 0.75rem", color: "#71594E" }}>
-              {editingUserId ? "Editar usuário" : "Novo usuário (admin)"}
-            </h4>
-            <form onSubmit={handleCreateUser} style={{ display: "grid", gap: "0.6rem" }}>
-              <div style={{ display: "grid", gap: "0.25rem" }}>
-                <label style={{ fontWeight: 700, color: "#71594E" }}>Nome</label>
-                <input
-                  type="text"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  required
-                  style={{
-                    padding: "0.7rem 0.9rem",
-                    borderRadius: "12px",
-                    border: "1px solid #d7c7bc",
-                    background: "#fdfaf7",
-                    color: "#71594E",
-                  }}
-                />
-              </div>
-              <div style={{ display: "grid", gap: "0.25rem" }}>
-                <label style={{ fontWeight: 700, color: "#71594E" }}>Email</label>
-                <input
-                  type="email"
-                  value={userEmail}
-                  onChange={(e) => setUserEmail(e.target.value)}
-                  required
-                  style={{
-                    padding: "0.7rem 0.9rem",
-                    borderRadius: "12px",
-                    border: "1px solid #d7c7bc",
-                    background: "#fdfaf7",
-                    color: "#71594E",
-                  }}
-                />
-              </div>
-              <div style={{ display: "grid", gap: "0.25rem" }}>
-                <label style={{ fontWeight: 700, color: "#71594E" }}>
-                  {editingUserId ? "Senha (opcional)" : "Senha"}
-                </label>
-                <input
-                  type="password"
-                  value={userPassword}
-                  onChange={(e) => setUserPassword(e.target.value)}
-                  required={!editingUserId}
-                  placeholder={editingUserId ? "Deixe em branco para manter" : ""}
-                  style={{
-                    padding: "0.7rem 0.9rem",
-                    borderRadius: "12px",
-                    border: "1px solid #d7c7bc",
-                    background: "#fdfaf7",
-                    color: "#71594E",
-                  }}
-                />
-              </div>
-              <div style={{ display: "grid", gap: "0.25rem" }}>
-                <label style={{ fontWeight: 700, color: "#71594E" }}>Foto (opcional)</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setUserPhoto(e.target.files?.[0] || null)}
-                  style={{
-                    padding: "0.4rem 0",
-                    color: "#71594E",
-                  }}
-                />
-              </div>
-              {userMessage && (
-                <p style={{ margin: 0, color: userMessage.includes("sucesso") ? "#2c7a38" : "#c0392b" }}>
-                  {userMessage}
-                </p>
-              )}
-              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowUserForm(false);
-                    setEditingUserId(null);
-                    setUserMessage("");
-                  }}
-                  style={{
-                    padding: "0.75rem 1rem",
-                    borderRadius: "10px",
-                    border: "1px solid #d7c7bc",
-                    background: "#fdfaf7",
-                    color: "#71594E",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Fechar
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "0.75rem 1rem",
-                    borderRadius: "10px",
-                    border: "none",
-                    background: "#71594E",
-                    color: "#f3e6df",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
-                  }}
-                >
-                  {editingUserId ? "Salvar" : "Criar Usuário"}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
-
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #e3d6cb",
-          borderRadius: "16px",
-          boxShadow: "0 12px 30px rgba(0,0,0,0.08)",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "3fr 1fr 180px",
-            gap: "0.75rem",
-            padding: "0.9rem 1rem",
-            background: "#f8f1ec",
-            borderBottom: "1px solid #e3d6cb",
-            fontWeight: 700,
-            color: "#5d4a42",
-          }}
-        >
-          <span>Título</span>
-          <span style={{ textAlign: "center" }}>Categoria</span>
-          <span style={{ textAlign: "right" }}>Ações</span>
-        </div>
-
-        {filtered.map((article) => (
-          <div
-            key={article.id}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "3fr 1fr 180px",
-              gap: "0.75rem",
-              padding: "1rem",
-              borderBottom: "1px solid #f0e6df",
-              alignItems: "center",
-            }}
-          >
-            <div>
-              <p style={{ margin: 0, color: "#8b7468", fontSize: "0.85rem" }}>{article.slug}</p>
-              <p style={{ margin: "0.2rem 0 0", fontWeight: 800, fontSize: "1.05rem" }}>
-                {article.title}
-              </p>
-              <p style={{ margin: "0.2rem 0 0", fontSize: "0.85rem", color: "#8b7468" }}>
-                Atualizado em {new Date(article.updatedAt).toLocaleDateString("pt-BR")}
-              </p>
-            </div>
-            <div style={{ textAlign: "center", fontWeight: 700 }}>{article.category}</div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "0.5rem",
-                alignItems: "center",
-              }}
-            >
-              <Link
-                to={`/admin/artigos/${article.id}/editar`}
-                style={{
-                  padding: "0.55rem 0.85rem",
-                  borderRadius: "10px",
-                  border: "1px solid #d7c7bc",
-                  background: "#fdfaf7",
-                  color: "#71594E",
-                  fontWeight: 700,
-                  textDecoration: "none",
-                }}
-              >
-                Editar
-              </Link>
-              <button
-                type="button"
-                onClick={() => handleDelete(article.id)}
-                style={{
-                  padding: "0.55rem 0.85rem",
-                  borderRadius: "10px",
-                  border: "none",
-                  background: "#c0392b",
-                  color: "#fff",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  boxShadow: "0 4px 10px rgba(0,0,0,0.1)",
-                }}
-              >
-                Remover
-              </button>
-            </div>
-          </div>
-        ))}
-
-        {articles.length === 0 && (
-          <p style={{ padding: "1rem", margin: 0, textAlign: "center" }}>Nenhum artigo cadastrado.</p>
-        )}
-      </div>
     </section>
   );
 }

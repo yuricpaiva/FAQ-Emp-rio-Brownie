@@ -1,81 +1,64 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
-import ReactQuill from "react-quill";
-import { Quill } from "react-quill";
+import ReactQuill, { Quill } from "react-quill";
 import ImageResize from "quill-image-resize-module-react";
 import "react-quill/dist/quill.snow.css";
 
 Quill.register("modules/imageResize", ImageResize);
 
+function slugify(text) {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+}
+
 function AdminEditArticle() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const categories = [
-    "Operação",
-    "Gente & Gestão",
-    "TI",
-    "Controladoria & Financeiro",
-    "Comercial",
-    "Marketing",
-  ];
-
+  const quillRef = useRef(null);
+  const wordInputRef = useRef(null);
+  const [categories, setCategories] = useState([]);
+  const [revisions, setRevisions] = useState([]);
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
-  const [category, setCategory] = useState(categories[0]);
+  const [summary, setSummary] = useState("");
+  const [category, setCategory] = useState("");
   const [content, setContent] = useState("");
+  const [status, setStatus] = useState("draft");
+  const [sortOrder, setSortOrder] = useState(0);
   const [error, setError] = useState("");
+  const [importWarnings, setImportWarnings] = useState([]);
+  const [importing, setImporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const quillRef = useRef(null);
-
-  useEffect(() => {
-    const editor = quillRef.current?.getEditor();
-    const root = editor?.root;
-
-    if (!root) return undefined;
-
-    const preserveScrollOnPaste = () => {
-      const scrollY = window.scrollY;
-      requestAnimationFrame(() => {
-        window.scrollTo({ top: scrollY });
-        requestAnimationFrame(() => {
-          window.scrollTo({ top: scrollY });
-        });
-      });
-    };
-
-    root.addEventListener("paste", preserveScrollOnPaste);
-    return () => root.removeEventListener("paste", preserveScrollOnPaste);
-  }, []);
 
   useEffect(() => {
     api
-      .get("/articles")
-      .then((res) => {
-        const article = res.data.find((item) => String(item.id) === id);
-        if (!article) {
-          setError("Artigo não encontrado");
-          return;
-        }
+      .get("/knowledge/categories")
+      .then((res) => setCategories(res.data))
+      .catch(() => setCategories([]));
+  }, []);
+
+  useEffect(() => {
+    Promise.all([api.get(`/knowledge/articles/id/${id}`), api.get(`/admin/articles/${id}/revisions`)])
+      .then(([articleRes, revisionsRes]) => {
+        const article = articleRes.data;
         setTitle(article.title);
         setSlug(article.slug);
+        setSummary(article.summary || "");
         setCategory(article.category);
         setContent(article.content);
+        setStatus(article.status);
+        setSortOrder(article.sortOrder);
+        setRevisions(revisionsRes.data);
         setLoaded(true);
       })
-      .catch(() => setError("Não foi possível carregar o artigo"));
+      .catch(() => setError("Não foi possível carregar o artigo."));
   }, [id]);
-
-  const autoSlug = (text) => {
-    const newSlug = text
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)+/g, "");
-    setSlug(newSlug);
-  };
 
   const handleImageUpload = () => {
     const input = document.createElement("input");
@@ -90,10 +73,9 @@ function AdminEditArticle() {
         const res = await api.post("/admin/uploads", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
-        const url = res.data.url;
         const editor = quillRef.current?.getEditor();
         const range = editor.getSelection(true);
-        editor.insertEmbed(range.index, "image", url);
+        editor.insertEmbed(range.index, "image", res.data.url);
         editor.setSelection(range.index + 1);
       } catch (err) {
         setError(err.response?.data?.error || "Erro ao enviar imagem");
@@ -112,21 +94,59 @@ function AdminEditArticle() {
           ["link", "image"],
           ["clean"],
         ],
-        handlers: {
-          image: handleImageUpload,
-        },
+        handlers: { image: handleImageUpload },
       },
       imageResize: { modules: ["Resize", "DisplaySize"] },
     }),
     []
   );
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleWordImport = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    if (content.trim() && !window.confirm("Importar o arquivo vai substituir o conteudo atual. Deseja continuar?")) {
+      return;
+    }
+
+    setImporting(true);
+    setError("");
+    setImportWarnings([]);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/admin/articles/import-word", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setTitle(res.data.title || "");
+      setSlug(slugify(res.data.title || ""));
+      setContent(res.data.content || "");
+      setImportWarnings(res.data.warnings || []);
+    } catch (err) {
+      setError(err.response?.data?.error || "Erro ao importar documento Word");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setLoading(true);
     setError("");
     try {
-      await api.put(`/admin/articles/${id}`, { title, slug, category, content });
+      await api.put(`/admin/articles/${id}`, {
+        title,
+        slug,
+        summary,
+        category,
+        content,
+        status,
+        sortOrder: Number(sortOrder),
+      });
       navigate("/admin/dashboard");
     } catch (err) {
       setError(err.response?.data?.error || "Erro ao atualizar artigo");
@@ -136,168 +156,134 @@ function AdminEditArticle() {
   };
 
   if (!loaded && !error) {
-    return <p>Carregando...</p>;
+    return <div className="surface-card">Carregando artigo...</div>;
   }
 
   return (
-    <section
-      style={{
-        maxWidth: "880px",
-        margin: "0 auto",
-        background: "#fff",
-        border: "1px solid #e3d6cb",
-        borderRadius: "16px",
-        padding: "1.5rem",
-        boxShadow: "0 18px 40px rgba(0,0,0,0.1)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "1rem",
-          gap: "1rem",
-        }}
-      >
-        <div>
-          <p style={{ margin: 0, color: "#71594E", fontWeight: 800, letterSpacing: "0.02em" }}>
-            Editar artigo
-          </p>
-          <p style={{ margin: 0, color: "#8b7468", fontSize: "0.95rem" }}>
-            Atualize os campos e salve as alterações.
-          </p>
-        </div>
-      </div>
-
-      {error && <p style={{ color: "#c0392b", fontSize: "0.95rem", marginBottom: "0.5rem" }}>{error}</p>}
-
-      <form onSubmit={handleSubmit} style={{ display: "grid", gap: "0.85rem" }}>
-        <div style={{ display: "grid", gap: "0.4rem" }}>
-          <label style={{ fontWeight: 700, color: "#71594E" }}>Título</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              autoSlug(e.target.value);
-            }}
-            required
-            placeholder="Ex: Como acessar o dashboard"
-            style={{
-              width: "100%",
-              padding: "0.4rem 0.5rem",
-              borderRadius: "12px",
-              border: "1px solid #d7c7bc",
-              fontSize: "1rem",
-              outline: "none",
-              background: "#fdfaf7",
-              color: "#71594E",
-            }}
-          />
-        </div>
-
-        <div style={{ display: "grid", gap: "0.4rem" }}>
-          <label style={{ fontWeight: 700, color: "#71594E" }}>Slug gerado</label>
-          <div
-            style={{
-              width: "100%",
-              padding: "0.4rem 0.5rem",
-              borderRadius: "12px",
-              border: "1px dashed #d7c7bc",
-              fontSize: "1rem",
-              background: "#fdfaf7",
-              color: "#71594E",
-            }}
-          >
-            {slug || "Digite o título para gerar automaticamente"}
+    <section className="page-stack">
+      <section className="surface-card surface-card--editor">
+        <div className="section-heading section-heading--split">
+          <div>
+            <p className="eyebrow">Edição</p>
+            <h1>Editar artigo</h1>
+            <p className="section-copy">Ajuste o conteúdo e acompanhe o histórico recente.</p>
           </div>
-        </div>
-
-        <div style={{ display: "grid", gap: "0.4rem" }}>
-          <label style={{ fontWeight: 700, color: "#71594E" }}>Categoria</label>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "0.4rem 0.5rem",
-              borderRadius: "12px",
-              border: "1px solid #d7c7bc",
-              fontSize: "1rem",
-              outline: "none",
-              background: "#fdfaf7",
-              color: "#71594E",
-              appearance: "none",
-              WebkitAppearance: "none",
-              MozAppearance: "none",
-            }}
-          >
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div style={{ display: "grid", gap: "0.4rem" }}>
-          <label style={{ fontWeight: 700, color: "#71594E" }}>Conteúdo</label>
-          <div
-            style={{
-              background: "#fdfaf7",
-              borderRadius: "12px",
-              border: "1px solid #d7c7bc",
-              overflow: "hidden",
-            }}
-          >
-            <ReactQuill
-              ref={quillRef}
-              theme="snow"
-              value={content}
-              onChange={setContent}
-              modules={quillModules}
-              placeholder="Descreva o passo a passo, links e detalhes úteis..."
+          <div className="toolbar">
+            <input
+              ref={wordInputRef}
+              type="file"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="visually-hidden"
+              onChange={handleWordImport}
             />
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => wordInputRef.current?.click()}
+              disabled={importing}
+            >
+              {importing ? "Importando Word..." : "Importar Word"}
+            </button>
+            <button type="button" className="button button--ghost" onClick={() => navigate("/admin/dashboard")}>
+              Voltar
+            </button>
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
-          <button
-            type="button"
-            onClick={() => navigate("/admin/dashboard")}
-            style={{
-              padding: "0.85rem 1.2rem",
-              borderRadius: "12px",
-              border: "1px solid #d7c7bc",
-              background: "#fdfaf7",
-              color: "#71594E",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              padding: "0.85rem 1.4rem",
-              borderRadius: "12px",
-              border: "none",
-              background: loading ? "#8b7468" : "#71594E",
-              color: "#f3e6df",
-              fontWeight: 800,
-              cursor: loading ? "not-allowed" : "pointer",
-              boxShadow: "0 10px 20px rgba(0,0,0,0.12)",
-              opacity: loading ? 0.8 : 1,
-              transition: "background 150ms ease, opacity 150ms ease",
-            }}
-          >
-            {loading ? "Salvando..." : "Atualizar"}
-          </button>
+        {error && <p className="form-message form-message--error">{error}</p>}
+        {importWarnings.length > 0 && (
+          <div className="import-note">
+          <strong>Importação concluída com observações.</strong>
+          <p>Revise a formatação antes de salvar.</p>
+          </div>
+        )}
+
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>
+            <span>Título</span>
+            <input
+              value={title}
+              onChange={(event) => {
+                setTitle(event.target.value);
+                setSlug(slugify(event.target.value));
+              }}
+              required
+            />
+          </label>
+          <label>
+            <span>Slug</span>
+            <input value={slug} onChange={(event) => setSlug(event.target.value)} required />
+          </label>
+          <label className="form-grid__full">
+            <span>Resumo</span>
+            <textarea value={summary} onChange={(event) => setSummary(event.target.value)} rows={3} />
+          </label>
+          <label>
+            <span>Categoria</span>
+            <select value={category} onChange={(event) => setCategory(event.target.value)} required>
+              {categories.map((item) => (
+                <option key={item.id} value={item.name}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Status</span>
+            <select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="draft">Rascunho</option>
+              <option value="published">Publicado</option>
+            </select>
+          </label>
+          <label>
+            <span>Ordem</span>
+            <input
+              type="number"
+              min="0"
+              max="9999"
+              value={sortOrder}
+              onChange={(event) => setSortOrder(event.target.value)}
+            />
+          </label>
+          <label className="form-grid__full">
+            <span>Conteúdo</span>
+            <div className="editor-shell">
+              <ReactQuill ref={quillRef} theme="snow" value={content} onChange={setContent} modules={quillModules} />
+            </div>
+          </label>
+
+          <div className="form-actions">
+            <button type="button" className="button button--ghost" onClick={() => navigate("/admin/dashboard")}>
+              Cancelar
+            </button>
+            <button type="submit" className="button" disabled={loading}>
+              {loading ? "Salvando..." : "Atualizar"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="surface-card">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Historico</p>
+            <h2>Últimas revisões</h2>
+          </div>
         </div>
-      </form>
+        <div className="revision-list">
+          {revisions.map((revision) => (
+            <div key={revision.id} className="revision-list__item">
+              <strong>{revision.title}</strong>
+              <p>{revision.summary || "Sem resumo nesta revisão."}</p>
+              <small>
+                {revision.status === "draft" ? "Rascunho" : "Publicado"} • {revision.updatedBy} •{" "}
+                {new Date(revision.createdAt).toLocaleString("pt-BR")}
+              </small>
+            </div>
+          ))}
+          {!revisions.length && <p className="empty-state">Nenhuma revisão registrada.</p>}
+        </div>
+      </section>
     </section>
   );
 }

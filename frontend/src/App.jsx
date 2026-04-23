@@ -1,40 +1,68 @@
-import { Routes, Route } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import Home from './pages/Home';
-import Category from './pages/Category';
-import Article from './pages/Article';
-import AdminLogin from './pages/AdminLogin';
-import AdminDashboard from './pages/AdminDashboard';
-import AdminNewArticle from './pages/AdminNewArticle';
-import AdminEditArticle from './pages/AdminEditArticle';
+import { Suspense, lazy } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Sidebar from "./components/Sidebar";
+
+const Home = lazy(() => import("./pages/Home"));
+const Category = lazy(() => import("./pages/Category"));
+const Article = lazy(() => import("./pages/Article"));
+const AdminLogin = lazy(() => import("./pages/AdminLogin"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AdminNewArticle = lazy(() => import("./pages/AdminNewArticle"));
+const AdminEditArticle = lazy(() => import("./pages/AdminEditArticle"));
+
+function RouteLoader() {
+  return (
+    <div className="app-loader">
+      <div className="app-loader__card">
+        <span className="app-loader__dot" />
+        <p>Carregando tela...</p>
+      </div>
+    </div>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Suspense fallback={<RouteLoader />}>
+      <Routes>
+        <Route path="/login" element={<AdminLogin />} />
+        <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+        <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+        <Route path="/categoria/:slug" element={<ProtectedRoute><Category /></ProtectedRoute>} />
+        <Route path="/artigo/:slug" element={<ProtectedRoute><Article /></ProtectedRoute>} />
+        <Route
+          path="/admin/dashboard"
+          element={<ProtectedRoute roles={["creator", "admin"]}><AdminDashboard /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/artigos/novo"
+          element={<ProtectedRoute roles={["creator", "admin"]}><AdminNewArticle /></ProtectedRoute>}
+        />
+        <Route
+          path="/admin/artigos/:id/editar"
+          element={<ProtectedRoute roles={["creator", "admin"]}><AdminEditArticle /></ProtectedRoute>}
+        />
+      </Routes>
+    </Suspense>
+  );
+}
 
 function App() {
+  const location = useLocation();
+  const isLoginPage = location.pathname === "/login" || location.pathname === "/admin/login";
+
+  if (isLoginPage) {
+    return <AppRoutes />;
+  }
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        fontFamily: '"Montserrat", sans-serif',
-        backgroundColor: '#f3e6df',
-        color: '#71594E'
-      }}
-    >
-      <Navbar />
-      <main
-        style={{
-          maxWidth: '960px',
-          margin: '0 auto',
-          padding: '2rem 1rem'
-        }}
-      >
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/categoria/:categoria" element={<Category />} />
-          <Route path="/artigo/:slug" element={<Article />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/admin/artigos/novo" element={<AdminNewArticle />} />
-          <Route path="/admin/artigos/:id/editar" element={<AdminEditArticle />} />
-        </Routes>
+    <div className="app-shell">
+      <Sidebar />
+      <main className="app-shell__content">
+        <div className="app-shell__inner">
+          <AppRoutes />
+        </div>
       </main>
     </div>
   );

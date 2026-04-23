@@ -1,15 +1,18 @@
 const { Router } = require('express');
 const {
   listArticles,
+  getArticleById,
   getArticleBySlug,
   listCategories
 } = require('../controllers/articleController');
-const { login } = require('../controllers/authController');
+const { authenticate } = require('../middleware/authAdmin');
 
 const router = Router();
 
-router.post('/login', login);
+router.use(authenticate);
+
 router.get('/articles', listArticles);
+router.get('/articles/id/:id', getArticleById);
 router.get('/articles/:slug', getArticleBySlug);
 router.get('/categories', listCategories);
 

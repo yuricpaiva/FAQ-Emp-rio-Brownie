@@ -15,6 +15,8 @@ build/
 backend/.env
 frontend/.env
 backend/src/prisma/*.db
+backend/src/uploads/
+backend/uploads/
 
 # Logs
 *.log
