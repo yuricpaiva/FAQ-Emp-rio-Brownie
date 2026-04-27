@@ -89,6 +89,10 @@ img {
   width: 88px;
 }
 
+.sidebar--collapsed .sidebar__brand {
+  display: none;
+}
+
 .sidebar__top,
 .sidebar__brand,
 .sidebar__profile,
@@ -112,6 +116,11 @@ img {
 }
 
 .sidebar--collapsed .sidebar__top {
+  justify-content: center;
+}
+
+.sidebar--collapsed .sidebar__top-actions {
+  width: 100%;
   justify-content: center;
 }
 
