@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { getCategoryIcon } from "../constants/categoryIcons";
 
 const STORAGE_KEY = "faq_sidebar_collapsed";
+const MOBILE_QUERY = "(max-width: 720px)";
 
 function Sidebar() {
   const navigate = useNavigate();
@@ -12,6 +13,8 @@ function Sidebar() {
   const [collapsed, setCollapsed] = useState(() => {
     return window.localStorage.getItem(STORAGE_KEY) === "true";
   });
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   const [showProfile, setShowProfile] = useState(false);
   const [formName, setFormName] = useState("");
@@ -23,6 +26,20 @@ function Sidebar() {
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, String(collapsed));
   }, [collapsed]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(MOBILE_QUERY);
+    const syncMobile = (event) => {
+      setIsMobile(event.matches);
+      if (!event.matches) {
+        setMobileOpen(false);
+      }
+    };
+
+    setIsMobile(mediaQuery.matches);
+    mediaQuery.addEventListener("change", syncMobile);
+    return () => mediaQuery.removeEventListener("change", syncMobile);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -48,12 +65,16 @@ function Sidebar() {
     [user]
   );
 
-  const collapseSidebar = () => {
+  const closeNavigation = () => {
+    if (isMobile) {
+      setMobileOpen(false);
+      return;
+    }
     setCollapsed(true);
   };
 
   const handleLogout = async () => {
-    collapseSidebar();
+    closeNavigation();
     await logout();
     navigate("/login", { replace: true });
   };
@@ -88,82 +109,154 @@ function Sidebar() {
     }
   };
 
+  const sidebarClasses = [
+    "sidebar",
+    collapsed && !isMobile ? "sidebar--collapsed" : "",
+    isMobile ? "sidebar--mobile" : "",
+    isMobile && mobileOpen ? "sidebar--mobile-open" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <>
-      <aside className={`sidebar ${collapsed ? "sidebar--collapsed" : ""}`}>
+      <aside className={sidebarClasses}>
         <div className="sidebar__top">
-          {!collapsed && (
-            <Link to="/" className="sidebar__brand" onClick={collapseSidebar}>
-              <strong>FAQ Empório Brownie</strong>
-            </Link>
-          )}
-          <button
-            type="button"
-            className="sidebar__toggle"
-            onClick={() => setCollapsed((value) => !value)}
-            aria-label={collapsed ? "Expandir menu" : "Retratar menu"}
+          <Link
+            to="/"
+            className="sidebar__brand"
+            onClick={() => {
+              closeNavigation();
+            }}
           >
-            <span className="sidebar__toggle-bars" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-          </button>
-        </div>
+            <strong>{isMobile ? "FAQ Empório Brownie" : "FAQ Empório Brownie"}</strong>
+          </Link>
 
-        <div className="sidebar__group">
-          <NavLink to="/" end className="sidebar__link" onClick={collapseSidebar}>
-            <img src="/icon-home.svg" alt="" className="sidebar__nav-icon" />
-            {!collapsed && <span>Início</span>}
-          </NavLink>
-          {hasRole(["creator", "admin"]) && (
-            <NavLink to="/admin/dashboard" className="sidebar__link" onClick={collapseSidebar}>
-              <img src="/icon-painel.svg" alt="" className="sidebar__nav-icon" />
-              {!collapsed && <span>Painel</span>}
-            </NavLink>
-          )}
-        </div>
+          <div className="sidebar__top-actions">
+            {isMobile && (
+              <button
+                type="button"
+                className="sidebar__mobile-profile"
+                onClick={() => {
+                  setMobileOpen(false);
+                  setMessage("");
+                  setFormPassword("");
+                  setFormPhoto(null);
+                  setShowProfile(true);
+                }}
+                aria-label="Abrir perfil"
+              >
+                {user?.photoUrl ? (
+                  <img src={user.photoUrl} alt={user.name} className="sidebar__avatar" />
+                ) : (
+                  <div className="sidebar__avatar sidebar__avatar--fallback">{initials}</div>
+                )}
+              </button>
+            )}
 
-        <div className="sidebar__group">
-          {categories.map((category) => (
-            <NavLink
-              key={category.id}
-              to={`/categoria/${category.slug}`}
-              className="sidebar__link"
-              onClick={collapseSidebar}
+            <button
+              type="button"
+              className="sidebar__toggle"
+              onClick={() => {
+                if (isMobile) {
+                  setMobileOpen((value) => !value);
+                } else {
+                  setCollapsed((value) => !value);
+                }
+              }}
+              aria-label={isMobile ? (mobileOpen ? "Fechar menu" : "Abrir menu") : collapsed ? "Expandir menu" : "Retratar menu"}
             >
-              <img src={getCategoryIcon(category.iconKey)} alt="" className="sidebar__category-icon" />
-              {!collapsed && <span>{category.name}</span>}
-            </NavLink>
-          ))}
+              <span className="sidebar__toggle-bars" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </button>
+          </div>
         </div>
 
-        <button
-          type="button"
-          className="sidebar__profile"
-          onClick={() => {
-            setMessage("");
-            setFormPassword("");
-            setFormPhoto(null);
-            setShowProfile(true);
-          }}
-        >
-          {user?.photoUrl ? (
-            <img src={user.photoUrl} alt={user.name} className="sidebar__avatar" />
-          ) : (
-            <div className="sidebar__avatar sidebar__avatar--fallback">{initials}</div>
+        <div className="sidebar__nav">
+          <div className="sidebar__group">
+            <NavLink to="/" end className="sidebar__link" onClick={closeNavigation}>
+              <img src="/icon-home.svg" alt="" className="sidebar__nav-icon" />
+              {(isMobile || !collapsed) && <span>Início</span>}
+            </NavLink>
+            {hasRole(["creator", "admin"]) && (
+              <NavLink to="/admin/dashboard" className="sidebar__link" onClick={closeNavigation}>
+                <img src="/icon-painel.svg" alt="" className="sidebar__nav-icon" />
+                {(isMobile || !collapsed) && <span>Painel</span>}
+              </NavLink>
+            )}
+          </div>
+
+          <div className="sidebar__group">
+            {categories.map((category) => (
+              <NavLink
+                key={category.id}
+                to={`/categoria/${category.slug}`}
+                className="sidebar__link"
+                onClick={closeNavigation}
+              >
+                <img src={getCategoryIcon(category.iconKey)} alt="" className="sidebar__category-icon" />
+                {(isMobile || !collapsed) && <span>{category.name}</span>}
+              </NavLink>
+            ))}
+          </div>
+
+          {!isMobile && (
+            <>
+              <button
+                type="button"
+                className="sidebar__profile"
+                onClick={() => {
+                  setMessage("");
+                  setFormPassword("");
+                  setFormPhoto(null);
+                  setShowProfile(true);
+                }}
+              >
+                {user?.photoUrl ? (
+                  <img src={user.photoUrl} alt={user.name} className="sidebar__avatar" />
+                ) : (
+                  <div className="sidebar__avatar sidebar__avatar--fallback">{initials}</div>
+                )}
+                {!collapsed && (
+                  <div className="sidebar__profile-copy">
+                    <strong>{user?.name}</strong>
+                  </div>
+                )}
+              </button>
+
+              <button type="button" className="sidebar__logout" onClick={handleLogout}>
+                <span className="sidebar__link-icon">↩</span>
+                {!collapsed && <span>Sair</span>}
+              </button>
+            </>
           )}
-          {!collapsed && (
-            <div className="sidebar__profile-copy">
-              <strong>{user?.name}</strong>
+
+          {isMobile && (
+            <div className="sidebar__mobile-actions">
+              <button
+                type="button"
+                className="sidebar__link sidebar__link--button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  setMessage("");
+                  setFormPassword("");
+                  setFormPhoto(null);
+                  setShowProfile(true);
+                }}
+              >
+                <span className="sidebar__link-icon">👤</span>
+                <span>Perfil</span>
+              </button>
+              <button type="button" className="sidebar__link sidebar__link--button" onClick={handleLogout}>
+                <span className="sidebar__link-icon">↩</span>
+                <span>Sair</span>
+              </button>
             </div>
           )}
-        </button>
-
-        <button type="button" className="sidebar__logout" onClick={handleLogout}>
-          <span className="sidebar__link-icon">↩</span>
-          {!collapsed && <span>Sair</span>}
-        </button>
+        </div>
       </aside>
 
       {showProfile && (

@@ -98,6 +98,12 @@ img {
   align-items: center;
 }
 
+.sidebar__top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 .sidebar__top {
   justify-content: space-between;
   align-items: center;
@@ -213,6 +219,14 @@ img {
 
 .sidebar__profile {
   margin-top: auto;
+}
+
+.sidebar__mobile-profile {
+  display: none;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
 }
 
 .sidebar__profile-copy {
@@ -1067,60 +1081,67 @@ textarea:focus {
     padding: 0.75rem;
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    overflow: visible;
+    overflow: hidden;
   }
 
-  .sidebar--collapsed {
-    width: auto;
+  .sidebar--mobile {
+    display: grid;
+    gap: 0.75rem;
   }
 
-  .sidebar__top,
-  .sidebar--collapsed .sidebar__top {
-    justify-content: space-between;
+  .sidebar--mobile .sidebar__top {
+    margin-bottom: 0;
+    min-height: 48px;
   }
 
-  .sidebar__brand,
-  .sidebar__link span,
-  .sidebar__profile-copy,
-  .sidebar--collapsed .sidebar__link span,
-  .sidebar--collapsed .sidebar__profile-copy {
+  .sidebar--mobile .sidebar__brand {
+    padding: 0;
+  }
+
+  .sidebar--mobile .sidebar__brand strong {
+    font-size: 0.9rem;
+  }
+
+  .sidebar__mobile-profile {
     display: block;
   }
 
-  .sidebar__group {
-    display: flex;
-    gap: 0.45rem;
-    overflow-x: auto;
-    padding-bottom: 0.2rem;
-    scrollbar-width: none;
-  }
-
-  .sidebar__group::-webkit-scrollbar {
+  .sidebar--mobile .sidebar__nav {
     display: none;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
 
-  .sidebar__link,
-  .sidebar__profile,
-  .sidebar__logout,
-  .sidebar--collapsed .sidebar__link,
-  .sidebar--collapsed .sidebar__profile,
-  .sidebar--collapsed .sidebar__logout {
-    width: auto;
-    min-width: max-content;
+  .sidebar--mobile-open .sidebar__nav {
+    display: grid;
+  }
+
+  .sidebar--mobile .sidebar__group,
+  .sidebar--mobile .sidebar__mobile-actions {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .sidebar--mobile .sidebar__link,
+  .sidebar--mobile .sidebar__link--button {
+    width: 100%;
+    min-width: 0;
     justify-content: flex-start;
-    padding: 0.72rem 0.85rem;
+    padding: 0.8rem 0.9rem;
   }
 
-  .sidebar__profile {
-    margin-top: 0;
+  .sidebar--mobile .sidebar__link span {
+    display: block;
+  }
+
+  .sidebar--mobile .sidebar__profile-copy,
+  .sidebar--mobile .sidebar__profile,
+  .sidebar--mobile .sidebar__logout {
+    display: none;
   }
 
   .app-shell__content {
     padding: 0.9rem;
-  }
-
-  .app-shell__inner {
-    max-width: 100%;
   }
 
   .surface-card,
