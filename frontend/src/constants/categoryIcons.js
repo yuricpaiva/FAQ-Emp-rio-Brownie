@@ -5,6 +5,7 @@ export const categoryIcons = {
   "controladoria-financeiro": "/icon-controladoria-financeiro.svg",
   comercial: "/icon-comercial.svg",
   marketing: "/icon-marketing.svg",
+  "producao-expedicao": "/icon-producao-expedicao.svg",
   default: "/icon-ti.svg",
 };
 
