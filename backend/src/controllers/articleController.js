@@ -1,5 +1,4 @@
 const { PrismaClient } = require('@prisma/client');
-const mammoth = require('mammoth');
 const fs = require('fs/promises');
 const path = require('path');
 const { validateArticleInput, validateNumericId, VALID_ARTICLE_STATUS } = require('../utils/validation');
@@ -188,6 +187,7 @@ async function importWordArticle(req, res) {
   }
 
   try {
+    const mammoth = require('mammoth');
     await fs.mkdir(uploadsDir, { recursive: true });
 
     const conversion = await mammoth.convertToHtml(

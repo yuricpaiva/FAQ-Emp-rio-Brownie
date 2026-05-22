@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
+import ArticleEmojiPicker from "../components/ArticleEmojiPicker";
 import ReactQuill, { Quill } from "react-quill";
 import ImageResize from "quill-image-resize-module-react";
 import "react-quill/dist/quill.snow.css";
@@ -21,6 +22,7 @@ function AdminEditArticle() {
   const navigate = useNavigate();
   const quillRef = useRef(null);
   const wordInputRef = useRef(null);
+  const selectionRef = useRef(null);
   const [categories, setCategories] = useState([]);
   const [revisions, setRevisions] = useState([]);
   const [title, setTitle] = useState("");
@@ -35,6 +37,7 @@ function AdminEditArticle() {
   const [importing, setImporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   useEffect(() => {
     api
@@ -84,6 +87,18 @@ function AdminEditArticle() {
     input.click();
   };
 
+  const handleEmojiSelect = (emoji) => {
+    const editor = quillRef.current?.getEditor();
+    if (!editor) return;
+
+    const range = editor.getSelection() || selectionRef.current;
+    const index = range?.index ?? Math.max(editor.getLength() - 1, 0);
+
+    editor.insertText(index, emoji, "user");
+    editor.setSelection(index + emoji.length, 0, "user");
+    editor.focus();
+  };
+
   const quillModules = useMemo(
     () => ({
       toolbar: {
@@ -91,10 +106,13 @@ function AdminEditArticle() {
           [{ header: [1, 2, 3, false] }],
           ["bold", "italic", "underline", "strike"],
           [{ list: "ordered" }, { list: "bullet" }],
-          ["link", "image"],
+          ["link", "image", "emoji"],
           ["clean"],
         ],
-        handlers: { image: handleImageUpload },
+        handlers: {
+          image: handleImageUpload,
+          emoji: () => setEmojiPickerOpen((current) => !current),
+        },
       },
       imageResize: { modules: ["Resize", "DisplaySize"] },
     }),
@@ -247,8 +265,24 @@ function AdminEditArticle() {
           </label>
           <label className="form-grid__full">
             <span>Conteúdo</span>
-            <div className="editor-shell">
-              <ReactQuill ref={quillRef} theme="snow" value={content} onChange={setContent} modules={quillModules} />
+            <div className="editor-wrap">
+              <div className="editor-shell">
+                <ReactQuill
+                  ref={quillRef}
+                  theme="snow"
+                  value={content}
+                  onChange={setContent}
+                  onChangeSelection={(range) => {
+                    if (range) selectionRef.current = range;
+                  }}
+                  modules={quillModules}
+                />
+              </div>
+              <ArticleEmojiPicker
+                open={emojiPickerOpen}
+                onClose={() => setEmojiPickerOpen(false)}
+                onSelect={handleEmojiSelect}
+              />
             </div>
           </label>
 

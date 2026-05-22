@@ -909,10 +909,46 @@ textarea:focus {
   color: var(--brand-strong);
 }
 
+.editor-wrap {
+  position: relative;
+}
+
 .editor-shell {
   border-radius: 18px;
   overflow: hidden;
   border: 1px solid rgba(107, 70, 52, 0.14);
+}
+
+.emoji-picker-shell {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 0.65rem));
+  z-index: 20;
+}
+
+.emoji-picker-popover {
+  width: min(360px, calc(100vw - 2.5rem));
+  padding: 0.45rem;
+  border-radius: 18px;
+  border: 1px solid rgba(107, 70, 52, 0.16);
+  background: rgba(255, 250, 245, 0.98);
+  box-shadow: 0 20px 45px rgba(73, 44, 31, 0.18);
+  z-index: 20;
+}
+
+.emoji-picker-popover .EmojiPickerReact {
+  --epr-bg-color: #fffaf5;
+  --epr-category-label-bg-color: #fffaf5;
+  --epr-hover-bg-color: rgba(107, 70, 52, 0.1);
+  --epr-focus-bg-color: rgba(107, 70, 52, 0.12);
+  --epr-highlight-color: var(--brand);
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.ql-toolbar .ql-emoji::before {
+  content: "😊";
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .ql-container {
