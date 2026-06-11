@@ -16,6 +16,16 @@ const {
   listUsers,
   updateUserAdmin
 } = require('../controllers/authController');
+const {
+  updatePoolSettings,
+  createPoolParticipant,
+  updatePoolParticipant,
+  deletePoolParticipant
+} = require('../controllers/poolController');
+const {
+  getPowerBiSettingsAdmin,
+  updatePowerBiSettings
+} = require('../controllers/settingsController');
 
 const router = Router();
 const canCreateContent = requireRole(['creator', 'admin']);
@@ -71,5 +81,11 @@ router.get('/articles/:id/revisions', canCreateContent, listArticleRevisions);
 router.post('/users', adminOnly, createUser);
 router.get('/users', adminOnly, listUsers);
 router.put('/users/:id', adminOnly, updateUserAdmin);
+router.post('/pool-participants', adminOnly, createPoolParticipant);
+router.put('/pool-participants/:id', adminOnly, updatePoolParticipant);
+router.delete('/pool-participants/:id', adminOnly, deletePoolParticipant);
+router.put('/pool-settings', adminOnly, updatePoolSettings);
+router.get('/power-bi-settings', adminOnly, getPowerBiSettingsAdmin);
+router.put('/power-bi-settings', adminOnly, updatePowerBiSettings);
 
 module.exports = router;

@@ -224,6 +224,35 @@ function validateNumericId(rawId, fieldName = 'ID') {
   return { value: id };
 }
 
+function validatePoolParticipantInput(body = {}, { partial = false } = {}) {
+  const name = partial ? normalizeOptionalString(body.name) : normalizeString(body.name);
+  const photoUrl = partial ? normalizeOptionalString(body.photoUrl) : normalizeString(body.photoUrl);
+  const scoreProvided = body.score !== undefined && body.score !== null && body.score !== '';
+  const score = scoreProvided ? Number(body.score) : partial ? undefined : 0;
+
+  if (!partial && !name) {
+    return { error: 'Nome do colaborador e obrigatorio.' };
+  }
+
+  if (name !== undefined && (!name || name.length > 120)) {
+    return { error: 'O nome deve ter entre 1 e 120 caracteres.' };
+  }
+
+  if (!partial && !photoUrl) {
+    return { error: 'A foto do colaborador e obrigatoria.' };
+  }
+
+  if (photoUrl !== undefined && (!photoUrl || !isValidHttpUrl(photoUrl))) {
+    return { error: 'A foto precisa ser uma URL http/https valida.' };
+  }
+
+  if ((!partial || scoreProvided) && (!Number.isInteger(score) || score < 0)) {
+    return { error: 'A pontuacao deve ser um numero inteiro maior ou igual a zero.' };
+  }
+
+  return { value: { name, photoUrl, score } };
+}
+
 module.exports = {
   VALID_ROLES,
   VALID_ARTICLE_STATUS,
@@ -236,5 +265,6 @@ module.exports = {
   validateCreateUserInput,
   validateSelfUserUpdateInput,
   validateAdminUserUpdateInput,
-  validateNumericId
+  validateNumericId,
+  validatePoolParticipantInput
 };

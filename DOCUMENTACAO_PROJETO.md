@@ -44,6 +44,9 @@ Modelos principais:
 - `Category`: categorias de conhecimento, slug, icone, ordem e status.
 - `Article`: artigos com titulo, slug, resumo, categoria, conteudo HTML, status, autor e metadados.
 - `ArticleRevision`: historico de revisoes dos artigos.
+- `PoolParticipant`: participantes independentes do bolao, com nome, foto e pontuacao.
+- `AppSettings`: configuracoes globais do Bolao da Copa e Power BI.
+- `PowerBiAccess`: usuarios autorizados a visualizar o relatorio Power BI.
 
 ## Estrutura de pastas
 
@@ -95,7 +98,26 @@ FAQ-Emp-rio-Brownie-master/
 - Listagem de artigos recentes.
 - Tela de categoria em `/categoria/:slug`.
 - Tela de artigo em `/artigo/:slug`.
+- Tela de Power BI em `/power-bi`, reservada para incorporacao de dashboard via iframe.
+- Ranking do Bolao da Copa em `/ranking-bolao`, com classificacao, fotos e barras de pontuacao.
 - Renderizacao segura do HTML dos artigos com DOMPurify.
+
+### Bolao da Copa
+
+- Ranking disponivel para todos os usuarios autenticados.
+- Participantes independentes dos usuarios que fazem login.
+- Ordenacao por maior pontuacao e nome.
+- Empatados compartilham a mesma colocacao.
+- Cadastro, edicao e exclusao disponiveis somente para administradores.
+- Nome, foto e pontuacao inteira maior ou igual a zero.
+- O administrador pode habilitar ou ocultar o ranking pela tela de configuracoes.
+
+### Power BI
+
+- O administrador pode habilitar ou desabilitar o recurso.
+- O link incorporado do Power BI e configurado sem alteracao no codigo.
+- O acesso e concedido individualmente para usuarios ativos.
+- O menu e o link do iframe aparecem somente para usuarios autorizados.
 
 ### Painel administrativo
 
@@ -140,6 +162,7 @@ Regras principais:
 - Rotas de conhecimento exigem autenticacao.
 - Conteudos `draft` ficam visiveis para `creator` e `admin`.
 - Gestao de usuarios exige `admin`.
+- Configuracao do Bolao da Copa exige `admin`.
 
 ## Rotas do frontend
 
@@ -150,9 +173,13 @@ Regras principais:
 | `/` | Home da base | Autenticado |
 | `/categoria/:slug` | Artigos de uma categoria | Autenticado |
 | `/artigo/:slug` | Detalhe do artigo | Autenticado |
+| `/power-bi` | Visualizacao de dashboard Power BI | Autenticado |
+| `/ranking-bolao` | Ranking do Bolao da Copa | Autenticado |
 | `/admin/dashboard` | Painel de controle | `creator`, `admin` |
 | `/admin/artigos/novo` | Novo artigo | `creator`, `admin` |
 | `/admin/artigos/:id/editar` | Edicao de artigo | `creator`, `admin` |
+| `/admin/bolao` | Configuracao dos participantes do bolao | `admin` |
+| `/admin/configuracoes` | Configuracoes globais da aplicacao | `admin` |
 
 ## Rotas da API
 
@@ -176,6 +203,9 @@ Todas exigem autenticacao.
 | `GET` | `/knowledge/articles/id/:id` | Busca artigo por ID |
 | `GET` | `/knowledge/articles/:slug` | Busca artigo por slug |
 | `GET` | `/knowledge/categories` | Lista categorias ativas com contagem de artigos |
+| `GET` | `/knowledge/pool-ranking` | Lista o ranking do bolao por pontuacao |
+| `GET` | `/knowledge/pool-settings` | Retorna se o Bolao da Copa esta habilitado |
+| `GET` | `/knowledge/power-bi-config` | Retorna disponibilidade, acesso e link autorizado do BI |
 
 ### Administracao
 
@@ -193,6 +223,12 @@ Todas exigem autenticacao. Algumas exigem papel especifico.
 | `POST` | `/admin/users` | Cria usuario | `admin` |
 | `GET` | `/admin/users` | Lista usuarios | `admin` |
 | `PUT` | `/admin/users/:id` | Atualiza usuario | `admin` |
+| `POST` | `/admin/pool-participants` | Cadastra participante do bolao | `admin` |
+| `PUT` | `/admin/pool-participants/:id` | Atualiza participante e pontuacao | `admin` |
+| `DELETE` | `/admin/pool-participants/:id` | Remove participante do bolao | `admin` |
+| `PUT` | `/admin/pool-settings` | Habilita ou desabilita o Bolao da Copa | `admin` |
+| `GET` | `/admin/power-bi-settings` | Retorna link e usuarios autorizados do BI | `admin` |
+| `PUT` | `/admin/power-bi-settings` | Atualiza habilitacao, link e acessos do BI | `admin` |
 
 ## Categorias padrao
 

@@ -16,6 +16,8 @@ function Sidebar() {
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [poolEnabled, setPoolEnabled] = useState(false);
+  const [powerBiAccess, setPowerBiAccess] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
@@ -42,6 +44,19 @@ function Sidebar() {
   }, []);
 
   useEffect(() => {
+    const loadPowerBiAccess = () => {
+      api
+        .get("/knowledge/power-bi-config")
+        .then((res) => setPowerBiAccess(res.data.enabled && res.data.hasAccess))
+        .catch(() => setPowerBiAccess(false));
+    };
+
+    loadPowerBiAccess();
+    window.addEventListener("power-bi-settings-updated", loadPowerBiAccess);
+    return () => window.removeEventListener("power-bi-settings-updated", loadPowerBiAccess);
+  }, []);
+
+  useEffect(() => {
     if (!user) return;
     setFormName(user.name || "");
     setFormEmail(user.email || "");
@@ -52,6 +67,19 @@ function Sidebar() {
       .get("/knowledge/categories")
       .then((res) => setCategories(res.data))
       .catch(() => setCategories([]));
+  }, []);
+
+  useEffect(() => {
+    api
+      .get("/knowledge/pool-settings")
+      .then((res) => setPoolEnabled(res.data.poolEnabled))
+      .catch(() => setPoolEnabled(false));
+
+    const handlePoolSettingsUpdate = (event) => {
+      setPoolEnabled(Boolean(event.detail?.poolEnabled));
+    };
+    window.addEventListener("pool-settings-updated", handlePoolSettingsUpdate);
+    return () => window.removeEventListener("pool-settings-updated", handlePoolSettingsUpdate);
   }, []);
 
   const initials = useMemo(
@@ -181,6 +209,18 @@ function Sidebar() {
               <img src="/icon-home.svg" alt="" className="sidebar__nav-icon" />
               {(isMobile || !collapsed) && <span>Início</span>}
             </NavLink>
+            {powerBiAccess && (
+              <NavLink to="/power-bi" className="sidebar__link" onClick={closeNavigation}>
+                <img src="/icon-power-bi.svg" alt="" className="sidebar__nav-icon" />
+                {(isMobile || !collapsed) && <span>Power BI</span>}
+              </NavLink>
+            )}
+            {poolEnabled && (
+              <NavLink to="/ranking-bolao" className="sidebar__link" onClick={closeNavigation}>
+                <img src="/icon-ranking.svg" alt="" className="sidebar__nav-icon" />
+                {(isMobile || !collapsed) && <span>Ranking do Bolão</span>}
+              </NavLink>
+            )}
             {hasRole(["creator", "admin"]) && (
               <NavLink to="/admin/dashboard" className="sidebar__link" onClick={closeNavigation}>
                 <img src="/icon-painel.svg" alt="" className="sidebar__nav-icon" />

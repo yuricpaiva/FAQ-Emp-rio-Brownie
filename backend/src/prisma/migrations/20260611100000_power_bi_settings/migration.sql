@@ -1,0 +1,13 @@
+ALTER TABLE "AppSettings" ADD COLUMN "powerBiEnabled" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "AppSettings" ADD COLUMN "powerBiUrl" TEXT NOT NULL DEFAULT 'https://app.powerbi.com/view?r=eyJrIjoiYTZiZDBjNWItYWU0YS00NjA0LWE1NmMtNTk3YzQ0YTViYzg3IiwidCI6IjU4ODNmMjZmLTk1ZDQtNDE2YS04OThmLTBmZDhmYzMyNGQ0NSJ9&pageName=e4f916ca95bbd083114d';
+
+CREATE TABLE "PowerBiAccess" (
+    "userId" INTEGER NOT NULL PRIMARY KEY,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "PowerBiAccess_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+INSERT INTO "PowerBiAccess" ("userId", "createdAt")
+SELECT "id", CURRENT_TIMESTAMP
+FROM "User"
+WHERE "active" = true;

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true">
+  <defs>
+    <mask id="soccer-cutouts">
+      <circle cx="32" cy="32" r="28" fill="#fff"/>
+      <path fill="#000" d="m32 17 10 7.3-3.8 11.8H25.8L22 24.3 32 17Z"/>
+      <path fill="none" stroke="#000" stroke-width="3.5" stroke-linejoin="round" d="m32 17-3-12m13 19.3 12-4.5M38.2 36.1l7.3 10.8m-19.7-10.8-7.3 10.8M22 24.3 10 19.8m35.5 27.1 10.5.8m-37.5-.8-10.5.8"/>
+    </mask>
+  </defs>
+  <circle cx="32" cy="32" r="28" fill="#000" mask="url(#soccer-cutouts)"/>
+</svg>

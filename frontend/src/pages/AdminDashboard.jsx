@@ -209,6 +209,12 @@ function AdminDashboard() {
                 Gerenciar usuários
               </button>
             )}
+            {canManageUsers && (
+              <Link to="/admin/configuracoes" className="button button--ghost dashboard-settings-button">
+                <img src="/icon-settings.svg" alt="" />
+                Configurações
+              </Link>
+            )}
           </div>
         </div>
 

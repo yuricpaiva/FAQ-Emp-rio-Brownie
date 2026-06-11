@@ -15,6 +15,7 @@ model User {
   role         String  @default("reader")
   photoUrl     String  @default("")
   active       Boolean @default(true)
+  powerBiAccess PowerBiAccess?
 }
 
 model Category {
@@ -63,4 +64,29 @@ model ArticleRevision {
   article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([articleId, createdAt])
+}
+
+model PoolParticipant {
+  id        Int      @id @default(autoincrement())
+  name      String
+  photoUrl  String
+  score     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([score, name])
+}
+
+model AppSettings {
+  id             Int      @id @default(1)
+  poolEnabled    Boolean  @default(true)
+  powerBiEnabled Boolean  @default(true)
+  powerBiUrl     String   @default("")
+  updatedAt      DateTime @updatedAt
+}
+
+model PowerBiAccess {
+  userId    Int      @id
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
