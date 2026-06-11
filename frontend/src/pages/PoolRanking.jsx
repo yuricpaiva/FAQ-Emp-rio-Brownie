@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import ParticipantAvatar from "../components/ParticipantAvatar";
 import api from "../services/api";
 
 const BAR_COLORS = ["#168847", "#f4c430", "#1769aa"];
@@ -116,7 +117,11 @@ function PoolRanking() {
                 <span className="pool-ranking-column__position">{participant.position}º</span>
                 <div className="pool-ranking-column__avatar-wrap">
                   {isLeader && <span className="pool-ranking-column__crown" aria-label="Líder">♛</span>}
-                  <img src={participant.photoUrl} alt="" className="pool-ranking-column__avatar" />
+                  <ParticipantAvatar
+                    name={participant.name}
+                    photoUrl={participant.photoUrl}
+                    className="pool-ranking-column__avatar"
+                  />
                 </div>
                 <strong title={participant.name}>{participant.name}</strong>
                 {isLeader && <span className="pool-ranking-column__leader-label">Líder da rodada</span>}

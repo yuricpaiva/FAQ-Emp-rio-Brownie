@@ -256,6 +256,27 @@ test('pool ranking is readable by authenticated users and writable only by admin
   assert.equal(create.status, 201);
   const participant = await create.json();
 
+  const createWithoutPhoto = await fetch(`${base}/admin/pool-participants`, {
+    method: 'POST',
+    headers: { cookie: adminCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Teste Bolao Sem Foto',
+      score: 5
+    })
+  });
+  assert.equal(createWithoutPhoto.status, 201);
+  const participantWithoutPhoto = await createWithoutPhoto.json();
+  assert.equal(participantWithoutPhoto.photoUrl, '');
+
+  const removeWithoutPhoto = await fetch(
+    `${base}/admin/pool-participants/${participantWithoutPhoto.id}`,
+    {
+      method: 'DELETE',
+      headers: { cookie: adminCookie }
+    }
+  );
+  assert.equal(removeWithoutPhoto.status, 204);
+
   const tiedCreate = await fetch(`${base}/admin/pool-participants`, {
     method: 'POST',
     headers: { cookie: adminCookie, 'Content-Type': 'application/json' },

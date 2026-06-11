@@ -238,11 +238,7 @@ function validatePoolParticipantInput(body = {}, { partial = false } = {}) {
     return { error: 'O nome deve ter entre 1 e 120 caracteres.' };
   }
 
-  if (!partial && !photoUrl) {
-    return { error: 'A foto do colaborador e obrigatoria.' };
-  }
-
-  if (photoUrl !== undefined && (!photoUrl || !isValidHttpUrl(photoUrl))) {
+  if (photoUrl !== undefined && !isValidHttpUrl(photoUrl)) {
     return { error: 'A foto precisa ser uma URL http/https valida.' };
   }
 

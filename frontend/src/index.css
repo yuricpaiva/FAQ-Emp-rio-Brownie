@@ -675,10 +675,21 @@ textarea:focus {
 .pool-ranking-column__avatar {
   width: 58px;
   height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 3px solid #f4c430;
   border-radius: 50%;
   object-fit: cover;
   background: #e9efe8;
+}
+
+.participant-avatar--fallback {
+  color: #fff;
+  background: linear-gradient(145deg, #1769aa, #0b3f73);
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
 }
 
 .pool-ranking-column__crown {
@@ -830,10 +841,13 @@ textarea:focus {
 }
 
 .admin-pool-photo-preview img,
-.admin-pool-item > img {
+.admin-pool-item__avatar {
   width: 58px;
   height: 58px;
   flex: 0 0 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 50%;
   object-fit: cover;
   border: 3px solid #f4c430;
@@ -1982,7 +1996,7 @@ textarea:focus {
     grid-template-columns: 52px minmax(0, 1fr);
   }
 
-  .admin-pool-item > img {
+  .admin-pool-item__avatar {
     width: 52px;
     height: 52px;
   }

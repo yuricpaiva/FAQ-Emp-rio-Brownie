@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import ParticipantAvatar from "../components/ParticipantAvatar";
 import api from "../services/api";
 
 function AdminPool() {
@@ -51,7 +52,7 @@ function AdminPool() {
     setEditingId(participant.id);
     setName(participant.name);
     setScore(String(participant.score));
-    setCurrentPhotoUrl(participant.photoUrl);
+    setCurrentPhotoUrl(participant.photoUrl || "");
     setPhoto(null);
     setMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -72,11 +73,6 @@ function AdminPool() {
           headers: { "Content-Type": "multipart/form-data" },
         });
         photoUrl = upload.data.url;
-      }
-
-      if (!photoUrl) {
-        setMessage("Selecione uma foto para o colaborador.");
-        return;
       }
 
       const payload = { name, score: Number(score), photoUrl };
@@ -156,12 +152,11 @@ function AdminPool() {
               />
             </label>
             <label>
-              <span>{editingId ? "Nova foto (opcional)" : "Foto"}</span>
+              <span>{editingId ? "Nova foto (opcional)" : "Foto (opcional)"}</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={(event) => setPhoto(event.target.files?.[0] || null)}
-                required={!editingId && !currentPhotoUrl}
               />
             </label>
 
@@ -201,7 +196,11 @@ function AdminPool() {
           <div className="admin-pool-list__items">
             {participants.map((participant) => (
               <article className="admin-pool-item" key={participant.id}>
-                <img src={participant.photoUrl} alt="" />
+                <ParticipantAvatar
+                  name={participant.name}
+                  photoUrl={participant.photoUrl}
+                  className="admin-pool-item__avatar"
+                />
                 <div>
                   <strong>{participant.name}</strong>
                   <span>{participant.score} {participant.score === 1 ? "ponto" : "pontos"}</span>
