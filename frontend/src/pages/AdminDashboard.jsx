@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 const roleLabels = {
   reader: "Leitor",
   creator: "Criador",
+  production_manager: "Gerente de produção",
   admin: "Administrador",
 };
 
@@ -388,6 +389,7 @@ function AdminDashboard() {
                     <select value={userRole} onChange={(event) => setUserRole(event.target.value)}>
                       <option value="reader">Leitor</option>
                       <option value="creator">Criador</option>
+                      <option value="production_manager">Gerente de produção</option>
                       <option value="admin">Administrador</option>
                     </select>
                   </label>

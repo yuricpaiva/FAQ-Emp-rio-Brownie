@@ -90,3 +90,56 @@ model PowerBiAccess {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+model ProductionProduct {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sourceConversions ProductionConversion[] @relation("ProductionConversionSource")
+
+  @@index([active, code])
+}
+
+model ProductionConversion {
+  id              Int               @id @default(autoincrement())
+  sourceProductId Int               @unique
+  conversionCode  String
+  conversionName  String
+  conversionFactor Decimal
+  active          Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  sourceProduct   ProductionProduct @relation("ProductionConversionSource", fields: [sourceProductId], references: [id])
+
+  @@index([active, sourceProductId])
+  @@index([conversionCode])
+}
+
+model ProductionStore {
+  id          Int                    @id @default(autoincrement())
+  sourceCode  String                 @unique
+  sourceName  String
+  displayName String
+  active      Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  routes      ProductionStoreRoute[]
+
+  @@index([active, displayName])
+}
+
+model ProductionStoreRoute {
+  id        Int             @id @default(autoincrement())
+  storeId   Int
+  weekday   Int
+  active    Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  store     ProductionStore @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, weekday])
+  @@index([active, weekday])
+}

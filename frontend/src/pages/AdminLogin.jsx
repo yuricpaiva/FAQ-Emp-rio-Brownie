@@ -44,16 +44,13 @@ function AdminLogin() {
       <div className="login-screen__backdrop" />
       <div className="login-card">
         <div className="login-card__brand">
-          <div>
-            <h1>FAQ Empório Brownie</h1>
-          </div>
+          <img
+            src="/login-faq-emporio-brownie.png"
+            alt="FAQ Emporio Brownie"
+          />
         </div>
 
-        <p className="login-card__copy">
-          Faça login para acessar a base interna de conhecimento, navegar pelas categorias e gerenciar conteúdos.
-        </p>
-
-        <form onSubmit={handleSubmit} className="form-grid">
+        <form onSubmit={handleSubmit} className="form-grid login-card__form">
           <label>
             <span>Email</span>
             <input

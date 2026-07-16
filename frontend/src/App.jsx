@@ -7,6 +7,9 @@ const Home = lazy(() => import("./pages/Home"));
 const Category = lazy(() => import("./pages/Category"));
 const Article = lazy(() => import("./pages/Article"));
 const PowerBI = lazy(() => import("./pages/PowerBI"));
+const ProductionPlanning = lazy(() => import("./pages/ProductionPlanning"));
+const NewProductionPlanning = lazy(() => import("./pages/NewProductionPlanning"));
+const ProductionPlanningSettings = lazy(() => import("./pages/ProductionPlanningSettings"));
 const PoolRanking = lazy(() => import("./pages/PoolRanking"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -36,6 +39,22 @@ function AppRoutes() {
         <Route path="/categoria/:slug" element={<ProtectedRoute><Category /></ProtectedRoute>} />
         <Route path="/artigo/:slug" element={<ProtectedRoute><Article /></ProtectedRoute>} />
         <Route path="/power-bi" element={<ProtectedRoute><PowerBI /></ProtectedRoute>} />
+        <Route
+          path="/planejamento-producao"
+          element={<ProtectedRoute roles={["admin", "production_manager"]}><ProductionPlanning /></ProtectedRoute>}
+        />
+        <Route
+          path="/planejamento-producao/nova"
+          element={<ProtectedRoute roles={["admin", "production_manager"]}><NewProductionPlanning /></ProtectedRoute>}
+        />
+        <Route
+          path="/planejamento-producao/:day/editar"
+          element={<ProtectedRoute roles={["admin", "production_manager"]}><NewProductionPlanning /></ProtectedRoute>}
+        />
+        <Route
+          path="/planejamento-producao/configuracoes"
+          element={<ProtectedRoute roles={["admin"]}><ProductionPlanningSettings /></ProtectedRoute>}
+        />
         <Route path="/ranking-bolao" element={<ProtectedRoute><PoolRanking /></ProtectedRoute>} />
         <Route
           path="/admin/dashboard"
@@ -65,7 +84,7 @@ function AppRoutes() {
 function App() {
   const location = useLocation();
   const isLoginPage = location.pathname === "/login" || location.pathname === "/admin/login";
-  const isPoolRankingPage = location.pathname === "/ranking-bolao";
+  const isFullPage = ["/power-bi", "/ranking-bolao"].includes(location.pathname);
 
   if (isLoginPage) {
     return <AppRoutes />;
@@ -74,8 +93,8 @@ function App() {
   return (
     <div className="app-shell">
       <Sidebar />
-      <main className={`app-shell__content ${isPoolRankingPage ? "app-shell__content--full" : ""}`}>
-        <div className={`app-shell__inner ${isPoolRankingPage ? "app-shell__inner--full" : ""}`}>
+      <main className={`app-shell__content ${isFullPage ? "app-shell__content--full" : ""}`}>
+        <div className={`app-shell__inner ${isFullPage ? "app-shell__inner--full" : ""}`}>
           <AppRoutes />
         </div>
       </main>

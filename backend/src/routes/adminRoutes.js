@@ -26,10 +26,30 @@ const {
   getPowerBiSettingsAdmin,
   updatePowerBiSettings
 } = require('../controllers/settingsController');
+const {
+  listProductionProducts,
+  saveProductionProducts,
+  upsertProductionProduct
+} = require('../controllers/productionProductController');
+const {
+  listProductionConversions,
+  saveProductionConversions
+} = require('../controllers/productionConversionController');
+const {
+  listProductionStores,
+  saveProductionStoreRoutes,
+  saveProductionStores,
+  syncProductionStores
+} = require('../controllers/productionStoreController');
+const {
+  getProductionStocks,
+  suggestProduction
+} = require('../controllers/productionPlanningController');
 
 const router = Router();
 const canCreateContent = requireRole(['creator', 'admin']);
 const adminOnly = requireRole(['admin']);
+const canPlanProduction = requireRole(['admin', 'production_manager']);
 
 router.use(authenticate);
 
@@ -87,5 +107,18 @@ router.delete('/pool-participants/:id', adminOnly, deletePoolParticipant);
 router.put('/pool-settings', adminOnly, updatePoolSettings);
 router.get('/power-bi-settings', adminOnly, getPowerBiSettingsAdmin);
 router.put('/power-bi-settings', adminOnly, updatePowerBiSettings);
+router.get('/production-products/planning', canPlanProduction, listProductionProducts);
+router.post('/production-products', canPlanProduction, upsertProductionProduct);
+router.get('/production-products', adminOnly, listProductionProducts);
+router.put('/production-products', adminOnly, saveProductionProducts);
+router.get('/production-conversions', adminOnly, listProductionConversions);
+router.put('/production-conversions', adminOnly, saveProductionConversions);
+router.get('/production-stores/planning', canPlanProduction, listProductionStores);
+router.post('/production-stores/sync', adminOnly, syncProductionStores);
+router.get('/production-stores', adminOnly, listProductionStores);
+router.put('/production-stores', adminOnly, saveProductionStores);
+router.put('/production-store-routes', adminOnly, saveProductionStoreRoutes);
+router.post('/production-planning/suggestions', canPlanProduction, suggestProduction);
+router.post('/production-planning/stocks', canPlanProduction, getProductionStocks);
 
 module.exports = router;

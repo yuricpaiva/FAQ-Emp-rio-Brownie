@@ -1,4 +1,4 @@
-const VALID_ROLES = ['reader', 'creator', 'admin'];
+const VALID_ROLES = ['reader', 'creator', 'production_manager', 'admin'];
 const VALID_ARTICLE_STATUS = ['draft', 'published'];
 const VALID_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const VALID_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];

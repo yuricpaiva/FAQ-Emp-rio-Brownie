@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { getCategoryIcon } from "../constants/categoryIcons";
@@ -9,12 +9,14 @@ const MOBILE_QUERY = "(max-width: 720px)";
 
 function Sidebar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout, updateUser, hasRole } = useAuth();
   const [collapsed, setCollapsed] = useState(() => {
     return window.localStorage.getItem(STORAGE_KEY) === "true";
   });
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [knowledgeOpen, setKnowledgeOpen] = useState(() => window.location.pathname.startsWith("/categoria"));
   const [categories, setCategories] = useState([]);
   const [poolEnabled, setPoolEnabled] = useState(false);
   const [powerBiAccess, setPowerBiAccess] = useState(false);
@@ -28,6 +30,12 @@ function Sidebar() {
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, String(collapsed));
   }, [collapsed]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/categoria")) {
+      setKnowledgeOpen(true);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(MOBILE_QUERY);
@@ -105,6 +113,13 @@ function Sidebar() {
     closeNavigation();
     await logout();
     navigate("/login", { replace: true });
+  };
+
+  const handleKnowledgeToggle = () => {
+    if (!isMobile && collapsed) {
+      setCollapsed(false);
+    }
+    setKnowledgeOpen((value) => !value);
   };
 
   const handleProfileSave = async (event) => {
@@ -215,6 +230,12 @@ function Sidebar() {
                 {(isMobile || !collapsed) && <span>Power BI</span>}
               </NavLink>
             )}
+            {hasRole(["admin", "production_manager"]) && (
+              <NavLink to="/planejamento-producao" className="sidebar__link" onClick={closeNavigation}>
+                <img src="/icon-producao-expedicao.svg" alt="" className="sidebar__nav-icon" />
+                {(isMobile || !collapsed) && <span>Planejamento de Produção</span>}
+              </NavLink>
+            )}
             {poolEnabled && (
               <NavLink to="/ranking-bolao" className="sidebar__link" onClick={closeNavigation}>
                 <img src="/icon-ranking.svg" alt="" className="sidebar__nav-icon" />
@@ -230,17 +251,42 @@ function Sidebar() {
           </div>
 
           <div className="sidebar__group">
-            {categories.map((category) => (
-              <NavLink
-                key={category.id}
-                to={`/categoria/${category.slug}`}
-                className="sidebar__link"
-                onClick={closeNavigation}
-              >
-                <img src={getCategoryIcon(category.iconKey)} alt="" className="sidebar__category-icon" />
-                {(isMobile || !collapsed) && <span>{category.name}</span>}
-              </NavLink>
-            ))}
+            <button
+              type="button"
+              className={`sidebar__link sidebar__link--button sidebar__knowledge-trigger ${
+                location.pathname.startsWith("/categoria") ? "active" : ""
+              }`}
+              onClick={handleKnowledgeToggle}
+              aria-expanded={knowledgeOpen}
+              aria-controls="knowledge-menu"
+            >
+              <img src="/icon-base-conhecimento.svg" alt="" className="sidebar__nav-icon" />
+              {(isMobile || !collapsed) && (
+                <>
+                  <span>Base de conhecimento</span>
+                  <span className={`sidebar__chevron ${knowledgeOpen ? "sidebar__chevron--open" : ""}`}>
+                    v
+                  </span>
+                </>
+              )}
+            </button>
+
+            {(isMobile || !collapsed) && knowledgeOpen && (
+              <div id="knowledge-menu" className="sidebar__submenu">
+                {categories.map((category) => (
+                  <NavLink
+                    key={category.id}
+                    to={`/categoria/${category.slug}`}
+                    className="sidebar__submenu-link"
+                    onClick={closeNavigation}
+                  >
+                    <img src={getCategoryIcon(category.iconKey)} alt="" className="sidebar__category-icon" />
+                    <span>{category.name}</span>
+                  </NavLink>
+                ))}
+                {!categories.length && <span className="sidebar__submenu-empty">Nenhuma categoria cadastrada</span>}
+              </div>
+            )}
           </div>
 
           {!isMobile && (

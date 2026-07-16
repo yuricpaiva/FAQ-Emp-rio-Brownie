@@ -1,0 +1,27 @@
+{
+  "name": "faq-emporio-brownie",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix backend test"
+  },
+  "description": "Aplicação interna de base de conhecimento com:",
+  "main": "index.js",
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yuricpaiva/FAQ-Emp-rio-Brownie.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/yuricpaiva/FAQ-Emp-rio-Brownie/issues"
+  },
+  "homepage": "https://github.com/yuricpaiva/FAQ-Emp-rio-Brownie#readme"
+}
