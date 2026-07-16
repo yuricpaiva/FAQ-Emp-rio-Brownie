@@ -48,6 +48,10 @@ test('auth protects readers routes and admin routes use the session cookie', asy
   const users = await fetch(`${base}/admin/users`, { headers: { cookie } });
   assert.equal(users.status, 200);
 
+  const databaseConnections = await fetch(`${base}/admin/database-connections`, { headers: { cookie } });
+  assert.equal(databaseConnections.status, 200);
+  assert.equal(JSON.stringify(await databaseConnections.json()).includes('password\"'), false);
+
   const logout = await fetch(`${base}/auth/logout`, { method: 'POST', headers: { cookie } });
   assert.equal(logout.status, 204);
 });
@@ -116,6 +120,11 @@ test('pool ranking is readable by authenticated users and writable only by admin
     body: JSON.stringify({ email: 'reader-pool@test.local', password: 'reader123' })
   });
   const readerCookie = readerLogin.headers.get('set-cookie')?.split(';')[0];
+
+  const forbiddenDatabaseConnections = await fetch(`${base}/admin/database-connections`, {
+    headers: { cookie: readerCookie }
+  });
+  assert.equal(forbiddenDatabaseConnections.status, 403);
 
   const ranking = await fetch(`${base}/knowledge/pool-ranking`, {
     headers: { cookie: readerCookie }

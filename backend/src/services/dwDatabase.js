@@ -27,7 +27,14 @@ async function queryDw(text, params) {
   return getDwPool().query(text, params);
 }
 
+async function resetDwPool() {
+  const currentPool = pool;
+  pool = undefined;
+  if (currentPool) await currentPool.end();
+}
+
 module.exports = {
   getDwPool,
   queryDw,
+  resetDwPool,
 };

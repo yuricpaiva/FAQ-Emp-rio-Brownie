@@ -45,6 +45,11 @@ const {
   getProductionStocks,
   suggestProduction
 } = require('../controllers/productionPlanningController');
+const {
+  getDatabaseConnections,
+  saveConnection,
+  testConnection
+} = require('../controllers/databaseConnectionController');
 
 const router = Router();
 const canCreateContent = requireRole(['creator', 'admin']);
@@ -107,6 +112,9 @@ router.delete('/pool-participants/:id', adminOnly, deletePoolParticipant);
 router.put('/pool-settings', adminOnly, updatePoolSettings);
 router.get('/power-bi-settings', adminOnly, getPowerBiSettingsAdmin);
 router.put('/power-bi-settings', adminOnly, updatePowerBiSettings);
+router.get('/database-connections', adminOnly, getDatabaseConnections);
+router.post('/database-connections/:system/test', adminOnly, testConnection);
+router.put('/database-connections/:system', adminOnly, saveConnection);
 router.get('/production-products/planning', canPlanProduction, listProductionProducts);
 router.post('/production-products', canPlanProduction, upsertProductionProduct);
 router.get('/production-products', adminOnly, listProductionProducts);

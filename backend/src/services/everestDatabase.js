@@ -6,6 +6,16 @@ function isEverestEnabled() {
   return String(process.env.EVEREST_DB_ENABLED || '').toLowerCase() === 'true';
 }
 
+function isEverestStockDebugEnabled() {
+  return String(process.env.EVEREST_STOCK_DEBUG || '').toLowerCase() === 'true';
+}
+
+function debugEverestStock(message, details) {
+  if (isEverestStockDebugEnabled()) {
+    console.log(`[Everest estoque] ${message}`, details);
+  }
+}
+
 function getEverestStockDate(now = new Date()) {
   const timeZone = process.env.EVEREST_STOCK_TIMEZONE || 'America/Fortaleza';
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -84,6 +94,20 @@ function buildStockSnapshotFromRows({ rows, stockDate, stores, productCodes }) {
   if (duplicateKeys.length) console.warn('Saldos duplicados encontrados no Everest:', { stockDate, items: duplicateKeys });
   if (invalidKeys.length) console.warn('Saldos negativos ou invalidos encontrados no Everest:', { stockDate, items: invalidKeys });
 
+  const statusCounts = Object.values(items).reduce((totals, storeItems) => {
+    Object.values(storeItems).forEach((item) => {
+      totals[item.status] = (totals[item.status] || 0) + 1;
+    });
+    return totals;
+  }, {});
+  debugEverestStock('Resultado processado', {
+    stockDate,
+    returnedRows: Array.isArray(rows) ? rows.length : 0,
+    statusCounts,
+    returnedStores: normalizeValues((rows || []).map((row) => row.fantasia)),
+    returnedProductCodesSample: normalizeValues((rows || []).map((row) => row.cd_item)).slice(0, 20),
+  });
+
   const warnings = [];
   if (duplicateKeys.length) warnings.push(`${duplicateKeys.length} saldo(s) duplicado(s) precisam ser conferidos no Everest.`);
   if (invalidKeys.length) warnings.push(`${invalidKeys.length} saldo(s) negativo(s) ou invalido(s) nao foram descontados.`);
@@ -127,6 +151,7 @@ async function getEverestStockSnapshot({ stores, productCodes, stockDate = getEv
   }
 
   if (!isEverestEnabled()) {
+    debugEverestStock('Consulta desabilitada', { stockDate });
     return {
       stockDate,
       status: 'unavailable',
@@ -136,7 +161,9 @@ async function getEverestStockSnapshot({ stores, productCodes, stockDate = getEv
   }
 
   const requiredConfig = ['EVEREST_DB_HOST', 'EVEREST_DB_NAME', 'EVEREST_DB_USER', 'EVEREST_DB_PASSWORD'];
-  if (requiredConfig.some((key) => !String(process.env[key] || '').trim())) {
+  const missingConfig = requiredConfig.filter((key) => !String(process.env[key] || '').trim());
+  if (missingConfig.length) {
+    debugEverestStock('Configuracao incompleta', { stockDate, missingConfig });
     return {
       stockDate,
       status: 'unavailable',
@@ -147,6 +174,15 @@ async function getEverestStockSnapshot({ stores, productCodes, stockDate = getEv
 
   const storePlaceholders = normalizedStores.map(() => '?').join(', ');
   const codePlaceholders = normalizedCodes.map(() => '?').join(', ');
+  debugEverestStock('Iniciando consulta', {
+    stockDate,
+    host: process.env.EVEREST_DB_HOST,
+    port: Number(process.env.EVEREST_DB_PORT || 3306),
+    database: process.env.EVEREST_DB_NAME,
+    stores: normalizedStores,
+    productCodeCount: normalizedCodes.length,
+    productCodesSample: normalizedCodes.slice(0, 20),
+  });
   try {
     const [rows] = await getEverestPool().execute(
       `
@@ -181,9 +217,16 @@ function isStockAvailable(stockItem) {
   return availableStatuses.has(stockItem?.status);
 }
 
+async function resetEverestPool() {
+  const currentPool = pool;
+  pool = undefined;
+  if (currentPool) await currentPool.end();
+}
+
 module.exports = {
   buildStockSnapshotFromRows,
   getEverestStockDate,
   getEverestStockSnapshot,
   isStockAvailable,
+  resetEverestPool,
 };

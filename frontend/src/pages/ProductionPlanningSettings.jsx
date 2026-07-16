@@ -28,6 +28,12 @@ const settingsTabs = [
       "Preparar cálculo consolidado por produto.",
     ],
   },
+  {
+    id: "connections",
+    label: "Conexões",
+    title: "Conexões externas",
+    description: "Configure e valide os bancos usados pelo planejamento de produção.",
+  },
 ];
 
 const weekdays = [
@@ -871,6 +877,251 @@ function ConversionsSettings() {
   );
 }
 
+const emptyConnectionState = {
+  configuration: null,
+  password: "",
+  validationToken: "",
+  testResult: null,
+  message: "",
+  testing: false,
+  saving: false,
+};
+
+function formatConnectionDate(value) {
+  if (!value) return "Sem dados";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(date);
+}
+
+function ConnectionLog({ result }) {
+  if (!result) return null;
+
+  return (
+    <div className={`database-connection-log database-connection-log--${result.success ? "success" : "error"}`} aria-live="polite">
+      <div className="database-connection-log__summary">
+        <strong>{result.success ? "Conexão validada" : "Falha na conexão"}</strong>
+        <span>Data consultada: {formatConnectionDate(result.businessDate)}</span>
+        {result.success && (
+          <>
+            <span>Data mais recente: {formatConnectionDate(result.latestDate)}</span>
+            <span>Registros na data: {result.todayCount ?? 0}</span>
+          </>
+        )}
+      </div>
+      <ol className="database-connection-log__steps">
+        {(result.logs || []).map((entry, index) => (
+          <li key={`${entry.name}-${entry.timestamp}-${index}`} className={`database-connection-log__step database-connection-log__step--${entry.status}`}>
+            <span className="database-connection-log__indicator" aria-hidden="true" />
+            <div>
+              <strong>{entry.name}</strong>
+              <span>{entry.message}</span>
+            </div>
+            <time dateTime={entry.timestamp}>{entry.durationMs} ms</time>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function DatabaseConnectionSection({ system, title, description, state, setState }) {
+  const configuration = state.configuration || {};
+  const isEverest = system === "everest";
+
+  const updateField = (field, value) => {
+    setState((current) => ({
+      ...current,
+      configuration: { ...current.configuration, [field]: value },
+      validationToken: "",
+      testResult: null,
+      message: current.testResult ? "Os campos mudaram. Teste a conexão novamente." : "",
+    }));
+  };
+
+  const updatePassword = (value) => {
+    setState((current) => ({
+      ...current,
+      password: value,
+      validationToken: "",
+      testResult: null,
+      message: current.testResult ? "Os campos mudaram. Teste a conexão novamente." : "",
+    }));
+  };
+
+  const payload = () => ({ ...configuration, password: state.password });
+
+  const testConnection = async () => {
+    setState((current) => ({ ...current, testing: true, validationToken: "", testResult: null, message: "" }));
+    try {
+      const response = await api.post(`/admin/database-connections/${system}/test`, payload());
+      setState((current) => ({
+        ...current,
+        testing: false,
+        testResult: response.data,
+        validationToken: response.data.validationToken || "",
+        message: response.data.success ? "Teste concluído com sucesso." : response.data.error?.message || "A conexão não pôde ser validada.",
+      }));
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        testing: false,
+        testResult: null,
+        message: error.response?.data?.error || "Não foi possível executar o teste.",
+      }));
+    }
+  };
+
+  const saveConnection = async () => {
+    setState((current) => ({ ...current, saving: true, message: "" }));
+    try {
+      const response = await api.put(`/admin/database-connections/${system}`, {
+        configuration: payload(),
+        validationToken: state.validationToken,
+      });
+      setState((current) => ({
+        ...current,
+        configuration: response.data.configuration,
+        password: "",
+        validationToken: "",
+        saving: false,
+        message: response.data.message,
+      }));
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        saving: false,
+        validationToken: "",
+        message: error.response?.data?.error || "Não foi possível salvar a configuração.",
+      }));
+    }
+  };
+
+  return (
+    <section className="database-connection-section">
+      <div className="production-settings-subsection__header">
+        <div>
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+        {isEverest && (
+          <label className="database-connection-enabled">
+            <input
+              type="checkbox"
+              checked={Boolean(configuration.enabled)}
+              onChange={(event) => updateField("enabled", event.target.checked)}
+            />
+            <span>Conexão ativa</span>
+          </label>
+        )}
+      </div>
+
+      <div className="database-connection-fields">
+        <label>
+          <span>Host</span>
+          <input type="text" value={configuration.host || ""} onChange={(event) => updateField("host", event.target.value)} />
+        </label>
+        <label>
+          <span>Porta</span>
+          <input type="number" min="1" max="65535" value={configuration.port || ""} onChange={(event) => updateField("port", event.target.value)} />
+        </label>
+        <label>
+          <span>Database</span>
+          <input type="text" value={configuration.database || ""} onChange={(event) => updateField("database", event.target.value)} />
+        </label>
+        <label>
+          <span>Usuário</span>
+          <input type="text" autoComplete="username" value={configuration.user || ""} onChange={(event) => updateField("user", event.target.value)} />
+        </label>
+        <label>
+          <span>Nova senha</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={state.password}
+            placeholder={configuration.passwordConfigured ? "Senha configurada" : "Senha não configurada"}
+            onChange={(event) => updatePassword(event.target.value)}
+          />
+        </label>
+        {isEverest && (
+          <>
+            <label>
+              <span>Charset</span>
+              <input type="text" value={configuration.charset || ""} onChange={(event) => updateField("charset", event.target.value)} />
+            </label>
+            <label>
+              <span>Timezone</span>
+              <input type="text" value={configuration.timezone || ""} onChange={(event) => updateField("timezone", event.target.value)} />
+            </label>
+          </>
+        )}
+      </div>
+
+      <div className="database-connection-actions">
+        <button type="button" className="button button--ghost" onClick={testConnection} disabled={state.testing || state.saving}>
+          {state.testing ? "Testando..." : "Testar conexão"}
+        </button>
+        <button type="button" className="button" onClick={saveConnection} disabled={!state.validationToken || state.testing || state.saving}>
+          {state.saving ? "Salvando..." : "Salvar configuração"}
+        </button>
+      </div>
+
+      <ConnectionLog result={state.testResult} />
+      {state.message && (
+        <p className={`form-message ${state.validationToken || state.message.toLowerCase().includes("sucesso") ? "form-message--success" : "form-message--error"}`}>
+          {state.message}
+        </p>
+      )}
+    </section>
+  );
+}
+
+function ConnectionsSettings() {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [dw, setDw] = useState(emptyConnectionState);
+  const [everest, setEverest] = useState(emptyConnectionState);
+
+  useEffect(() => {
+    let active = true;
+    api.get("/admin/database-connections")
+      .then((response) => {
+        if (!active) return;
+        setDw({ ...emptyConnectionState, configuration: response.data.dw });
+        setEverest({ ...emptyConnectionState, configuration: response.data.everest });
+      })
+      .catch((error) => {
+        if (active) setLoadError(error.response?.data?.error || "Não foi possível carregar as conexões.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  if (loading) return <p className="empty-state production-empty-state">Carregando conexões...</p>;
+  if (loadError) return <p className="form-message form-message--error">{loadError}</p>;
+
+  return (
+    <div className="database-connections-settings">
+      <DatabaseConnectionSection
+        system="dw"
+        title="Banco 3S - Média de venda"
+        description="PostgreSQL usado para consultar vendas e produtos."
+        state={dw}
+        setState={setDw}
+      />
+      <DatabaseConnectionSection
+        system="everest"
+        title="Everest - Estoque"
+        description="MySQL usado para consultar o saldo de estoque atual."
+        state={everest}
+        setState={setEverest}
+      />
+    </div>
+  );
+}
+
 function ProductionPlanningSettings() {
   const [activeTab, setActiveTab] = useState(settingsTabs[0].id);
   const currentTab = settingsTabs.find((tab) => tab.id === activeTab) || settingsTabs[0];
@@ -913,6 +1164,8 @@ function ProductionPlanningSettings() {
           <ProductsSettings />
         ) : activeTab === "conversions" ? (
           <ConversionsSettings />
+        ) : activeTab === "connections" ? (
+          <ConnectionsSettings />
         ) : (
           <div className="production-settings-placeholder">
             {currentTab.items.map((item) => (
