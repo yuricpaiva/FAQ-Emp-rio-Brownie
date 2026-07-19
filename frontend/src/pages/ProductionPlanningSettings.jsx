@@ -52,6 +52,24 @@ const headerAliases = {
   nome: "name",
 };
 
+const conversionHeaderAliases = {
+  "produto vendido": "sourceCode",
+  "codigo produto vendido": "sourceCode",
+  "codigo do produto vendido": "sourceCode",
+  "codigo de origem": "sourceCode",
+  "codigo do produto de origem": "sourceCode",
+  "cdg produto de conversao": "conversionCode",
+  "codigo produto de conversao": "conversionCode",
+  "codigo do produto de conversao": "conversionCode",
+  "codigo convertido": "conversionCode",
+  "nome produto de conversao": "conversionName",
+  "nome do produto de conversao": "conversionName",
+  "nome convertido": "conversionName",
+  "fator": "conversionFactor",
+  "fator conversao": "conversionFactor",
+  "fator de conversao": "conversionFactor",
+};
+
 let xlsxLibraryPromise;
 
 function loadXlsxLibrary() {
@@ -128,6 +146,98 @@ async function downloadWorkbookTemplate() {
   worksheet["!cols"] = [{ wch: 18 }, { wch: 32 }];
   XLSX.utils.book_append_sheet(workbook, worksheet, "Produtos vendidos");
   XLSX.writeFile(workbook, "modelo-produtos-vendidos.xlsx");
+}
+
+async function parseConversionsWorkbook(buffer) {
+  const XLSX = await loadXlsxLibrary();
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+
+  if (!worksheet) {
+    throw new Error("A planilha nao possui uma aba para importar.");
+  }
+
+  const rows = XLSX.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: "",
+    blankrows: false,
+    raw: true,
+  });
+
+  if (!rows.length) {
+    throw new Error("A planilha de conversoes esta vazia.");
+  }
+
+  const headers = rows[0].map((header) => (
+    conversionHeaderAliases[normalizeHeader(String(header || ""))]
+  ));
+  const requiredHeaders = ["sourceCode", "conversionCode", "conversionName", "conversionFactor"];
+  const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
+
+  if (missingHeaders.length) {
+    throw new Error("Use as colunas do modelo: codigo produto vendido, codigo produto de conversao, nome produto de conversao e fator de conversao.");
+  }
+
+  const indexes = Object.fromEntries(requiredHeaders.map((header) => [header, headers.indexOf(header)]));
+  const conversions = [];
+  const sourceRows = new Map();
+
+  rows.slice(1).forEach((columns, index) => {
+    const rowNumber = index + 2;
+    const values = {
+      sourceCode: String(columns[indexes.sourceCode] ?? "").trim(),
+      conversionCode: String(columns[indexes.conversionCode] ?? "").trim(),
+      conversionName: String(columns[indexes.conversionName] ?? "").trim(),
+      conversionFactor: String(columns[indexes.conversionFactor] ?? "").trim(),
+    };
+    const hasContent = Object.values(values).some(Boolean);
+
+    if (!hasContent) return;
+    if (!values.sourceCode || !values.conversionCode || !values.conversionName || !values.conversionFactor) {
+      throw new Error(`A linha ${rowNumber} possui campos obrigatorios vazios.`);
+    }
+
+    const factor = toDecimalNumber(values.conversionFactor);
+    const roundedFactor = Math.round((factor + Number.EPSILON) * 10000) / 10000;
+    if (!Number.isFinite(factor) || factor <= 0 || roundedFactor !== factor) {
+      throw new Error(`O fator de conversao da linha ${rowNumber} deve ser positivo e ter no maximo quatro casas decimais.`);
+    }
+
+    if (sourceRows.has(values.sourceCode)) {
+      throw new Error(`O produto vendido ${values.sourceCode} esta duplicado nas linhas ${sourceRows.get(values.sourceCode)} e ${rowNumber}.`);
+    }
+
+    sourceRows.set(values.sourceCode, rowNumber);
+    conversions.push({
+      ...values,
+      conversionFactor: String(roundedFactor),
+      rowNumber,
+    });
+  });
+
+  if (!conversions.length) {
+    throw new Error("A planilha nao possui conversoes preenchidas.");
+  }
+
+  return conversions;
+}
+
+async function downloadConversionsWorkbookTemplate() {
+  const XLSX = await loadXlsxLibrary();
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    [
+      "codigo produto vendido",
+      "codigo produto de conversao",
+      "nome produto de conversao",
+      "fator de conversao",
+    ],
+    ["KIT-006", "BRIG-001", "Brigadeiro", 6],
+  ]);
+  const workbook = XLSX.utils.book_new();
+
+  worksheet["!cols"] = [{ wch: 24 }, { wch: 28 }, { wch: 34 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Conversoes");
+  XLSX.writeFile(workbook, "modelo-conversoes-producao.xlsx");
 }
 
 function createProductId() {
@@ -652,9 +762,11 @@ function GeneralSettings() {
 }
 
 function ConversionsSettings() {
+  const fileInputRef = useRef(null);
   const [products, setProducts] = useState([]);
   const [conversions, setConversions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -714,6 +826,57 @@ function ConversionsSettings() {
 
   const removeConversion = (id) => {
     setConversions((currentConversions) => currentConversions.filter((conversion) => conversion.id !== id));
+  };
+
+  const importConversions = (importedConversions) => {
+    const productByCode = new Map(products.map((product) => [product.code.trim(), product]));
+    const unknownProducts = importedConversions.filter((conversion) => !productByCode.has(conversion.sourceCode));
+
+    if (unknownProducts.length) {
+      const examples = unknownProducts.slice(0, 5).map((conversion) => conversion.sourceCode).join(", ");
+      const suffix = unknownProducts.length > 5 ? ", ..." : "";
+      throw new Error(`Cadastre primeiro os produtos vendidos que nao foram encontrados: ${examples}${suffix}.`);
+    }
+
+    setConversions((currentConversions) => {
+      const conversionsBySource = new Map(
+        currentConversions.map((conversion) => [String(conversion.sourceProductId), conversion])
+      );
+
+      importedConversions.forEach((importedConversion) => {
+        const sourceProduct = productByCode.get(importedConversion.sourceCode);
+        const sourceProductId = String(sourceProduct.id);
+        const currentConversion = conversionsBySource.get(sourceProductId);
+        conversionsBySource.set(sourceProductId, {
+          id: currentConversion?.id || createConversionId(),
+          sourceProductId,
+          conversionCode: importedConversion.conversionCode,
+          conversionName: importedConversion.conversionName,
+          conversionFactor: importedConversion.conversionFactor,
+        });
+      });
+
+      return Array.from(conversionsBySource.values());
+    });
+
+    setMessage(`Importacao concluida com sucesso: ${importedConversions.length} conversao(oes). Clique em Salvar para confirmar.`);
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    setMessage("");
+    try {
+      const importedConversions = await parseConversionsWorkbook(await file.arrayBuffer());
+      importConversions(importedConversions);
+    } catch (error) {
+      setMessage(error.message || "Nao foi possivel importar a planilha de conversoes.");
+    } finally {
+      setImporting(false);
+      event.target.value = "";
+    }
   };
 
   const normalizeConversionsToSave = () => {
@@ -776,14 +939,47 @@ function ConversionsSettings() {
   return (
     <>
       <div className="production-products-settings-toolbar">
+        <div className="production-products-settings-toolbar__left">
+          <button
+            type="button"
+            className="production-settings-icon-button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading || importing || !products.length}
+            aria-label="Importar planilha de conversões"
+            title="Importar planilha"
+          >
+            <img src="/icon-importar-planilha.svg" alt="" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="production-settings-icon-button"
+            disabled={importing}
+            onClick={() => {
+              downloadConversionsWorkbookTemplate().catch(() => {
+                setMessage("Não foi possível baixar a planilha modelo de conversões.");
+              });
+            }}
+            aria-label="Baixar planilha modelo de conversões"
+            title="Baixar modelo"
+          >
+            <img src="/icon-baixar-modelo.svg" alt="" aria-hidden="true" />
+          </button>
+        </div>
         <div className="production-products-settings-toolbar__right">
           <button type="button" className="button production-products-settings-add" onClick={addConversion} disabled={loading || !products.length}>
             Adicionar conversão
           </button>
-          <button type="button" className="button" onClick={saveConversions} disabled={loading || saving}>
+          <button type="button" className="button" onClick={saveConversions} disabled={loading || importing || saving}>
             {saving ? "Salvando..." : "Salvar"}
           </button>
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          className="production-settings-file-input"
+          onChange={handleFileChange}
+        />
       </div>
 
       {message && (
