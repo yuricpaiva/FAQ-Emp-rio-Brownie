@@ -19,20 +19,43 @@ function normalizeConversions(conversions) {
     const conversionCode = String(conversion?.conversionCode || '').trim();
     const conversionName = String(conversion?.conversionName || '').trim();
     const conversionFactor = toPositiveNumber(conversion?.conversionFactor);
+    const roundedFactor = Math.round((conversionFactor + Number.EPSILON) * 10000) / 10000;
 
     if (!Number.isInteger(sourceProductId) || sourceProductId <= 0) return;
     if (!conversionCode || !conversionName) return;
-    if (conversionFactor <= 0) return;
+    if (conversionFactor <= 0 || roundedFactor !== conversionFactor) return;
 
     conversionsBySource.set(sourceProductId, {
       sourceProductId,
       conversionCode,
       conversionName,
-      conversionFactor
+      conversionFactor: roundedFactor
     });
   });
 
   return Array.from(conversionsBySource.values());
+}
+
+function validateConversionConfiguration(conversions, sourceProducts) {
+  const sourceCodeById = new Map(sourceProducts.map((product) => [product.id, product.code]));
+  const sourceCodes = new Set(sourceProducts.map((product) => product.code));
+  const targetNames = new Map();
+  for (const conversion of conversions) {
+    const sourceCode = sourceCodeById.get(conversion.sourceProductId);
+    if (sourceCode === conversion.conversionCode) {
+      return 'O produto de origem e o produto convertido devem ser diferentes.';
+    }
+    if (sourceCodes.has(conversion.conversionCode)) {
+      return 'Conversoes encadeadas ou ciclicas nao sao permitidas.';
+    }
+    const normalizedName = conversion.conversionName.toLocaleLowerCase('pt-BR');
+    const existingName = targetNames.get(conversion.conversionCode);
+    if (existingName && existingName !== normalizedName) {
+      return `Use o mesmo nome para o codigo convertido ${conversion.conversionCode}.`;
+    }
+    targetNames.set(conversion.conversionCode, normalizedName);
+  }
+  return '';
 }
 
 function mapProduct(product) {
@@ -85,15 +108,16 @@ async function saveProductionConversions(req, res) {
     return res.status(400).json({ error: 'Informe produtos, codigos, nomes e fatores validos.' });
   }
 
+  let sourceProducts = [];
   if (productIds.length) {
-    const activeProducts = await prisma.productionProduct.findMany({
+    sourceProducts = await prisma.productionProduct.findMany({
       where: {
         id: { in: productIds },
         active: true
       },
-      select: { id: true }
+      select: { id: true, code: true, name: true }
     });
-    const activeProductIds = new Set(activeProducts.map((product) => product.id));
+    const activeProductIds = new Set(sourceProducts.map((product) => product.id));
     const hasInvalidProduct = productIds.some((productId) => !activeProductIds.has(productId));
 
     if (hasInvalidProduct) {
@@ -101,7 +125,26 @@ async function saveProductionConversions(req, res) {
     }
   }
 
+  const validationError = validateConversionConfiguration(conversions, sourceProducts);
+  if (validationError) return res.status(400).json({ error: validationError });
+
+  const targetCodes = Array.from(new Set(conversions.map((conversion) => conversion.conversionCode)));
+  const existingTargets = targetCodes.length
+    ? await prisma.productionProduct.findMany({ where: { code: { in: targetCodes } } })
+    : [];
+  const existingTargetByCode = new Map(existingTargets.map((product) => [product.code, product]));
+  const targetNameByCode = new Map(targetCodes.map((code) => [
+    code,
+    existingTargetByCode.get(code)?.name || conversions.find((conversion) => conversion.conversionCode === code).conversionName,
+  ]));
+
   await prisma.$transaction(async (tx) => {
+    await Promise.all(targetCodes.map((code) => tx.productionProduct.upsert({
+      where: { code },
+      update: { active: true },
+      create: { code, name: targetNameByCode.get(code), active: true },
+    })));
+
     await tx.productionConversion.updateMany({
       where: activeSourceIds.length ? { sourceProductId: { notIn: activeSourceIds } } : {},
       data: { active: false }
@@ -112,14 +155,14 @@ async function saveProductionConversions(req, res) {
         where: { sourceProductId: conversion.sourceProductId },
         update: {
           conversionCode: conversion.conversionCode,
-          conversionName: conversion.conversionName,
+          conversionName: targetNameByCode.get(conversion.conversionCode),
           conversionFactor: conversion.conversionFactor,
           active: true
         },
         create: {
           sourceProductId: conversion.sourceProductId,
           conversionCode: conversion.conversionCode,
-          conversionName: conversion.conversionName,
+          conversionName: targetNameByCode.get(conversion.conversionCode),
           conversionFactor: conversion.conversionFactor,
           active: true
         }
@@ -143,5 +186,6 @@ async function saveProductionConversions(req, res) {
 
 module.exports = {
   listProductionConversions,
-  saveProductionConversions
+  saveProductionConversions,
+  validateConversionConfiguration,
 };

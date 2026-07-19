@@ -4,6 +4,14 @@ const {
   getEverestStockSnapshot,
   isStockAvailable,
 } = require('../services/everestDatabase');
+const {
+  buildConversionContext,
+  convertOrderItems,
+  convertSalesRows,
+  convertStockItems,
+  getRequiredStockCodes,
+  roundQuantity,
+} = require('../services/productionConversionService');
 
 const prisma = new PrismaClient();
 
@@ -48,7 +56,7 @@ function toNullableNumber(value) {
 }
 
 function roundDecimal(value) {
-  return Math.round(value * 100) / 100;
+  return roundQuantity(value);
 }
 
 function calculateProductionSuggestion({ averageSold, increasePercent, fixedQuantity = 0, orderQuantity = 0, stockItem }) {
@@ -175,6 +183,7 @@ function getRowsByStoreDateAndCode(rows) {
 async function suggestProduction(req, res) {
   const comparisonStartDate = String(req.body?.comparisonStartDate || '').trim();
   const comparisonEndDate = String(req.body?.comparisonEndDate || '').trim();
+  const planningDay = String(req.body?.planningDay || '').trim();
   const stores = normalizeStores(req.body?.stores);
 
   if (!isValidDate(comparisonStartDate) || !isValidDate(comparisonEndDate)) {
@@ -192,12 +201,13 @@ async function suggestProduction(req, res) {
 
   try {
     const displayNames = stores.map((store) => store.displayName);
-    const activeStores = await prisma.productionStore.findMany({
+    const candidateStores = await prisma.productionStore.findMany({
       where: {
-        active: true,
         displayName: { in: displayNames },
       },
       select: {
+        id: true,
+        active: true,
         displayName: true,
         sourceName: true,
         routes: {
@@ -206,14 +216,45 @@ async function suggestProduction(req, res) {
         },
       },
     });
-    const activeProducts = await prisma.productionProduct.findMany({
-      where: { active: true },
-      select: {
-        code: true,
-        name: true,
-      },
-      orderBy: { code: 'asc' },
-    });
+    const savedStoreIds = new Set();
+    if (planningDay && isValidDate(planningDay)) {
+      const savedStores = await prisma.productionPlanningStore.findMany({
+        where: { planningDay: { day: planningDay }, storeName: { in: displayNames } },
+        select: {
+          productionStoreId: true,
+          storeName: true,
+          productionStore: {
+            select: {
+              id: true,
+              active: true,
+              sourceName: true,
+              routes: { where: { active: true }, select: { weekday: true } },
+            },
+          },
+        },
+      });
+      savedStores.forEach((store) => {
+        savedStoreIds.add(store.productionStoreId);
+        const savedStore = { ...store.productionStore, displayName: store.storeName };
+        const candidateIndex = candidateStores.findIndex((candidate) => candidate.displayName === store.storeName);
+        if (candidateIndex >= 0) candidateStores.splice(candidateIndex, 1, savedStore);
+        else candidateStores.push(savedStore);
+      });
+    }
+    const activeStores = candidateStores.filter((store) => store.active || savedStoreIds.has(store.id));
+    const [activeProducts, activeConversions] = await Promise.all([
+      prisma.productionProduct.findMany({
+        where: { active: true },
+        select: { id: true, code: true, name: true },
+        orderBy: { code: 'asc' },
+      }),
+      prisma.productionConversion.findMany({
+        where: { active: true },
+        include: { sourceProduct: { select: { code: true, name: true } } },
+      }),
+    ]);
+    const conversionContext = buildConversionContext(activeProducts, activeConversions);
+    const outputProducts = activeProducts.filter((product) => !conversionContext.sourceCodes.has(product.code));
 
     const sourceNameByDisplayName = new Map(activeStores.map((store) => [store.displayName, store.sourceName]));
     const activeStoreByDisplayName = new Map(activeStores.map((store) => [store.displayName, store]));
@@ -221,8 +262,11 @@ async function suggestProduction(req, res) {
     if (missingStores.length) {
       return res.status(400).json({ error: 'Selecione apenas lojas ativas.' });
     }
+    if (new Set(activeStores.map((store) => store.id)).size !== activeStores.length) {
+      return res.status(400).json({ error: 'A mesma loja nao pode ser selecionada mais de uma vez.' });
+    }
 
-    if (!activeProducts.length) {
+    if (!outputProducts.length) {
       return res.json({
         comparisonDays,
         stores: buildEmptySuggestions(stores),
@@ -286,7 +330,19 @@ async function suggestProduction(req, res) {
       }),
     ]);
 
-    const rowsByStoreDateAndCode = getRowsByStoreDateAndCode(result.rows);
+    const convertedRows = convertSalesRows(result.rows, conversionContext);
+    const rowsByStoreDateAndCode = getRowsByStoreDateAndCode(convertedRows);
+    const convertedStockByStore = Object.fromEntries(displayNames.map((storeName) => [
+      storeName,
+      Object.fromEntries(convertStockItems(
+        activeProductCodes.map((code) => ({
+          code,
+          ...(stockSnapshot.items?.[storeName]?.[code] || { quantity: null, status: 'unavailable', reason: 'Estoque nao consultado.' }),
+        })),
+        outputProducts.map((product) => product.code),
+        conversionContext
+      ).map((item) => [item.code, item])),
+    ]));
     const suggestions = buildEmptySuggestions(stores);
 
     stores.forEach((store) => {
@@ -296,7 +352,7 @@ async function suggestProduction(req, res) {
       store.days.forEach((day) => {
         const servedDates = servedDatesByProductionDay?.get(day.day) || [];
 
-        suggestions[store.displayName][day.day] = activeProducts.map((product) => {
+        suggestions[store.displayName][day.day] = outputProducts.map((product) => {
           const servedRows = servedDates.map((dateValue) =>
             rowsByStoreDateAndCode.get(`${sourceName}::${dateValue}::${product.code}`)
           );
@@ -306,7 +362,7 @@ async function suggestProduction(req, res) {
           ));
           const productRow = servedRows.find(Boolean);
           const increasePercent = day.increasePercent ?? 0;
-          const stockItem = stockSnapshot.items?.[store.displayName]?.[product.code];
+          const stockItem = convertedStockByStore[store.displayName]?.[product.code];
           const stockData = mapStockItem(stockItem, stockSnapshot.stockDate);
           const suggestion = calculateProductionSuggestion({
             averageSold: accumulatedAverage,
@@ -321,6 +377,9 @@ async function suggestProduction(req, res) {
             averageSold: accumulatedAverage,
             servedDates,
             ...stockData,
+            stockSource: 'everest',
+            stockSources: stockItem?.sources || [],
+            fixedOrderSources: [],
             increasePercent: day.increasePercent,
             suggestion: String(suggestion),
           };
@@ -343,38 +402,75 @@ async function suggestProduction(req, res) {
 
 async function getProductionStocks(req, res) {
   const stores = normalizeStockRequestStores(req.body?.stores);
+  const planningDay = String(req.body?.planningDay || '').trim();
   if (!stores.length) {
     return res.status(400).json({ error: 'Informe pelo menos uma loja e um produto.' });
   }
 
   const displayNames = stores.map((store) => store.displayName);
   const productCodes = Array.from(new Set(stores.flatMap((store) => store.productCodes)));
-  const [activeStores, activeProducts] = await Promise.all([
+  const [candidateStores, activeProducts, activeConversions] = await Promise.all([
     prisma.productionStore.findMany({
-      where: { active: true, displayName: { in: displayNames } },
-      select: { displayName: true },
+      where: { displayName: { in: displayNames } },
+      select: { id: true, active: true, displayName: true },
     }),
     prisma.productionProduct.findMany({
-      where: { active: true, code: { in: productCodes } },
-      select: { code: true },
+      where: { active: true },
+      select: { id: true, code: true, name: true },
+    }),
+    prisma.productionConversion.findMany({
+      where: { active: true },
+      include: { sourceProduct: { select: { code: true, name: true } } },
     }),
   ]);
+  const savedStoreIds = new Set();
+  if (planningDay && isValidDate(planningDay)) {
+    const savedStores = await prisma.productionPlanningStore.findMany({
+      where: { planningDay: { day: planningDay }, storeName: { in: displayNames } },
+      select: {
+        productionStoreId: true,
+        storeName: true,
+        productionStore: { select: { id: true, active: true } },
+      },
+    });
+    savedStores.forEach((store) => {
+      savedStoreIds.add(store.productionStoreId);
+      const savedStore = { ...store.productionStore, displayName: store.storeName };
+      const candidateIndex = candidateStores.findIndex((candidate) => candidate.displayName === store.storeName);
+      if (candidateIndex >= 0) candidateStores.splice(candidateIndex, 1, savedStore);
+      else candidateStores.push(savedStore);
+    });
+  }
+  const activeStores = candidateStores.filter((store) => store.active || savedStoreIds.has(store.id));
   const activeStoreNames = new Set(activeStores.map((store) => store.displayName));
   const activeProductCodes = new Set(activeProducts.map((product) => product.code));
   if (displayNames.some((displayName) => !activeStoreNames.has(displayName))) {
     return res.status(400).json({ error: 'Selecione apenas lojas ativas.' });
   }
+  if (new Set(activeStores.map((store) => store.id)).size !== activeStores.length) {
+    return res.status(400).json({ error: 'A mesma loja nao pode ser selecionada mais de uma vez.' });
+  }
   if (productCodes.some((code) => !activeProductCodes.has(code))) {
     return res.status(400).json({ error: 'Consulte apenas produtos ativos.' });
   }
 
-  const stockSnapshot = await getEverestStockSnapshot({ stores: displayNames, productCodes });
+  const conversionContext = buildConversionContext(activeProducts, activeConversions);
+  const requiredStockCodes = getRequiredStockCodes(productCodes, conversionContext);
+  const stockSnapshot = await getEverestStockSnapshot({ stores: displayNames, productCodes: requiredStockCodes });
   const responseStores = Object.fromEntries(stores.map((store) => [
     store.displayName,
-    Object.fromEntries(store.productCodes.map((code) => [
-      code,
-      mapStockItem(stockSnapshot.items?.[store.displayName]?.[code], stockSnapshot.stockDate),
-    ])),
+    Object.fromEntries(convertStockItems(
+      requiredStockCodes.map((code) => ({
+        code,
+        ...(stockSnapshot.items?.[store.displayName]?.[code] || { quantity: null, status: 'unavailable', reason: 'Estoque nao consultado.' }),
+      })),
+      store.productCodes,
+      conversionContext
+    ).map((item) => [item.code, {
+      ...mapStockItem(item, stockSnapshot.stockDate),
+      stockSource: 'everest',
+      stockSources: item.sources,
+    }])),
   ]));
 
   return res.json({
@@ -385,7 +481,54 @@ async function getProductionStocks(req, res) {
   });
 }
 
+async function applyProductionConversions(req, res) {
+  const mode = String(req.body?.mode || '').trim();
+  const groups = Array.isArray(req.body?.groups) ? req.body.groups : [];
+  if (!['orders', 'stock'].includes(mode) || !groups.length || groups.length > 200) {
+    return res.status(400).json({ error: 'Informe o modo e os grupos para conversao.' });
+  }
+
+  try {
+    const [products, conversions] = await Promise.all([
+      prisma.productionProduct.findMany({
+        where: { active: true },
+        select: { code: true, name: true },
+      }),
+      prisma.productionConversion.findMany({
+        where: { active: true },
+        include: { sourceProduct: { select: { code: true, name: true } } },
+      }),
+    ]);
+    const context = buildConversionContext(products, conversions);
+    const convertedGroups = groups.map((group) => {
+      const key = String(group?.key || '').trim();
+      const items = Array.isArray(group?.items) ? group.items : [];
+      if (!key || items.length > 10000) throw new Error('INVALID_GROUP');
+      if (items.some((item) => {
+        const fields = mode === 'orders' ? ['fixedQuantity', 'orderQuantity'] : ['quantity'];
+        return fields.some((field) => item?.[field] !== null && item?.[field] !== undefined && toNumber(item[field], -1) < 0);
+      })) throw new Error('INVALID_QUANTITY');
+
+      if (mode === 'orders') {
+        return { key, items: convertOrderItems(items, context) };
+      }
+      const outputCodes = Array.isArray(group?.outputCodes)
+        ? Array.from(new Set(group.outputCodes.map((code) => String(code || '').trim()).filter(Boolean)))
+        : [];
+      return { key, items: convertStockItems(items, outputCodes, context) };
+    });
+    return res.json({ mode, groups: convertedGroups });
+  } catch (error) {
+    if (['INVALID_GROUP', 'INVALID_QUANTITY'].includes(error.message)) {
+      return res.status(400).json({ error: 'Existem grupos ou quantidades invalidas para conversao.' });
+    }
+    console.error('Falha ao aplicar conversoes de producao:', error);
+    return res.status(500).json({ error: 'Nao foi possivel aplicar as conversoes.' });
+  }
+}
+
 module.exports = {
+  applyProductionConversions,
   calculateProductionSuggestion,
   getProductionStocks,
   suggestProduction,

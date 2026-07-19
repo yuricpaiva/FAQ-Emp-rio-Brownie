@@ -1,13 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ProductionProgressBar from "../components/ProductionProgressBar";
-import {
-  finalizeMockProductionDispatch,
-  listMockProductionDays,
-  updateMockDispatchItem,
-  updateMockProductionDayStatus,
-} from "../data/productionPlanningMock";
+import api from "../services/api";
 
 let xlsxLibraryPromise;
 
@@ -52,10 +47,11 @@ function getCurrentMonthKey() {
   return `${year}-${month}`;
 }
 
-function isDateInRange(value, startDate, endDate) {
-  if (startDate && value < startDate) return false;
-  if (endDate && value > endDate) return false;
-  return true;
+function getCurrentMonthRange() {
+  const month = getCurrentMonthKey();
+  const [year, monthNumber] = month.split("-").map(Number);
+  const lastDay = new Date(year, monthNumber, 0).getDate();
+  return { startDate: `${month}-01`, endDate: `${month}-${String(lastDay).padStart(2, "0")}` };
 }
 
 function formatDate(value) {
@@ -154,8 +150,9 @@ function ProductionPlanning() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
   const canAccessSettings = hasRole(["admin"]);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const productionDays = useMemo(() => listMockProductionDays(), [refreshKey]);
+  const [productionDays, setProductionDays] = useState([]);
+  const [planningLoading, setPlanningLoading] = useState(true);
+  const [planningError, setPlanningError] = useState("");
   const [periodSearch, setPeriodSearch] = useState({ startDate: "", endDate: "" });
   const [appliedPeriodSearch, setAppliedPeriodSearch] = useState({ startDate: "", endDate: "" });
   const [viewingDay, setViewingDay] = useState(null);
@@ -181,16 +178,7 @@ function ProductionPlanning() {
     () => (viewingDay ? getDispatchProgress(viewingDay) : { producedCount: 0, totalProducts: 0, percentage: 0 }),
     [viewingDay]
   );
-  const visibleProductionDays = useMemo(() => {
-    if (appliedPeriodSearch.startDate || appliedPeriodSearch.endDate) {
-      return productionDays.filter((production) =>
-        isDateInRange(production.day, appliedPeriodSearch.startDate, appliedPeriodSearch.endDate)
-      );
-    }
-
-    const currentMonth = getCurrentMonthKey();
-    return productionDays.filter((production) => production.day.startsWith(currentMonth));
-  }, [productionDays, appliedPeriodSearch]);
+  const visibleProductionDays = productionDays;
   const productionCountLabel = `${visibleProductionDays.length} ${
     visibleProductionDays.length === 1 ? "dia planejado" : "dias planejados"
   }`;
@@ -199,6 +187,31 @@ function ProductionPlanning() {
   const filterDescription = hasPeriodSearch
     ? `Producoes de ${formatPeriodBoundary(appliedPeriodSearch.startDate, "inicio")} a ${formatPeriodBoundary(appliedPeriodSearch.endDate, "fim")}`
     : "Producoes do mes atual";
+
+  const loadProductionDays = async (period = getCurrentMonthRange()) => {
+    setPlanningLoading(true);
+    setPlanningError("");
+    try {
+      const response = await api.get("/admin/production-planning", { params: period });
+      setProductionDays(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      setProductionDays([]);
+      setPlanningError(error.response?.data?.error || "Não foi possível carregar os planejamentos.");
+    } finally {
+      setPlanningLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProductionDays();
+  }, []);
+
+  const applyUpdatedDay = (updatedDay) => {
+    setProductionDays((currentDays) => currentDays.map((day) =>
+      day.day === updatedDay.day ? updatedDay : day
+    ));
+    setViewingDay(updatedDay);
+  };
 
   const openViewModal = (productionDay) => {
     setViewingDay(productionDay);
@@ -220,30 +233,42 @@ function ProductionPlanning() {
 
   const handleSearchPeriod = () => {
     setAppliedPeriodSearch(periodSearch);
+    loadProductionDays(periodSearch);
   };
 
   const handleClearSearch = () => {
     const emptyPeriod = { startDate: "", endDate: "" };
     setPeriodSearch(emptyPeriod);
     setAppliedPeriodSearch(emptyPeriod);
+    loadProductionDays();
   };
 
-  const handleStatusAction = () => {
+  const handleStatusAction = async () => {
     if (!viewingDay) return;
     const nextStatus = viewingDay.status === "nao_iniciado" ? "em_producao" : "nao_iniciado";
-    const updatedDay = updateMockProductionDayStatus(viewingDay.day, nextStatus);
-    if (updatedDay) {
-      setViewingDay(updatedDay);
-      setRefreshKey((value) => value + 1);
+    setPlanningError("");
+    try {
+      const response = await api.patch(`/admin/production-planning/${viewingDay.day}/status`, { status: nextStatus });
+      applyUpdatedDay(response.data);
+    } catch (error) {
+      setPlanningError(error.response?.data?.error || "Não foi possível alterar o status.");
     }
   };
 
-  const saveDispatchItem = (storeName, productCode, dispatchItem) => {
+  const saveDispatchItem = async (storeName, productCode, dispatchItem) => {
     if (!viewingDay || isFinalized) return;
-    const updatedDay = updateMockDispatchItem(viewingDay.day, storeName, productCode, dispatchItem);
-    if (updatedDay) {
-      setViewingDay(updatedDay);
-      setRefreshKey((value) => value + 1);
+    setPlanningError("");
+    try {
+      const response = await api.put(`/admin/production-planning/${viewingDay.day}/dispatch`, {
+        storeName,
+        productCode,
+        dispatchItem,
+      });
+      applyUpdatedDay(response.data);
+      return true;
+    } catch (error) {
+      setPlanningError(error.response?.data?.error || "Não foi possível atualizar o despacho.");
+      return false;
     }
   };
 
@@ -275,7 +300,7 @@ function ProductionPlanning() {
     setIncompleteError("");
   };
 
-  const handleIncompleteSubmit = (event) => {
+  const handleIncompleteSubmit = async (event) => {
     event.preventDefault();
     if (!incompleteItem) return;
 
@@ -290,12 +315,12 @@ function ProductionPlanning() {
       return;
     }
 
-    saveDispatchItem(incompleteItem.storeName, incompleteItem.product.code, {
+    const saved = await saveDispatchItem(incompleteItem.storeName, incompleteItem.product.code, {
       status: "incomplete",
       actualQuantity,
       justification,
     });
-    closeIncompleteModal();
+    if (saved) closeIncompleteModal();
   };
 
   const handleExportActiveView = async () => {
@@ -386,15 +411,17 @@ function ProductionPlanning() {
     }
   };
 
-  const handleFinalizeDispatch = () => {
+  const handleFinalizeDispatch = async () => {
     if (!viewingDay || isFinalized || dispatchProgress.percentage < 100) return;
     const confirmed = window.confirm("Confirma a finalização da expedição deste dia de produção?");
     if (!confirmed) return;
 
-    const updatedDay = finalizeMockProductionDispatch(viewingDay.day);
-    if (updatedDay) {
-      setViewingDay(updatedDay);
-      setRefreshKey((value) => value + 1);
+    setPlanningError("");
+    try {
+      const response = await api.post(`/admin/production-planning/${viewingDay.day}/finalize`);
+      applyUpdatedDay(response.data);
+    } catch (error) {
+      setPlanningError(error.response?.data?.error || "Não foi possível finalizar a expedição.");
     }
   };
 
@@ -461,6 +488,8 @@ function ProductionPlanning() {
         )}
       </div>
 
+      {planningError && <p className="form-message form-message--error" role="alert">{planningError}</p>}
+
       <div className="production-table-shell">
         <table className="production-table">
           <thead>
@@ -511,8 +540,9 @@ function ProductionPlanning() {
                     <button
                       type="button"
                       aria-label="Editar planejamento"
-                      title="Editar"
+                      title={production.status === "finalizado" ? "Planejamentos finalizados não podem ser editados" : "Editar"}
                       onClick={() => navigate(`/planejamento-producao/${production.day}/editar`)}
+                      disabled={production.status === "finalizado"}
                     >
                       <span aria-hidden="true">✎</span>
                     </button>
@@ -531,7 +561,8 @@ function ProductionPlanning() {
           </tbody>
         </table>
 
-        {!visibleProductionDays.length && (
+        {planningLoading && <p className="empty-state production-empty-state">Carregando planejamentos...</p>}
+        {!planningLoading && !visibleProductionDays.length && (
           <p className="empty-state production-empty-state">
             {hasPeriodSearch ? "Nenhum dia planejado para este periodo." : "Nenhum dia planejado no mes atual."}
           </p>

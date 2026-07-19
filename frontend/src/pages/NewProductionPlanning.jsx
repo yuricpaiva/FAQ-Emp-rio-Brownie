@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import {
-  getMockProductionDay,
-  updateMockProductionDay,
-  upsertMockProductionPlanForRange,
-} from "../data/productionPlanningMock";
 import api from "../services/api";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -165,6 +160,177 @@ async function parseFixedOrdersWorkbook(buffer, expectedDeliveryDate) {
     validLineCount,
     ignoredCount,
   };
+}
+
+function normalizeStoreName(value) {
+  return String(value || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
+
+function parseStockQuantity(value) {
+  if (typeof value === "number") return value;
+  const text = String(value ?? "").trim();
+  if (!text) return Number.NaN;
+  const normalizedValue = text.includes(",")
+    ? text.replace(/\./g, "").replace(",", ".")
+    : text;
+  return Number(normalizedValue);
+}
+
+async function parseStockWorkbook(buffer) {
+  const XLSX = await loadXlsxLibrary();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+  const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!worksheet) throw new Error("A planilha não possui uma aba para importar.");
+
+  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: true, blankrows: false });
+  if (!rows.length) throw new Error("A planilha está vazia.");
+
+  const normalizedHeaders = rows[0].map(normalizeSpreadsheetHeader);
+  const requiredHeaders = {
+    store: "fantasia",
+    stockDate: "data base",
+    code: "item",
+    quantity: "q. saldo",
+  };
+  const indexes = Object.fromEntries(
+    Object.entries(requiredHeaders).map(([key, header]) => [key, normalizedHeaders.indexOf(header)])
+  );
+  const missingHeaders = Object.entries(indexes)
+    .filter(([, index]) => index < 0)
+    .map(([key]) => requiredHeaders[key]);
+  if (missingHeaders.length) {
+    throw new Error(`Colunas obrigatórias ausentes: ${missingHeaders.join(", ")}.`);
+  }
+
+  const stores = new Set();
+  const stockDates = new Set();
+  const productsByCode = new Map();
+  const errors = [];
+
+  rows.slice(1).forEach((columns, rowIndex) => {
+    const rowNumber = rowIndex + 2;
+    const hasContent = columns.some((value) => String(value ?? "").trim());
+    if (!hasContent) return;
+
+    const storeName = String(columns[indexes.store] || "").trim();
+    const stockDate = normalizeDeliveryDate(columns[indexes.stockDate]);
+    const code = normalizeItemCode(columns[indexes.code]);
+    const quantity = parseStockQuantity(columns[indexes.quantity]);
+
+    if (!code) return;
+    if (!storeName || !stockDate) {
+      errors.push(`Linha ${rowNumber}: informe Fantasia e Data Base.`);
+      return;
+    }
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      errors.push(`Linha ${rowNumber}: Q. Saldo deve ser um número maior ou igual a zero.`);
+      return;
+    }
+    if (productsByCode.has(code)) {
+      errors.push(`Linha ${rowNumber}: o Item ${code} está duplicado.`);
+      return;
+    }
+
+    stores.add(storeName);
+    stockDates.add(stockDate);
+    productsByCode.set(code, roundQuantity(quantity));
+  });
+
+  if (errors.length) {
+    throw new Error(`${errors.slice(0, 3).join(" ")}${errors.length > 3 ? ` Mais ${errors.length - 3} erro(s).` : ""}`);
+  }
+  if (!productsByCode.size) throw new Error("Nenhum item de estoque foi encontrado.");
+  if (stores.size !== 1) throw new Error("A planilha deve conter somente uma loja.");
+  if (stockDates.size !== 1) throw new Error("A planilha deve conter somente uma Data Base.");
+
+  return {
+    storesByName: new Map([[
+      normalizeStoreName(Array.from(stores)[0]),
+      {
+        storeName: Array.from(stores)[0],
+        productsByCode,
+      },
+    ]]),
+    stockDate: Array.from(stockDates)[0],
+    ignoredLineCount: 0,
+  };
+}
+
+function parseStockText(content, stockDate) {
+  const lines = String(content || "").replace(/^\uFEFF/, "").split(/\r?\n/);
+  const header = lines[0] || "";
+  const validHeader = (
+    normalizeSpreadsheetHeader(header.slice(0, 18)) === "fantasia" &&
+    normalizeSpreadsheetHeader(header.slice(18, 26)) === "item" &&
+    normalizeSpreadsheetHeader(header.slice(26, 84)) === "descricao item" &&
+    normalizeSpreadsheetHeader(header.slice(84, 92)) === "um" &&
+    normalizeSpreadsheetHeader(header.slice(92, 108)) === "q. saldo" &&
+    normalizeSpreadsheetHeader(header.slice(108)) === "situacao"
+  );
+  if (!validHeader) {
+    throw new Error("O cabeçalho do TXT de estoque não corresponde ao modelo esperado.");
+  }
+
+  const storesByName = new Map();
+  const errors = [];
+  let ignoredLineCount = 0;
+
+  lines.slice(1).forEach((line, lineIndex) => {
+    const lineNumber = lineIndex + 2;
+    if (!line.trim()) return;
+
+    const storeName = line.slice(0, 18).trim();
+    const code = normalizeItemCode(line.slice(18, 26));
+    const quantityText = line.slice(92, 108).trim();
+    const status = normalizeStoreName(line.slice(108));
+    if (line.length < 108 || !storeName || !code || !quantityText) {
+      ignoredLineCount += 1;
+      return;
+    }
+    if (status && status !== "ATIVO") {
+      ignoredLineCount += 1;
+      return;
+    }
+
+    const quantity = parseStockQuantity(quantityText);
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      errors.push(`Linha ${lineNumber}: Q. Saldo deve ser um número maior ou igual a zero.`);
+      return;
+    }
+
+    const storeKey = normalizeStoreName(storeName);
+    const store = storesByName.get(storeKey) || { storeName, productsByCode: new Map() };
+    if (store.productsByCode.has(code)) {
+      errors.push(`Linha ${lineNumber}: o Item ${code} está duplicado para ${storeName}.`);
+      return;
+    }
+    store.productsByCode.set(code, roundQuantity(quantity));
+    storesByName.set(storeKey, store);
+  });
+
+  if (errors.length) {
+    throw new Error(`${errors.slice(0, 3).join(" ")}${errors.length > 3 ? ` Mais ${errors.length - 3} erro(s).` : ""}`);
+  }
+  if (!storesByName.size) throw new Error("Nenhum item de estoque válido foi encontrado no TXT.");
+
+  return { storesByName, stockDate, ignoredLineCount };
+}
+
+function findImportedStockStore(storesByName, planningStoreName) {
+  const planningStoreKey = normalizeStoreName(planningStoreName);
+  const exactMatch = storesByName.get(planningStoreKey);
+  if (exactMatch) return { storeKey: planningStoreKey, store: exactMatch };
+
+  const tokenMatches = Array.from(storesByName.entries()).filter(([storeKey]) =>
+    storeKey.split(" ").includes(planningStoreKey)
+  );
+  if (tokenMatches.length !== 1) return null;
+  return { storeKey: tokenMatches[0][0], store: tokenMatches[0][1] };
 }
 
 function toLocalDate(value) {
@@ -470,6 +636,63 @@ function normalizeDayProducts(products) {
   }));
 }
 
+function mergeRecalculatedProducts(recalculatedProducts, existingProducts, convertedOrders = [], convertedStocks = []) {
+  const existingByCode = new Map((existingProducts || []).map((product) => [String(product.code), product]));
+  const ordersByCode = new Map(convertedOrders.map((item) => [String(item.code), item]));
+  const stocksByCode = new Map(convertedStocks.map((item) => [String(item.code), item]));
+  const mergedProducts = normalizeProducts(recalculatedProducts).map((recalculatedProduct) => {
+    const existingProduct = existingByCode.get(String(recalculatedProduct.code));
+    const convertedOrder = ordersByCode.get(String(recalculatedProduct.code));
+    const convertedStock = stocksByCode.get(String(recalculatedProduct.code));
+    const preserveImportedStock = existingProduct?.stockSource === "spreadsheet";
+    const hasTrackedOrderSources = Boolean(existingProduct?.fixedOrderSources?.length);
+    const nextProduct = {
+      ...recalculatedProduct,
+      increasePercent: existingProduct?.increasePercent ?? "",
+      fixedQuantity: convertedOrder?.fixedQuantity ?? (hasTrackedOrderSources ? 0 : existingProduct?.fixedQuantity ?? 0),
+      orderQuantity: convertedOrder?.orderQuantity ?? (hasTrackedOrderSources ? 0 : existingProduct?.orderQuantity ?? 0),
+      fixedOrderSources: convertedOrder?.sources ?? (hasTrackedOrderSources ? [] : existingProduct?.fixedOrderSources ?? []),
+      importedOnly: existingProduct?.importedOnly || Boolean(convertedOrder),
+      ...(convertedStock ? {
+        stockQuantity: convertedStock.quantity,
+        stockStatus: convertedStock.status,
+        stockDate: existingProduct?.stockDate || "",
+        stockReason: convertedStock.reason || "",
+        stockSource: "spreadsheet",
+        stockSources: convertedStock.sources || [],
+      } : preserveImportedStock ? {
+        stockQuantity: existingProduct.stockQuantity,
+        stockStatus: existingProduct.stockStatus,
+        stockDate: existingProduct.stockDate,
+        stockReason: existingProduct.stockReason,
+        stockSource: existingProduct.stockSource,
+        stockSources: existingProduct.stockSources || [],
+      } : {}),
+    };
+    return {
+      ...nextProduct,
+      suggestion: calculateSuggestion(
+        nextProduct.averageSold,
+        nextProduct.increasePercent,
+        nextProduct.fixedQuantity,
+        nextProduct.orderQuantity,
+        nextProduct.stockQuantity,
+        nextProduct.stockStatus
+      ),
+    };
+  });
+  const recalculatedCodes = new Set(mergedProducts.map((product) => String(product.code)));
+  const legacyProducts = (existingProducts || []).filter((product) =>
+    !recalculatedCodes.has(String(product.code)) &&
+    !(product.fixedOrderSources || []).length &&
+    !(product.stockSources || []).length &&
+    (toNumber(product.fixedQuantity) > 0 || toNumber(product.orderQuantity) > 0 || product.stockSource === "spreadsheet")
+  );
+  return [...mergedProducts, ...legacyProducts].sort((left, right) =>
+    String(left.code).localeCompare(String(right.code), "pt-BR", { numeric: true })
+  );
+}
+
 function getConsolidatedStoreProducts(productsByDay) {
   const productMap = new Map();
 
@@ -532,55 +755,37 @@ function getConsolidatedStoreProducts(productsByDay) {
 function NewProductionPlanning() {
   const navigate = useNavigate();
   const fixedOrdersFileInputRef = useRef(null);
+  const stockFileInputRef = useRef(null);
   const { day: editingDayParam } = useParams();
-  const editingDay = editingDayParam ? getMockProductionDay(editingDayParam) : null;
-  const isEditing = Boolean(editingDay);
-  const savedStores = editingDay ? Object.keys(editingDay.stores) : [];
-  const initialSelectedStores = savedStores.length ? savedStores : [];
-  const [servedStartDate, setServedStartDate] = useState(editingDay?.day || today);
-  const [servedEndDate, setServedEndDate] = useState(editingDay?.day || today);
-  const [comparisonStartDate, setComparisonStartDate] = useState(editingDay?.comparisonStartDate || today);
-  const [comparisonEndDate, setComparisonEndDate] = useState(editingDay?.comparisonEndDate || today);
-  const [selectedStores, setSelectedStores] = useState(initialSelectedStores);
-  const [activeStore, setActiveStore] = useState(initialSelectedStores[0] || "");
+  const isEditing = Boolean(editingDayParam);
+  const [editingUpdatedAt, setEditingUpdatedAt] = useState("");
+  const [editLoading, setEditLoading] = useState(isEditing);
+  const [editLoadError, setEditLoadError] = useState("");
+  const [calculationDirty, setCalculationDirty] = useState(false);
+  const [servedStartDate, setServedStartDate] = useState(editingDayParam || today);
+  const [servedEndDate, setServedEndDate] = useState(editingDayParam || today);
+  const [comparisonStartDate, setComparisonStartDate] = useState(isEditing ? "" : today);
+  const [comparisonEndDate, setComparisonEndDate] = useState(isEditing ? "" : today);
+  const [selectedStores, setSelectedStores] = useState([]);
+  const [activeStore, setActiveStore] = useState("");
   const [activeDay, setActiveDay] = useState(consolidatedTab);
-  const [productsByStoreAndDay, setProductsByStoreAndDay] = useState(() => (
-    editingDay
-      ? Object.fromEntries(
-          Object.entries(editingDay.stores).map(([storeName, storeProduction]) => [
-            storeName,
-            {
-              [editingDay.day]: normalizeProducts(storeProduction.products),
-            },
-          ])
-        )
-      : {}
-  ));
-  const [defaultIncreaseByStoreAndDay, setDefaultIncreaseByStoreAndDay] = useState(() => (
-    editingDay
-      ? Object.fromEntries(
-          Object.entries(editingDay.stores).map(([storeName, storeProduction]) => [
-            storeName,
-            {
-              [editingDay.day]: storeProduction.defaultIncreasePercent === null || storeProduction.defaultIncreasePercent === undefined
-                ? ""
-                : String(storeProduction.defaultIncreasePercent),
-            },
-          ])
-        )
-      : Object.fromEntries(initialSelectedStores.map((storeName) => [storeName, {}]))
-  ));
+  const [productsByStoreAndDay, setProductsByStoreAndDay] = useState({});
+  const [defaultIncreaseByStoreAndDay, setDefaultIncreaseByStoreAndDay] = useState({});
   const [focusedPercentField, setFocusedPercentField] = useState("");
   const [productQuery, setProductQuery] = useState("");
-  const [hasSuggested, setHasSuggested] = useState(isEditing);
+  const [hasSuggested, setHasSuggested] = useState(false);
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(isEditing);
   const [productionStores, setProductionStores] = useState([]);
+  const [savedStoreReferences, setSavedStoreReferences] = useState({});
   const [storesLoading, setStoresLoading] = useState(true);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [saveLoading, setSaveLoading] = useState(false);
   const [productsMessage, setProductsMessage] = useState("");
   const [stockWarnings, setStockWarnings] = useState([]);
   const [importMessage, setImportMessage] = useState("");
   const [importLoading, setImportLoading] = useState(false);
+  const [stockImportLoading, setStockImportLoading] = useState(false);
+  const [stockImportWarning, setStockImportWarning] = useState("");
   const [importPreview, setImportPreview] = useState(null);
   const [registeringProductCodes, setRegisteringProductCodes] = useState([]);
   const productionDays = useMemo(
@@ -592,6 +797,9 @@ function NewProductionPlanning() {
     return store?.routeWeekdays?.length ? store.routeWeekdays : allWeekdays;
   };
   const getProductionDaysForStore = (storeName) => {
+    if (isEditing && productsByStoreAndDay[storeName]?.[editingDayParam]) {
+      return [editingDayParam];
+    }
     const routeWeekdays = getStoreRouteWeekdays(storeName);
     return productionDays.filter((day) => routeWeekdays.includes(toLocalDate(day).getDay()));
   };
@@ -617,6 +825,79 @@ function NewProductionPlanning() {
       durationDays: dateDiffInDays(servedStartDate, servedEndDate),
     };
   }, [servedStartDate, servedEndDate]);
+  const selectableProductionStores = useMemo(() => {
+    const savedNames = new Set(Object.keys(productsByStoreAndDay));
+    const savedNamesById = new Map(Object.entries(savedStoreReferences).map(([storeName, id]) => [id, storeName]));
+    const productionWeekday = editingDayParam ? toLocalDate(editingDayParam).getDay() : null;
+    const eligibleStores = isEditing
+      ? productionStores.filter((store) => {
+        const savedName = savedNamesById.get(store.id);
+        if (savedName && savedName !== store.displayName) return false;
+        return savedNames.has(store.displayName) ||
+          !store.routeWeekdays?.length || store.routeWeekdays.includes(productionWeekday);
+      })
+      : productionStores;
+    const knownNames = new Set(eligibleStores.map((store) => store.displayName));
+    const savedMissingStores = selectedStores
+      .filter((storeName) => productsByStoreAndDay[storeName] && !knownNames.has(storeName))
+      .map((storeName) => ({
+        id: savedStoreReferences[storeName] || `saved-${storeName}`,
+        displayName: storeName,
+        routeWeekdays: [],
+      }));
+    return [...eligibleStores, ...savedMissingStores];
+  }, [editingDayParam, isEditing, productionStores, productsByStoreAndDay, savedStoreReferences, selectedStores]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    let active = true;
+    setEditLoading(true);
+    setEditLoadError("");
+    api.get(`/admin/production-planning/${editingDayParam}`)
+      .then((response) => {
+        if (!active) return;
+        const planning = response.data;
+        if (planning.status === "finalizado") {
+          setEditLoadError("Planejamentos finalizados não podem ser editados.");
+          return;
+        }
+        const storeNames = Object.keys(planning.stores || {});
+        setServedStartDate(planning.day);
+        setServedEndDate(planning.day);
+        setComparisonStartDate(planning.comparisonStartDate);
+        setComparisonEndDate(planning.comparisonEndDate);
+        setSelectedStores(storeNames);
+        setActiveStore(storeNames[0] || "");
+        setActiveDay(consolidatedTab);
+        setProductsByStoreAndDay(Object.fromEntries(storeNames.map((storeName) => [
+          storeName,
+          { [planning.day]: normalizeProducts(planning.stores[storeName].products || []) },
+        ])));
+        setSavedStoreReferences(Object.fromEntries(storeNames.map((storeName) => [
+          storeName,
+          planning.stores[storeName].productionStoreId,
+        ])));
+        setDefaultIncreaseByStoreAndDay(Object.fromEntries(storeNames.map((storeName) => [
+          storeName,
+          {
+            [planning.day]: planning.stores[storeName].defaultIncreasePercent === null ||
+              planning.stores[storeName].defaultIncreasePercent === undefined
+              ? ""
+              : String(planning.stores[storeName].defaultIncreasePercent),
+          },
+        ])));
+        setEditingUpdatedAt(planning.updatedAt);
+        setHasSuggested(true);
+        setCalculationDirty(false);
+      })
+      .catch((error) => {
+        if (active) setEditLoadError(error.response?.data?.error || "Não foi possível carregar o planejamento.");
+      })
+      .finally(() => {
+        if (active) setEditLoading(false);
+      });
+    return () => { active = false; };
+  }, [editingDayParam, isEditing]);
 
   useEffect(() => {
     if (!selectedStores.includes(activeStore)) {
@@ -648,7 +929,7 @@ function NewProductionPlanning() {
   }, [isEditing, productionStores, selectedStores.length]);
 
   useEffect(() => {
-    if (!productionRangeRule || !comparisonStartDate || !comparisonEndDate) return;
+    if (isEditing || !productionRangeRule || !comparisonStartDate || !comparisonEndDate) return;
 
     const comparisonMatches =
       toLocalDate(comparisonStartDate).getDay() === productionRangeRule.startWeekday &&
@@ -659,7 +940,7 @@ function NewProductionPlanning() {
       setComparisonStartDate("");
       setComparisonEndDate("");
     }
-  }, [comparisonEndDate, comparisonStartDate, productionRangeRule]);
+  }, [comparisonEndDate, comparisonStartDate, isEditing, productionRangeRule]);
 
   useEffect(() => {
     let active = true;
@@ -687,6 +968,7 @@ function NewProductionPlanning() {
   }, []);
 
   const isComparisonDateDisabled = (dateValue, context = {}) => {
+    if (isEditing) return false;
     if (!productionRangeRule) return false;
     const date = toLocalDate(dateValue);
 
@@ -705,6 +987,14 @@ function NewProductionPlanning() {
     }
 
     if (!productionRangeRule) return false;
+
+    if (isEditing) {
+      const comparisonDates = getDateRange(comparisonStartDate, comparisonEndDate);
+      const productionWeekday = toLocalDate(editingDayParam).getDay();
+      return comparisonStartDate <= comparisonEndDate && comparisonDates.some((dateValue) =>
+        toLocalDate(dateValue).getDay() === productionWeekday
+      );
+    }
 
     return (
       toLocalDate(comparisonStartDate).getDay() === productionRangeRule.startWeekday &&
@@ -731,6 +1021,7 @@ function NewProductionPlanning() {
     if (hasSuggested && isAddingStore) {
       setProductsMessage("Clique em Sugerir produção novamente para carregar a loja adicionada.");
     }
+    if (isEditing) setCalculationDirty(true);
   };
 
   const handleSuggestProduction = async () => {
@@ -759,6 +1050,7 @@ function NewProductionPlanning() {
       const response = await api.post("/admin/production-planning/suggestions", {
         comparisonStartDate,
         comparisonEndDate,
+        ...(isEditing ? { planningDay: editingDayParam } : {}),
         stores: selectedStores.map((storeName) => ({
           displayName: storeName,
           days: getProductionDaysForStore(storeName).map((day) => ({
@@ -767,11 +1059,55 @@ function NewProductionPlanning() {
         })),
       });
 
-      setProductsByStoreAndDay(Object.fromEntries(
+      const convertedImportsByKey = new Map();
+      const convertedStocksByKey = new Map();
+      if (isEditing) {
+        const orderGroups = [];
+        const stockGroups = [];
+        Object.entries(response.data?.stores || {}).forEach(([storeName, productsByDay]) => {
+          Object.entries(productsByDay).forEach(([day, recalculatedProducts]) => {
+            const existingProducts = productsByStoreAndDay[storeName]?.[day] || [];
+            const orderSources = existingProducts.flatMap((product) => product.fixedOrderSources || []);
+            if (orderSources.length) orderGroups.push({ key: `${storeName}::${day}`, items: orderSources });
+            const spreadsheetProducts = existingProducts.filter((product) => product.stockSource === "spreadsheet");
+            const stockSources = spreadsheetProducts.flatMap((product) => product.stockSources || []);
+            if (stockSources.length) {
+              const sourceByCode = new Map(stockSources.map((source) => [String(source.code), source]));
+              stockGroups.push({
+                key: `${storeName}::${day}`,
+                items: Array.from(sourceByCode.values()),
+                outputCodes: recalculatedProducts.map((product) => product.code),
+              });
+            }
+          });
+        });
+        const [ordersResponse, stocksResponse] = await Promise.all([
+          orderGroups.length
+            ? api.post("/admin/production-planning/conversions/apply", { mode: "orders", groups: orderGroups })
+            : Promise.resolve({ data: { groups: [] } }),
+          stockGroups.length
+            ? api.post("/admin/production-planning/conversions/apply", { mode: "stock", groups: stockGroups })
+            : Promise.resolve({ data: { groups: [] } }),
+        ]);
+        (ordersResponse.data?.groups || []).forEach((group) => convertedImportsByKey.set(group.key, group.items));
+        (stocksResponse.data?.groups || []).forEach((group) => convertedStocksByKey.set(group.key, group.items));
+      }
+
+      setProductsByStoreAndDay((currentProductsByStoreAndDay) => Object.fromEntries(
         Object.entries(response.data?.stores || {}).map(([storeName, productsByDay]) => [
           storeName,
           Object.fromEntries(
-            Object.entries(productsByDay).map(([day, products]) => [day, normalizeProducts(products)])
+            Object.entries(productsByDay).map(([day, products]) => [
+              day,
+              isEditing
+                ? mergeRecalculatedProducts(
+                    products,
+                    currentProductsByStoreAndDay[storeName]?.[day],
+                    convertedImportsByKey.get(`${storeName}::${day}`),
+                    convertedStocksByKey.get(`${storeName}::${day}`)
+                  )
+                : normalizeProducts(products),
+            ])
           ),
         ])
       ));
@@ -783,6 +1119,7 @@ function NewProductionPlanning() {
       setFocusedPercentField("");
       setHasSuggested(true);
       setIsHeaderCollapsed(true);
+      setCalculationDirty(false);
     } catch (error) {
       setProductsMessage(error.response?.data?.error || "Não foi possível sugerir a produção.");
     } finally {
@@ -873,6 +1210,19 @@ function NewProductionPlanning() {
         api.get("/admin/production-products/planning"),
       ]);
       const parsed = await parseFixedOrdersWorkbook(buffer, importDay);
+      const conversionResponse = await api.post("/admin/production-planning/conversions/apply", {
+        mode: "orders",
+        groups: [{
+          key: `${importStore}::${importDay}`,
+          items: parsed.products.map((product) => ({
+            code: product.code,
+            name: product.spreadsheetName,
+            fixedQuantity: product.fixedQuantity,
+            orderQuantity: product.orderQuantity,
+          })),
+        }],
+      });
+      const convertedProducts = conversionResponse.data?.groups?.[0]?.items || [];
       const catalogByCode = new Map(
         (catalogResponse.data || []).map((product) => [String(product.code).trim(), product])
       );
@@ -883,8 +1233,9 @@ function NewProductionPlanning() {
         fileName: file.name,
         validLineCount: parsed.validLineCount,
         ignoredCount: parsed.ignoredCount,
-        products: parsed.products.map((product) => ({
+        products: convertedProducts.map((product) => ({
           ...product,
+          spreadsheetName: product.name,
           registeredProduct: catalogByCode.get(product.code) || null,
         })),
       });
@@ -892,6 +1243,150 @@ function NewProductionPlanning() {
       setProductsMessage(error.response?.data?.error || error.message || "Nao foi possivel importar a planilha.");
     } finally {
       setImportLoading(false);
+    }
+  };
+
+  const handleStockFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || isConsolidatedActive || !activeStore || !activeDay) return;
+
+    setStockImportLoading(true);
+    setImportMessage("");
+    setStockImportWarning("");
+    setProductsMessage("");
+
+    try {
+      const isTextFile = /\.txt$/i.test(file.name) || file.type.startsWith("text/");
+      const currentDate = toInputDate(new Date());
+      const [fileContent, catalogResponse] = await Promise.all([
+        isTextFile ? file.text() : file.arrayBuffer(),
+        api.get("/admin/production-products/planning"),
+      ]);
+      const parsed = isTextFile
+        ? parseStockText(fileContent, currentDate)
+        : await parseStockWorkbook(fileContent);
+
+      const activeProductCodes = new Set(
+        (catalogResponse.data || []).map((product) => normalizeItemCode(product.code))
+      );
+      const planningStoreNames = Object.keys(productsByStoreAndDay);
+      const importedStoreByPlanningName = new Map(planningStoreNames.map((storeName) => [
+        storeName,
+        findImportedStockStore(parsed.storesByName, storeName),
+      ]));
+      const matchedFileStoreKeys = new Set(
+        Array.from(importedStoreByPlanningName.values()).filter(Boolean).map((match) => match.storeKey)
+      );
+      const matchedStoreCount = Array.from(importedStoreByPlanningName.values()).filter(Boolean).length;
+      const missingPlanningStoreCount = planningStoreNames.length - matchedStoreCount;
+      const ignoredFileStores = Array.from(parsed.storesByName.keys())
+        .filter((storeKey) => !matchedFileStoreKeys.has(storeKey));
+      let appliedStockCount = 0;
+      let ignoredProductCount = 0;
+      parsed.storesByName.forEach((store, storeKey) => {
+        store.productsByCode.forEach((quantity, code) => {
+          if (!matchedFileStoreKeys.has(storeKey) || !activeProductCodes.has(code)) {
+            ignoredProductCount += 1;
+          } else {
+            appliedStockCount += 1;
+          }
+        });
+      });
+
+      const stockConversionResponse = await api.post("/admin/production-planning/conversions/apply", {
+        mode: "stock",
+        groups: planningStoreNames.map((storeName) => {
+          const importedStore = importedStoreByPlanningName.get(storeName)?.store;
+          const importedProducts = importedStore?.productsByCode || new Map();
+          const outputCodes = Array.from(new Set(
+            Object.values(productsByStoreAndDay[storeName] || {}).flatMap((products) =>
+              products.map((product) => normalizeItemCode(product.code))
+            )
+          ));
+          return {
+            key: storeName,
+            outputCodes,
+            items: Array.from(importedProducts.entries())
+              .filter(([code]) => activeProductCodes.has(code))
+              .map(([code, quantity]) => ({ code, quantity, status: "available", reason: "" })),
+          };
+        }),
+      });
+      const convertedStockByStore = new Map(
+        (stockConversionResponse.data?.groups || []).map((group) => [
+          group.key,
+          new Map((group.items || []).map((item) => [String(item.code), item])),
+        ])
+      );
+
+      setProductsByStoreAndDay((currentProductsByStoreAndDay) => {
+        return Object.fromEntries(Object.entries(currentProductsByStoreAndDay).map(([storeName, storeDays]) => {
+          const convertedProducts = convertedStockByStore.get(storeName) || new Map();
+          const updatedStoreDays = Object.fromEntries(Object.entries(storeDays).map(([day, products]) => [
+            day,
+            products.map((product) => {
+              const code = normalizeItemCode(product.code);
+              if (!activeProductCodes.has(code)) return product;
+
+              const convertedStock = convertedProducts.get(code) || {
+                quantity: 0,
+                status: "not_found",
+                reason: "Produto não encontrado no arquivo de estoque importado.",
+                sources: [],
+              };
+              const stockQuantity = convertedStock.quantity;
+              const stockStatus = convertedStock.status;
+              const stockReason = convertedStock.reason || "";
+
+              return {
+                ...product,
+                stockQuantity,
+                stockStatus,
+                stockDate: parsed.stockDate,
+                stockReason,
+                stockSource: "spreadsheet",
+                stockSources: convertedStock.sources || [],
+                suggestion: calculateSuggestion(
+                  product.averageSold,
+                  product.increasePercent,
+                  product.fixedQuantity,
+                  product.orderQuantity,
+                  stockQuantity,
+                  stockStatus
+                ),
+              };
+            }),
+          ]));
+          return [storeName, updatedStoreDays];
+        }));
+      });
+
+      const warnings = [];
+      if (parsed.stockDate !== currentDate) {
+        warnings.push(`A data-base importada é ${formatDate(parsed.stockDate)}, diferente de hoje.`);
+      }
+      if (parsed.ignoredLineCount) {
+        warnings.push(`${parsed.ignoredLineCount} linha(s) incompleta(s) ou inativa(s) foram ignoradas.`);
+      }
+      if (ignoredFileStores.length) {
+        warnings.push(`${ignoredFileStores.length} loja(s) do arquivo não fazem parte deste planejamento.`);
+      }
+      if (missingPlanningStoreCount) {
+        warnings.push(`${missingPlanningStoreCount} loja(s) do planejamento não foram encontradas no arquivo e receberam estoque zero.`);
+      }
+      setStockImportWarning(warnings.join(" "));
+      const ignoredNotice = ignoredProductCount
+        ? ` ${ignoredProductCount} item(ns) não cadastrados ou de lojas não selecionadas foram ignorados.`
+        : "";
+      setImportMessage(
+        `${appliedStockCount} saldo(s) aplicados em ${planningStoreNames.length} loja(s) do planejamento.` +
+        ignoredNotice
+      );
+    } catch (error) {
+      setProductsMessage(error.response?.data?.error || error.message || "Não foi possível importar a planilha de estoque.");
+    } finally {
+      setStockImportLoading(false);
     }
   };
 
@@ -926,6 +1421,7 @@ function NewProductionPlanning() {
     let stockByCode = {};
     try {
       const response = await api.post("/admin/production-planning/stocks", {
+        ...(isEditing ? { planningDay: editingDayParam } : {}),
         stores: [{
           displayName: preview.storeName,
           productCodes: preview.products.map((product) => product.code),
@@ -956,8 +1452,16 @@ function NewProductionPlanning() {
         const importedProduct = importedByCode.get(String(product.code));
         const fixedQuantity = importedProduct?.fixedQuantity || 0;
         const orderQuantity = importedProduct?.orderQuantity || 0;
-        const stockData = importedProduct ? stockByCode[String(product.code)] || {} : {};
-        const nextProduct = { ...product, ...stockData, fixedQuantity, orderQuantity };
+        const stockData = importedProduct && product.stockSource !== "spreadsheet"
+          ? stockByCode[String(product.code)] || {}
+          : {};
+        const nextProduct = {
+          ...product,
+          ...stockData,
+          fixedQuantity,
+          orderQuantity,
+          fixedOrderSources: importedProduct?.sources || [],
+        };
         return {
           ...nextProduct,
           suggestion: calculateSuggestion(
@@ -989,6 +1493,8 @@ function NewProductionPlanning() {
             increasePercent,
             fixedQuantity: product.fixedQuantity,
             orderQuantity: product.orderQuantity,
+            fixedOrderSources: product.sources || [],
+            stockSources: stockData.stockSources || [],
             importedOnly: true,
             suggestion: calculateSuggestion(
               0,
@@ -1030,41 +1536,66 @@ function NewProductionPlanning() {
       ])
   );
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!hasSuggested || !validatePlanningFilters()) return;
+    if (!hasSuggested || !validatePlanningFilters() || calculationDirty || saveLoading) return;
 
-    if (isEditing) {
-      const stores = buildStoresPayloadForDay(editingDayParam);
-      if (!Object.keys(stores).length) return;
-
-      updateMockProductionDay(editingDayParam, {
-        comparisonStartDate,
-        comparisonEndDate,
-        stores,
-      });
-    } else {
-      const storesByDay = Object.fromEntries(
-        productionDays.map((day) => [day, buildStoresPayloadForDay(day)])
-      );
-      if (!Object.values(storesByDay).some((stores) => Object.keys(stores).length)) return;
-
-      upsertMockProductionPlanForRange({
-        productionDate: servedStartDate,
-        servedStartDate,
-        servedEndDate,
-        comparisonStartDate,
-        comparisonEndDate,
-        storesByDay,
-      });
+    setSaveLoading(true);
+    setProductsMessage("");
+    try {
+      if (isEditing) {
+        const stores = buildStoresPayloadForDay(editingDayParam);
+        if (!Object.keys(stores).length) return;
+        await api.put(`/admin/production-planning/${editingDayParam}`, {
+          comparisonStartDate,
+          comparisonEndDate,
+          updatedAt: editingUpdatedAt,
+          stores,
+        });
+      } else {
+        const storesByDay = Object.fromEntries(
+          productionDays.map((day) => [day, buildStoresPayloadForDay(day)])
+        );
+        if (!Object.values(storesByDay).some((stores) => Object.keys(stores).length)) return;
+        await api.post("/admin/production-planning", {
+          servedStartDate,
+          servedEndDate,
+          comparisonStartDate,
+          comparisonEndDate,
+          storesByDay,
+        });
+      }
+      navigate("/planejamento-producao");
+    } catch (error) {
+      const conflictDays = error.response?.data?.conflictDays;
+      const conflictMessage = Array.isArray(conflictDays) && conflictDays.length
+        ? ` Datas em conflito: ${conflictDays.map(formatDate).join(", ")}.`
+        : "";
+      setProductsMessage((error.response?.data?.error || "Não foi possível salvar o planejamento.") + conflictMessage);
+    } finally {
+      setSaveLoading(false);
     }
-
-    navigate("/planejamento-producao");
   };
+
+  if (isEditing && !editLoading && editLoadError && !hasSuggested) {
+    return (
+      <section className="production-planning-page">
+        <div className="production-planning-toolbar">
+          <div>
+            <h1>Editar planejamento de {formatDate(editingDayParam)}</h1>
+          </div>
+          <Link to="/planejamento-producao" className="button button--ghost">
+            Voltar
+          </Link>
+        </div>
+        <p className="form-message form-message--error" role="alert">{editLoadError}</p>
+      </section>
+    );
+  }
 
   return (
     <section className="production-planning-page">
-      {(suggestionLoading || importLoading) && (
+      {(suggestionLoading || importLoading || stockImportLoading || editLoading || saveLoading) && (
         <div
           className="production-suggestion-loading"
           role="status"
@@ -1079,12 +1610,14 @@ function NewProductionPlanning() {
       )}
       <div className="production-planning-toolbar">
         <div>
-          <h1>Novo Planejamento de produção</h1>
+          <h1>{isEditing ? `Editar planejamento de ${formatDate(editingDayParam)}` : "Novo Planejamento de produção"}</h1>
         </div>
         <Link to="/planejamento-producao" className="button button--ghost">
           Cancelar
         </Link>
       </div>
+
+      {editLoadError && <p className="form-message form-message--error" role="alert">{editLoadError}</p>}
 
       <form className="production-form" onSubmit={handleSubmit}>
         <div className={`production-form-panel ${isHeaderCollapsed ? "production-form-panel--collapsed" : ""}`}>
@@ -1127,12 +1660,13 @@ function NewProductionPlanning() {
                   onChange={(nextStartDate, nextEndDate) => {
                     setComparisonStartDate(nextStartDate);
                     setComparisonEndDate(nextEndDate);
+                    if (isEditing) setCalculationDirty(true);
                   }}
                 />
               </label>
               <label className="production-form-grid__store">
                 <span>Loja</span>
-                <MultiStoreSelect stores={productionStores} selectedStores={selectedStores} onToggleStore={handleToggleStore} />
+                <MultiStoreSelect stores={selectableProductionStores} selectedStores={selectedStores} onToggleStore={handleToggleStore} />
               </label>
               <div className="production-form-grid__suggest">
                 <span>Ação</span>
@@ -1142,7 +1676,9 @@ function NewProductionPlanning() {
                   onClick={handleSuggestProduction}
                   disabled={suggestionLoading || storesLoading || !validatePlanningFilters()}
                 >
-                  {suggestionLoading || storesLoading ? "Carregando dados..." : "Sugerir produção"}
+                  {suggestionLoading || storesLoading
+                    ? "Carregando dados..."
+                    : isEditing ? "Recalcular produção" : "Sugerir produção"}
                 </button>
               </div>
               {hasSuggested && (
@@ -1167,6 +1703,14 @@ function NewProductionPlanning() {
         )}
         {importMessage && (
           <p className="form-message production-import-message">{importMessage}</p>
+        )}
+        {stockImportWarning && (
+          <p className="production-stock-warning" role="status">{stockImportWarning}</p>
+        )}
+        {isEditing && calculationDirty && (
+          <p className="production-stock-warning" role="status">
+            O período ou as lojas foram alterados. Recalcule a produção antes de salvar.
+          </p>
         )}
 
         {hasSuggested && (
@@ -1255,9 +1799,24 @@ function NewProductionPlanning() {
                     type="button"
                     className="button button--ghost"
                     onClick={() => fixedOrdersFileInputRef.current?.click()}
-                    disabled={importLoading}
+                    disabled={importLoading || stockImportLoading}
                   >
                     {importLoading ? "Lendo planilha..." : "Importar Fixos e Encomendas"}
+                  </button>
+                  <input
+                    ref={stockFileInputRef}
+                    type="file"
+                    accept=".txt,.xlsx,.xls,text/plain"
+                    onChange={handleStockFileChange}
+                    hidden
+                  />
+                  <button
+                    type="button"
+                    className="button button--ghost"
+                    onClick={() => stockFileInputRef.current?.click()}
+                    disabled={stockImportLoading || importLoading}
+                  >
+                    {stockImportLoading ? "Lendo estoque..." : "Importar Estoque"}
                   </button>
                 </div>
               )}
@@ -1341,8 +1900,8 @@ function NewProductionPlanning() {
               <Link to="/planejamento-producao" className="button button--ghost">
                 Cancelar
               </Link>
-              <button type="submit" className="button">
-                Gerar produção
+              <button type="submit" className="button" disabled={saveLoading || calculationDirty || Boolean(editLoadError)}>
+                {saveLoading ? "Salvando..." : isEditing ? "Salvar alterações" : "Gerar produção"}
               </button>
             </div>
           </>
@@ -1390,13 +1949,16 @@ function NewProductionPlanning() {
                   {importPreview.products.map((product) => {
                     const isRegistered = Boolean(product.registeredProduct);
                     const isRegistering = registeringProductCodes.includes(product.code);
+                    const compositionTitle = (product.sources || []).map((source) =>
+                      `${source.code}: ${formatQuantity(source.fixedQuantity + source.orderQuantity)} x ${formatQuantity(source.factor)}`
+                    ).join(" | ");
                     return (
                       <tr key={product.code} className={isRegistered ? "" : "production-import-row--unknown"}>
                         <td>{product.code}</td>
-                        <td>{product.registeredProduct?.name || product.spreadsheetName}</td>
+                        <td title={compositionTitle}>{product.registeredProduct?.name || product.spreadsheetName}</td>
                         <td>{formatQuantity(product.fixedQuantity)}</td>
                         <td>{formatQuantity(product.orderQuantity)}</td>
-                        <td>{formatQuantity(product.fixedQuantity + product.orderQuantity)}</td>
+                        <td title={compositionTitle}>{formatQuantity(product.fixedQuantity + product.orderQuantity)}</td>
                         <td>
                           <span className={`production-import-status production-import-status--${isRegistered ? "registered" : "unknown"}`}>
                             {isRegistered ? "Cadastrado" : "Não cadastrado"}

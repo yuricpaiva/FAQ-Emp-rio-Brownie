@@ -43,7 +43,18 @@ async function listProductionProducts(req, res) {
 
 async function saveProductionProducts(req, res) {
   const products = normalizeProducts(req.body?.products);
-  const activeCodes = products.map((product) => product.code);
+  const activeConversions = await prisma.productionConversion.findMany({
+    where: { active: true },
+    select: {
+      conversionCode: true,
+      sourceProduct: { select: { code: true } },
+    },
+  });
+  const protectedCodes = activeConversions.flatMap((conversion) => [
+    conversion.sourceProduct.code,
+    conversion.conversionCode,
+  ]);
+  const activeCodes = Array.from(new Set([...products.map((product) => product.code), ...protectedCodes]));
 
   if (!products.length) {
     return res.status(400).json({ error: 'Informe pelo menos um produto com codigo.' });
@@ -69,6 +80,12 @@ async function saveProductionProducts(req, res) {
         }
       })
     ));
+    if (protectedCodes.length) {
+      await tx.productionProduct.updateMany({
+        where: { code: { in: protectedCodes } },
+        data: { active: true },
+      });
+    }
   });
 
   const savedProducts = await prisma.productionProduct.findMany({

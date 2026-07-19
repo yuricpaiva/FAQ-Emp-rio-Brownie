@@ -1903,6 +1903,8 @@ textarea:focus {
 .production-store-controls .production-import-control {
   display: flex;
   justify-items: initial;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-left: auto;
 }
 
@@ -4149,6 +4151,7 @@ textarea:focus {
   }
 
   .production-store-controls .production-import-control {
+    flex-direction: column;
     width: 100%;
     margin-left: 0;
   }

@@ -99,6 +99,7 @@ model ProductionProduct {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   sourceConversions ProductionConversion[] @relation("ProductionConversionSource")
+  planningItems ProductionPlanningItem[]
 
   @@index([active, code])
 }
@@ -127,8 +128,69 @@ model ProductionStore {
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   routes      ProductionStoreRoute[]
+  planningStores ProductionPlanningStore[]
 
   @@index([active, displayName])
+}
+
+model ProductionPlanningDay {
+  id                  Int                       @id @default(autoincrement())
+  day                 String                    @unique
+  comparisonStartDate String
+  comparisonEndDate   String
+  status              String                    @default("nao_iniciado")
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  stores              ProductionPlanningStore[]
+
+  @@index([day, status])
+  @@index([createdAt])
+}
+
+model ProductionPlanningStore {
+  id                     Int                      @id @default(autoincrement())
+  planningDayId          Int
+  productionStoreId      Int
+  storeName              String
+  defaultIncreasePercent Decimal?
+  planningDay            ProductionPlanningDay    @relation(fields: [planningDayId], references: [id], onDelete: Cascade)
+  productionStore        ProductionStore          @relation(fields: [productionStoreId], references: [id])
+  products               ProductionPlanningItem[]
+
+  @@unique([planningDayId, productionStoreId])
+  @@index([planningDayId, storeName])
+}
+
+model ProductionPlanningItem {
+  id                  Int                     @id @default(autoincrement())
+  planningStoreId     Int
+  productionProductId Int
+  code                String
+  name                String
+  family              String                  @default("")
+  averageSold         Decimal                 @default(0)
+  servedDates         String                  @default("[]")
+  stockQuantity       Decimal?
+  stockStatus         String                  @default("unavailable")
+  stockDate           String                  @default("")
+  stockReason         String                  @default("")
+  stockSource         String                  @default("")
+  increasePercent     Decimal?
+  fixedQuantity       Decimal                 @default(0)
+  orderQuantity       Decimal                 @default(0)
+  fixedOrderSources   String                  @default("[]")
+  stockSources        String                  @default("[]")
+  suggestion          Decimal                 @default(0)
+  importedOnly        Boolean                 @default(false)
+  dispatchStatus      String?
+  actualQuantity      Decimal?
+  justification       String                  @default("")
+  planningStore       ProductionPlanningStore @relation(fields: [planningStoreId], references: [id], onDelete: Cascade)
+  productionProduct   ProductionProduct       @relation(fields: [productionProductId], references: [id])
+
+  @@unique([planningStoreId, productionProductId])
+  @@index([planningStoreId, code])
+  @@index([dispatchStatus])
 }
 
 model ProductionStoreRoute {

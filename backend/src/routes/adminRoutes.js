@@ -42,9 +42,19 @@ const {
   syncProductionStores
 } = require('../controllers/productionStoreController');
 const {
+  applyProductionConversions,
   getProductionStocks,
   suggestProduction
 } = require('../controllers/productionPlanningController');
+const {
+  createPlanning,
+  finalizePlanning,
+  getPlanning,
+  listPlanning,
+  updateDispatchItem,
+  updatePlanning,
+  updatePlanningStatus
+} = require('../controllers/productionPlanningPersistenceController');
 const {
   downloadEverestDiagnostic,
   getDatabaseConnections,
@@ -130,5 +140,13 @@ router.put('/production-stores', adminOnly, saveProductionStores);
 router.put('/production-store-routes', adminOnly, saveProductionStoreRoutes);
 router.post('/production-planning/suggestions', canPlanProduction, suggestProduction);
 router.post('/production-planning/stocks', canPlanProduction, getProductionStocks);
+router.post('/production-planning/conversions/apply', canPlanProduction, applyProductionConversions);
+router.get('/production-planning', canPlanProduction, listPlanning);
+router.post('/production-planning', canPlanProduction, createPlanning);
+router.get('/production-planning/:day', canPlanProduction, getPlanning);
+router.put('/production-planning/:day', canPlanProduction, updatePlanning);
+router.patch('/production-planning/:day/status', canPlanProduction, updatePlanningStatus);
+router.put('/production-planning/:day/dispatch', canPlanProduction, updateDispatchItem);
+router.post('/production-planning/:day/finalize', canPlanProduction, finalizePlanning);
 
 module.exports = router;
