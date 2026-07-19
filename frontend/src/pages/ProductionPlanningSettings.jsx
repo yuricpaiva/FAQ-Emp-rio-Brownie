@@ -885,6 +885,7 @@ const emptyConnectionState = {
   message: "",
   testing: false,
   saving: false,
+  downloading: false,
 };
 
 function formatConnectionDate(value) {
@@ -997,6 +998,39 @@ function DatabaseConnectionSection({ system, title, description, state, setState
     }
   };
 
+  const downloadDiagnostic = async () => {
+    setState((current) => ({ ...current, downloading: true, message: "" }));
+    try {
+      const response = await api.get("/admin/database-connections/everest/diagnostic", {
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const date = new Intl.DateTimeFormat("en-CA", {
+        timeZone: configuration.timezone || "America/Fortaleza",
+      }).format(new Date());
+      link.href = url;
+      link.download = `diagnostico-estoque-${date}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setState((current) => ({ ...current, downloading: false, message: "Diagnóstico baixado com sucesso." }));
+    } catch (error) {
+      let message = "Não foi possível baixar o diagnóstico do estoque.";
+      if (error.response?.data instanceof Blob) {
+        try {
+          const body = JSON.parse(await error.response.data.text());
+          message = body.error || message;
+        } catch (_parseError) {
+          // Keep the safe fallback message for non-JSON responses.
+        }
+      }
+      setState((current) => ({ ...current, downloading: false, message }));
+    }
+  };
+
   return (
     <section className="database-connection-section">
       <div className="production-settings-subsection__header">
@@ -1058,10 +1092,15 @@ function DatabaseConnectionSection({ system, title, description, state, setState
       </div>
 
       <div className="database-connection-actions">
-        <button type="button" className="button button--ghost" onClick={testConnection} disabled={state.testing || state.saving}>
+        {isEverest && (
+          <button type="button" className="button button--ghost" onClick={downloadDiagnostic} disabled={state.testing || state.saving || state.downloading}>
+            {state.downloading ? "Gerando diagnóstico..." : "Baixar diagnóstico"}
+          </button>
+        )}
+        <button type="button" className="button button--ghost" onClick={testConnection} disabled={state.testing || state.saving || state.downloading}>
           {state.testing ? "Testando..." : "Testar conexão"}
         </button>
-        <button type="button" className="button" onClick={saveConnection} disabled={!state.validationToken || state.testing || state.saving}>
+        <button type="button" className="button" onClick={saveConnection} disabled={!state.validationToken || state.testing || state.saving || state.downloading}>
           {state.saving ? "Salvando..." : "Salvar configuração"}
         </button>
       </div>

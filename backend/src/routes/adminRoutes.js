@@ -46,6 +46,7 @@ const {
   suggestProduction
 } = require('../controllers/productionPlanningController');
 const {
+  downloadEverestDiagnostic,
   getDatabaseConnections,
   saveConnection,
   testConnection
@@ -113,6 +114,7 @@ router.put('/pool-settings', adminOnly, updatePoolSettings);
 router.get('/power-bi-settings', adminOnly, getPowerBiSettingsAdmin);
 router.put('/power-bi-settings', adminOnly, updatePowerBiSettings);
 router.get('/database-connections', adminOnly, getDatabaseConnections);
+router.get('/database-connections/everest/diagnostic', adminOnly, downloadEverestDiagnostic);
 router.post('/database-connections/:system/test', adminOnly, testConnection);
 router.put('/database-connections/:system', adminOnly, saveConnection);
 router.get('/production-products/planning', canPlanProduction, listProductionProducts);

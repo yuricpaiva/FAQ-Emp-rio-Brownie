@@ -213,6 +213,95 @@ async function getEverestStockSnapshot({ stores, productCodes, stockDate = getEv
   }
 }
 
+async function getEverestDiagnosticSnapshot(stockDate = getEverestStockDate()) {
+  if (!isEverestEnabled()) {
+    throw Object.assign(new Error('A consulta do Everest esta desabilitada.'), { code: 'EVEREST_DISABLED' });
+  }
+
+  const database = getEverestPool();
+  const [serverRows] = await database.execute(
+    'SELECT NOW() AS server_now, DATABASE() AS database_name, VERSION() AS server_version'
+  );
+  const [latestRows] = await database.execute(
+    'SELECT DATE_FORMAT(dt_base, \'%Y-%m-%d\') AS stock_date FROM `525_saldo_estoque` WHERE dt_base IS NOT NULL ORDER BY dt_base DESC LIMIT 1'
+  );
+  const latestStockDate = latestRows[0]?.stock_date || null;
+  const [requestedCountRows] = await database.execute(
+    'SELECT COUNT(*) AS row_count FROM `525_saldo_estoque` WHERE dt_base >= ? AND dt_base < DATE_ADD(?, INTERVAL 1 DAY)',
+    [stockDate, stockDate]
+  );
+  const requestedDateRowCount = Number(requestedCountRows[0]?.row_count || 0);
+  const sampleDate = requestedDateRowCount > 0 ? stockDate : latestStockDate;
+
+  if (!sampleDate) {
+    return {
+      server: serverRows[0] || {},
+      stockDate,
+      latestStockDate: null,
+      sampleDate: null,
+      requestedDateRowCount,
+      summary: { rowCount: 0, storeCount: 0, productCount: 0 },
+      stores: [],
+      products: [],
+      rows: [],
+      duplicates: [],
+      limits: { stores: 200, products: 5000, rows: 100, duplicates: 100 },
+    };
+  }
+
+  const dateParams = [sampleDate, sampleDate];
+  const [[summaryRows], [storeRows], [productRows], [sampleRows], [duplicateRows]] = await Promise.all([
+    database.execute(
+      'SELECT COUNT(*) AS row_count, COUNT(DISTINCT TRIM(fantasia)) AS store_count, COUNT(DISTINCT cd_item) AS product_count FROM `525_saldo_estoque` WHERE dt_base >= ? AND dt_base < DATE_ADD(?, INTERVAL 1 DAY)',
+      dateParams
+    ),
+    database.execute(
+      'SELECT TRIM(fantasia) AS fantasia, COUNT(*) AS row_count FROM `525_saldo_estoque` WHERE dt_base >= ? AND dt_base < DATE_ADD(?, INTERVAL 1 DAY) GROUP BY TRIM(fantasia) ORDER BY row_count DESC, fantasia LIMIT 200',
+      dateParams
+    ),
+    database.execute(
+      'SELECT TRIM(CAST(cd_item AS CHAR)) AS cd_item, COUNT(*) AS row_count FROM `525_saldo_estoque` WHERE dt_base >= ? AND dt_base < DATE_ADD(?, INTERVAL 1 DAY) GROUP BY cd_item ORDER BY cd_item LIMIT 5000',
+      dateParams
+    ),
+    database.execute(
+      'SELECT DATE_FORMAT(dt_base, \'%Y-%m-%d\') AS dt_base, TRIM(fantasia) AS fantasia, TRIM(CAST(cd_item AS CHAR)) AS cd_item, qt_saldo FROM `525_saldo_estoque` WHERE dt_base >= ? AND dt_base < DATE_ADD(?, INTERVAL 1 DAY) ORDER BY fantasia, cd_item LIMIT 100',
+      dateParams
+    ),
+    database.execute(
+      'SELECT TRIM(fantasia) AS fantasia, TRIM(CAST(cd_item AS CHAR)) AS cd_item, COUNT(*) AS row_count FROM `525_saldo_estoque` WHERE dt_base >= ? AND dt_base < DATE_ADD(?, INTERVAL 1 DAY) GROUP BY TRIM(fantasia), cd_item HAVING COUNT(*) > 1 ORDER BY row_count DESC LIMIT 100',
+      dateParams
+    ),
+  ]);
+
+  const summary = summaryRows[0] || {};
+  return {
+    server: serverRows[0] || {},
+    stockDate,
+    latestStockDate,
+    sampleDate,
+    requestedDateRowCount,
+    summary: {
+      rowCount: Number(summary.row_count || 0),
+      storeCount: Number(summary.store_count || 0),
+      productCount: Number(summary.product_count || 0),
+    },
+    stores: storeRows.map((row) => ({ fantasia: String(row.fantasia ?? ''), rowCount: Number(row.row_count || 0) })),
+    products: productRows.map((row) => ({ cdItem: String(row.cd_item ?? ''), rowCount: Number(row.row_count || 0) })),
+    rows: sampleRows.map((row) => ({
+      dtBase: row.dt_base,
+      fantasia: String(row.fantasia ?? ''),
+      cdItem: String(row.cd_item ?? ''),
+      stockQuantity: Number(row.qt_saldo),
+    })),
+    duplicates: duplicateRows.map((row) => ({
+      fantasia: String(row.fantasia ?? ''),
+      cdItem: String(row.cd_item ?? ''),
+      rowCount: Number(row.row_count || 0),
+    })),
+    limits: { stores: 200, products: 5000, rows: 100, duplicates: 100 },
+  };
+}
+
 function isStockAvailable(stockItem) {
   return availableStatuses.has(stockItem?.status);
 }
@@ -226,6 +315,7 @@ async function resetEverestPool() {
 module.exports = {
   buildStockSnapshotFromRows,
   getEverestStockDate,
+  getEverestDiagnosticSnapshot,
   getEverestStockSnapshot,
   isStockAvailable,
   resetEverestPool,

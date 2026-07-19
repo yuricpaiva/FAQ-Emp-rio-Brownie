@@ -126,6 +126,11 @@ test('pool ranking is readable by authenticated users and writable only by admin
   });
   assert.equal(forbiddenDatabaseConnections.status, 403);
 
+  const forbiddenEverestDiagnostic = await fetch(`${base}/admin/database-connections/everest/diagnostic`, {
+    headers: { cookie: readerCookie }
+  });
+  assert.equal(forbiddenEverestDiagnostic.status, 403);
+
   const ranking = await fetch(`${base}/knowledge/pool-ranking`, {
     headers: { cookie: readerCookie }
   });
