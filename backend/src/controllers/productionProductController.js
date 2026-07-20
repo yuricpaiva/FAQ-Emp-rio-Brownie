@@ -35,7 +35,7 @@ function mapProduct(product) {
 async function listProductionProducts(req, res) {
   const products = await prisma.productionProduct.findMany({
     where: { active: true },
-    orderBy: { code: 'asc' }
+    orderBy: [{ name: 'asc' }, { code: 'asc' }]
   });
 
   return res.json(products.map(mapProduct));
@@ -90,7 +90,7 @@ async function saveProductionProducts(req, res) {
 
   const savedProducts = await prisma.productionProduct.findMany({
     where: { active: true },
-    orderBy: { code: 'asc' }
+    orderBy: [{ name: 'asc' }, { code: 'asc' }]
   });
 
   return res.json(savedProducts.map(mapProduct));

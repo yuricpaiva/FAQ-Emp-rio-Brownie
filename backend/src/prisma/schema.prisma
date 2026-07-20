@@ -8,14 +8,19 @@ datasource db {
 }
 
 model User {
-  id           Int     @id @default(autoincrement())
-  name         String
-  email        String  @unique
-  passwordHash String
-  role         String  @default("reader")
-  photoUrl     String  @default("")
-  active       Boolean @default(true)
-  powerBiAccess PowerBiAccess?
+  id                Int              @id @default(autoincrement())
+  name              String
+  email             String           @unique
+  passwordHash      String
+  role              String           @default("reader")
+  photoUrl          String           @default("")
+  active            Boolean          @default(true)
+  productionStoreId Int?
+  powerBiAccess     PowerBiAccess?
+  productionStore   ProductionStore? @relation("UserProductionStore", fields: [productionStoreId], references: [id], onDelete: SetNull)
+  createdStockCounts StockCount[]     @relation("StockCountCreatedBy")
+
+  @@index([productionStoreId])
 }
 
 model Category {
@@ -100,6 +105,7 @@ model ProductionProduct {
   updatedAt DateTime @updatedAt
   sourceConversions ProductionConversion[] @relation("ProductionConversionSource")
   planningItems ProductionPlanningItem[]
+  stockCountItems StockCountItem[]
 
   @@index([active, code])
 }
@@ -129,8 +135,46 @@ model ProductionStore {
   updatedAt   DateTime               @updatedAt
   routes      ProductionStoreRoute[]
   planningStores ProductionPlanningStore[]
+  users       User[]                  @relation("UserProductionStore")
+  stockCounts StockCount[]
 
   @@index([active, displayName])
+}
+
+model StockCount {
+  id                Int              @id @default(autoincrement())
+  productionStoreId Int
+  storeName         String
+  stockDate         String
+  status            String           @default("draft")
+  createdById       Int
+  createdByName     String
+  finalizedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  productionStore   ProductionStore  @relation(fields: [productionStoreId], references: [id], onDelete: Restrict)
+  createdBy         User             @relation("StockCountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items             StockCountItem[]
+
+  @@unique([productionStoreId, stockDate])
+  @@index([stockDate, status])
+  @@index([createdById])
+}
+
+model StockCountItem {
+  id                  Int               @id @default(autoincrement())
+  stockCountId        Int
+  productionProductId Int
+  code                String
+  name                String
+  quantity            Decimal?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  stockCount          StockCount        @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+  productionProduct   ProductionProduct @relation(fields: [productionProductId], references: [id], onDelete: Restrict)
+
+  @@unique([stockCountId, productionProductId])
+  @@index([stockCountId, code])
 }
 
 model ProductionPlanningDay {

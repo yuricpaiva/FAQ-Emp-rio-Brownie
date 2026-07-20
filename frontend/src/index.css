@@ -1581,7 +1581,35 @@ textarea:focus {
 }
 
 .production-form-grid__store {
-  grid-column: span 4;
+  grid-column: span 3;
+}
+
+.production-form-grid__stock-source {
+  grid-column: span 3;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.production-stock-source-import {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.production-stock-source-import .button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.production-stock-source-import small {
+  max-width: 180px;
+  overflow: hidden;
+  color: #6b554c;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .production-form-grid__percent {
@@ -1589,7 +1617,7 @@ textarea:focus {
 }
 
 .production-form-grid__suggest {
-  grid-column: span 2;
+  grid-column: 1 / -1;
   display: grid;
   gap: 0.35rem;
   align-content: end;
@@ -2265,6 +2293,50 @@ textarea:focus {
   cursor: not-allowed;
 }
 
+.production-form-grid--editing .production-form-grid__store {
+  grid-column: 1 / -1;
+}
+
+.production-dispatch-select-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.production-dispatch-select-all {
+  cursor: pointer;
+}
+
+.production-dispatch-select-all input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #2f7d4c;
+  cursor: pointer;
+}
+
+.production-dispatch-select-all input:disabled {
+  cursor: wait;
+}
+
+.production-dispatch-select-all-mobile {
+  display: none;
+}
+
+.production-dispatch-select-all-toolbar {
+  min-height: 36px;
+  color: #3f302a;
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.production-dispatch-empty {
+  color: #6b554c;
+  text-align: center;
+}
+
 .production-incomplete-cell {
   display: flex;
   align-items: center;
@@ -2339,6 +2411,14 @@ textarea:focus {
 
 .production-view-tabs-toolbar .production-view-tabs {
   flex: 1 1 520px;
+}
+
+.production-view-tabs-toolbar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.85rem;
+  margin-left: auto;
 }
 
 .production-export-button {
@@ -3639,6 +3719,20 @@ textarea:focus {
 }
 
 @media (max-width: 720px) {
+  .production-dispatch-select-all-toolbar {
+    display: none;
+  }
+
+  .production-dispatch-select-all-mobile {
+    display: flex;
+    justify-content: flex-end;
+    padding: 0.6rem 0.65rem;
+    border-bottom: 1px solid rgba(107, 70, 52, 0.12);
+    color: #3f302a;
+    font-size: 0.8rem;
+    font-weight: 800;
+  }
+
   .production-dispatch-store-table,
   .production-dispatch-store-table tbody,
   .production-dispatch-store-table tr,
@@ -4130,10 +4224,24 @@ textarea:focus {
 
   .production-form-grid__period,
   .production-form-grid__store,
+  .production-form-grid__stock-source,
   .production-form-grid__percent,
   .production-form-grid__suggest,
   .production-form-grid__collapse {
     grid-column: 1 / -1;
+  }
+
+  .production-form-grid__stock-source {
+    grid-template-columns: 1fr;
+  }
+
+  .production-stock-source-import {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .production-stock-source-import small {
+    max-width: 100%;
   }
 
   .production-form-grid__collapse,
@@ -4157,6 +4265,277 @@ textarea:focus {
   }
 
   .production-import-control .button {
+    width: 100%;
+  }
+}
+
+/* Stock count */
+.stock-counts-page,
+.stock-count-entry-page {
+  width: 100%;
+}
+
+.stock-count-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.35rem 0 0.15rem;
+}
+
+.stock-count-page-header h1 {
+  margin: 0.15rem 0 0.35rem;
+  font-size: clamp(1.65rem, 3vw, 2.35rem);
+  letter-spacing: 0;
+}
+
+.stock-count-page-header .section-copy {
+  margin: 0;
+}
+
+.stock-count-table-wrap {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  box-shadow: 0 12px 32px rgba(73, 44, 31, 0.08);
+}
+
+.stock-count-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.stock-count-table th,
+.stock-count-table td {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.stock-count-table th {
+  background: #f1eee9;
+  color: #604d43;
+  font-size: 0.73rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.stock-count-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.stock-count-table tbody tr:hover {
+  background: rgba(46, 103, 77, 0.035);
+}
+
+.stock-count-table th:nth-child(1) { width: 32%; }
+.stock-count-table th:nth-child(2) { width: 16%; }
+.stock-count-table th:nth-child(3) { width: 19%; }
+.stock-count-table th:nth-child(4) { width: 16%; }
+.stock-count-table th:nth-child(5) { width: 17%; }
+
+.stock-count-status {
+  display: inline-flex;
+  min-width: 86px;
+  justify-content: center;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: #fff1cb;
+  color: #795415;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.stock-count-status--finalized {
+  background: #dcefe4;
+  color: #24613f;
+}
+
+.stock-count-action {
+  min-width: 102px;
+  padding: 0.58rem 0.75rem;
+}
+
+.stock-count-empty {
+  padding: 3rem 1.25rem;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.stock-count-store-modal {
+  width: min(460px, calc(100vw - 2rem));
+}
+
+.stock-count-store-field {
+  display: grid;
+  gap: 0.45rem;
+  margin: 1.25rem 0;
+}
+
+.stock-count-store-field span {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.stock-count-store-field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+}
+
+.stock-count-back {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 0.5rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-strong);
+  color: var(--brand);
+  cursor: pointer;
+  font-size: 1.15rem;
+}
+
+.stock-count-save-state {
+  color: #2f6c4c;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.stock-count-entry-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.stock-count-entry-table th:nth-child(1) { width: 18%; }
+.stock-count-entry-table th:nth-child(2) { width: auto; }
+.stock-count-entry-table th:nth-child(3) { width: 190px; }
+
+.stock-count-code {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-count-quantity {
+  width: 100%;
+  min-height: 42px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgba(88, 65, 54, 0.24);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-count-quantity:focus {
+  outline: 2px solid rgba(47, 125, 76, 0.2);
+  border-color: #397755;
+}
+
+.stock-count-quantity:disabled {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text);
+  opacity: 1;
+}
+
+.stock-count-final-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.25rem;
+}
+
+.stock-count-final-actions span {
+  color: var(--text-soft);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+  .stock-count-page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .stock-count-page-header > .button {
+    width: 100%;
+  }
+
+  .stock-count-table-wrap {
+    overflow: visible;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  .stock-count-table,
+  .stock-count-table tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .stock-count-table thead {
+    display: none;
+  }
+
+  .stock-count-table tr {
+    display: grid;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-strong);
+  }
+
+  .stock-count-table td {
+    display: grid;
+    grid-template-columns: minmax(105px, 38%) 1fr;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.7rem 0.8rem;
+    text-align: right;
+  }
+
+  .stock-count-table td::before {
+    content: attr(data-label);
+    color: var(--text-soft);
+    font-size: 0.7rem;
+    font-weight: 750;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .stock-count-table td > * {
+    justify-self: end;
+  }
+
+  .stock-count-entry-table td:nth-child(2) strong {
+    max-width: 100%;
+    text-align: right;
+  }
+
+  .stock-count-quantity {
+    max-width: 150px;
+  }
+
+  .stock-count-final-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .stock-count-final-actions .button {
     width: 100%;
   }
 }

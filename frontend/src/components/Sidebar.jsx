@@ -236,6 +236,12 @@ function Sidebar() {
                 {(isMobile || !collapsed) && <span>Planejamento de Produção</span>}
               </NavLink>
             )}
+            {hasRole(["store", "admin", "production_manager"]) && (
+              <NavLink to="/contagem-estoque" className="sidebar__link" onClick={closeNavigation}>
+                <img src="/icon-operacao.svg" alt="" className="sidebar__nav-icon" />
+                {(isMobile || !collapsed) && <span>Contagem de Estoque</span>}
+              </NavLink>
+            )}
             {poolEnabled && (
               <NavLink to="/ranking-bolao" className="sidebar__link" onClick={closeNavigation}>
                 <img src="/icon-ranking.svg" alt="" className="sidebar__nav-icon" />

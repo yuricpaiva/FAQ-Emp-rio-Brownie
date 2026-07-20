@@ -1,9 +1,14 @@
 const { PrismaClient, Prisma } = require('@prisma/client');
+const { hasAtMostFourDecimalPlaces, normalizeDecimalText } = require('../utils/decimal');
 
 const prisma = new PrismaClient();
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 const editableStatuses = new Set(['nao_iniciado', 'em_producao']);
 const dispatchStatuses = new Set(['complete', 'incomplete']);
+
+function isDispatchableItem(item) {
+  return Number(item?.suggestion || 0) > 0;
+}
 
 class PlanningError extends Error {
   constructor(status, message, details) {
@@ -17,7 +22,7 @@ const planningInclude = {
   stores: {
     orderBy: { storeName: 'asc' },
     include: {
-      products: { orderBy: { code: 'asc' } },
+      products: { orderBy: [{ name: 'asc' }, { code: 'asc' }] },
     },
   },
 };
@@ -55,11 +60,14 @@ function getDateRange(startDate, endDate) {
 
 function toNumber(value, field, { nullable = false } = {}) {
   if (nullable && (value === null || value === undefined || String(value).trim() === '')) return null;
-  const number = Number(String(value ?? '').replace(',', '.'));
+  const number = Number(normalizeDecimalText(value));
   if (!Number.isFinite(number) || number < 0) {
     throw new PlanningError(400, `${field} deve ser um numero maior ou igual a zero.`);
   }
-  return Math.round(number * 10000) / 10000;
+  if (!hasAtMostFourDecimalPlaces(value)) {
+    throw new PlanningError(400, `${field} deve ter no maximo quatro casas decimais.`);
+  }
+  return number;
 }
 
 function normalizeServedDates(value) {
@@ -113,7 +121,7 @@ function normalizeProduct(product) {
     orderQuantity: toNumber(product?.orderQuantity ?? 0, `Encomendas de ${code}`),
     fixedOrderSources: normalizeFixedOrderSources(product?.fixedOrderSources),
     stockSources: normalizeStockSources(product?.stockSources),
-    suggestion: toNumber(product?.suggestion ?? 0, `Quantidade a produzir de ${code}`),
+    suggestion: toNumber(product?.suggestion ?? 0, `Quantidade a ser enviada de ${code}`),
     importedOnly: Boolean(product?.importedOnly),
   };
 }
@@ -566,6 +574,7 @@ async function updateDispatchItem(req, res) {
     const store = day.stores.find((item) => item.storeName === storeName);
     const item = store?.products.find((product) => product.code === productCode);
     if (!item) throw new PlanningError(404, 'Produto do planejamento nao encontrado.');
+    if (!isDispatchableItem(item)) throw new PlanningError(409, 'Produtos com quantidade zero nao entram no despacho.');
 
     let data = { dispatchStatus: null, actualQuantity: null, justification: '' };
     if (dispatchItem !== null && dispatchItem !== undefined) {
@@ -590,12 +599,38 @@ async function updateDispatchItem(req, res) {
   }
 }
 
+async function updateDispatchItemsBulk(req, res) {
+  const storeName = String(req.body?.storeName || '').trim();
+  const complete = req.body?.complete;
+  try {
+    if (typeof complete !== 'boolean') throw new PlanningError(400, 'Informe a marcacao dos produtos.');
+    const day = await prisma.productionPlanningDay.findUnique({ where: { day: req.params.day }, include: planningInclude });
+    if (!day) throw new PlanningError(404, 'Planejamento nao encontrado.');
+    if (!editableStatuses.has(day.status)) throw new PlanningError(409, 'O despacho finalizado nao pode ser alterado.');
+    const store = day.stores.find((item) => item.storeName === storeName);
+    if (!store) throw new PlanningError(404, 'Loja do planejamento nao encontrada.');
+    const itemIds = store.products.filter(isDispatchableItem).map((item) => item.id);
+    if (!itemIds.length) throw new PlanningError(409, 'A loja nao possui produtos para despachar.');
+
+    await prisma.productionPlanningItem.updateMany({
+      where: { id: { in: itemIds } },
+      data: complete
+        ? { dispatchStatus: 'complete', actualQuantity: null, justification: '' }
+        : { dispatchStatus: null, actualQuantity: null, justification: '' },
+    });
+    const updated = await prisma.productionPlanningDay.findUnique({ where: { id: day.id }, include: planningInclude });
+    return res.json(serializePlanningDay(updated));
+  } catch (error) {
+    return handleError(res, error, 'Nao foi possivel atualizar os produtos do despacho.');
+  }
+}
+
 async function finalizePlanning(req, res) {
   try {
     const day = await prisma.productionPlanningDay.findUnique({ where: { day: req.params.day }, include: planningInclude });
     if (!day) throw new PlanningError(404, 'Planejamento nao encontrado.');
     if (day.status === 'finalizado') return res.json(serializePlanningDay(day));
-    const items = day.stores.flatMap((store) => store.products);
+    const items = day.stores.flatMap((store) => store.products).filter(isDispatchableItem);
     if (!items.length || items.some((item) => !dispatchStatuses.has(item.dispatchStatus))) {
       throw new PlanningError(409, 'Marque todos os produtos antes de finalizar a expedicao.');
     }
@@ -624,11 +659,13 @@ module.exports = {
   createPlanning,
   finalizePlanning,
   getPlanning,
+  isDispatchableItem,
   itemFingerprint,
   listPlanning,
   normalizeStores,
   serializePlanningDay,
   updateDispatchItem,
+  updateDispatchItemsBulk,
   updatePlanning,
   updatePlanningStatus,
 };

@@ -12,10 +12,19 @@ const {
   getRequiredStockCodes,
   roundQuantity,
 } = require('../services/productionConversionService');
+const { hasAtMostFourDecimalPlaces, normalizeDecimalText } = require('../utils/decimal');
 
 const prisma = new PrismaClient();
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+const publicStockSources = new Set(['everest', 'faq', 'spreadsheet']);
+
+class ProductionStockError extends Error {
+  constructor(message) {
+    super(message);
+    this.status = 400;
+  }
+}
 
 function isValidDate(value) {
   if (!datePattern.test(String(value || ''))) return false;
@@ -50,9 +59,16 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-function toNullableNumber(value) {
-  if (value === null || value === undefined || String(value).trim() === '') return null;
-  return toNumber(value, null);
+function parseRequestDecimal(value, field, { nullable = false } = {}) {
+  if (nullable && (value === null || value === undefined || String(value).trim() === '')) return null;
+  const number = Number(normalizeDecimalText(value));
+  if (!Number.isFinite(number) || number < 0) {
+    throw new ProductionStockError(`${field} deve ser um numero maior ou igual a zero.`);
+  }
+  if (!hasAtMostFourDecimalPlaces(value)) {
+    throw new ProductionStockError(`${field} deve ter no maximo quatro casas decimais.`);
+  }
+  return number;
 }
 
 function roundDecimal(value) {
@@ -73,6 +89,187 @@ function mapStockItem(stockItem, stockDate) {
     stockStatus: stockItem?.status || 'unavailable',
     stockDate,
     stockReason: stockItem?.reason || '',
+  };
+}
+
+function getBusinessDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Fortaleza',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function normalizeStockSource(value, { allowPreserved = false } = {}) {
+  const source = String(value || 'everest').trim().toLowerCase();
+  if (allowPreserved && source === 'preserved') return source;
+  if (!publicStockSources.has(source)) {
+    throw new ProductionStockError('Selecione uma origem de estoque valida.');
+  }
+  return source;
+}
+
+function normalizeImportedStock(input) {
+  const stockDate = String(input?.stockDate || '').trim();
+  const rawStores = Array.isArray(input?.stores) ? input.stores : [];
+  if (!isValidDate(stockDate) || !rawStores.length || rawStores.length > 200) {
+    throw new ProductionStockError('Informe um arquivo de estoque valido antes de sugerir a producao.');
+  }
+
+  const seenStores = new Set();
+  const stores = rawStores.map((store) => {
+    const displayName = String(store?.displayName || '').trim();
+    const rawItems = Array.isArray(store?.items) ? store.items : [];
+    if (!displayName || seenStores.has(displayName) || rawItems.length > 10000) {
+      throw new ProductionStockError('O arquivo de estoque possui lojas invalidas ou duplicadas.');
+    }
+    seenStores.add(displayName);
+    const seenCodes = new Set();
+    const items = rawItems.map((item) => {
+      const code = String(item?.code ?? '').trim();
+      const quantity = Number(normalizeDecimalText(item?.quantity));
+      if (!code || seenCodes.has(code) || !Number.isFinite(quantity) || quantity < 0) {
+        throw new ProductionStockError('O arquivo de estoque possui produtos duplicados ou quantidades invalidas.');
+      }
+      if (!hasAtMostFourDecimalPlaces(item?.quantity)) {
+        throw new ProductionStockError('As quantidades do estoque importado devem ter no maximo quatro casas decimais.');
+      }
+      seenCodes.add(code);
+      return { code, quantity, status: 'available', reason: '' };
+    });
+    return { displayName, items };
+  });
+
+  return { stockDate, stores };
+}
+
+function buildImportedStockSnapshot({ importedStock, stores, productCodes, warnIgnoredStores = true }) {
+  const normalized = normalizeImportedStock(importedStock);
+  const importedByStore = new Map(normalized.stores.map((store) => [store.displayName, store]));
+  const selectedNames = new Set(stores.map((store) => store.displayName));
+  const warnings = [];
+  const today = getBusinessDate();
+  if (normalized.stockDate !== today) {
+    warnings.push(`O estoque importado usa a data-base ${normalized.stockDate}, diferente de hoje (${today}).`);
+  }
+
+  const ignoredStores = normalized.stores.filter((store) => !selectedNames.has(store.displayName));
+  if (warnIgnoredStores && ignoredStores.length) {
+    warnings.push(`${ignoredStores.length} loja(s) do arquivo nao fazem parte deste planejamento.`);
+  }
+
+  const items = Object.fromEntries(stores.map((store) => {
+    const importedStore = importedByStore.get(store.displayName);
+    const importedItems = new Map((importedStore?.items || []).map((item) => [item.code, item]));
+    if (!importedStore) warnings.push(`${store.displayName}: loja ausente no arquivo; estoque zero aplicado.`);
+    let missingProducts = 0;
+    const storeItems = Object.fromEntries(productCodes.map((code) => {
+      const item = importedItems.get(code);
+      if (item) return [code, item];
+      missingProducts += 1;
+      return [code, { quantity: 0, status: 'not_found', reason: 'Produto nao encontrado no arquivo de estoque.' }];
+    }));
+    if (importedStore && missingProducts) {
+      warnings.push(`${store.displayName}: ${missingProducts} produto(s) ausente(s) no arquivo receberam estoque zero.`);
+    }
+    return [store.displayName, storeItems];
+  }));
+
+  return {
+    stockDate: normalized.stockDate,
+    stockDates: Object.fromEntries(stores.map((store) => [store.displayName, normalized.stockDate])),
+    status: warnings.length ? 'partial' : 'available',
+    warnings,
+    items,
+  };
+}
+
+async function getFaqStockSnapshot({ stores, productCodes }) {
+  const counts = await prisma.stockCount.findMany({
+    where: {
+      productionStoreId: { in: stores.map((store) => store.id) },
+      status: 'finalized',
+    },
+    include: {
+      items: { select: { code: true, quantity: true } },
+    },
+    orderBy: [{ stockDate: 'desc' }, { finalizedAt: 'desc' }, { id: 'desc' }],
+  });
+  const latestByStoreId = new Map();
+  counts.forEach((count) => {
+    if (!latestByStoreId.has(count.productionStoreId)) latestByStoreId.set(count.productionStoreId, count);
+  });
+
+  const warnings = [];
+  const stockDates = {};
+  const today = getBusinessDate();
+  const items = Object.fromEntries(stores.map((store) => {
+    const count = latestByStoreId.get(store.id);
+    stockDates[store.displayName] = count?.stockDate || '';
+    if (!count) {
+      warnings.push(`${store.displayName}: nenhuma contagem finalizada encontrada; estoque zero aplicado.`);
+    } else if (count.stockDate !== today) {
+      warnings.push(`${store.displayName}: ultima contagem finalizada em ${count.stockDate}.`);
+    }
+    const countItems = new Map((count?.items || []).map((item) => [String(item.code), item]));
+    let missingProducts = 0;
+    const storeItems = Object.fromEntries(productCodes.map((code) => {
+      const item = countItems.get(code);
+      if (item) return [code, { quantity: Number(item.quantity), status: 'available', reason: '' }];
+      missingProducts += 1;
+      return [code, {
+        quantity: 0,
+        status: 'not_found',
+        reason: count ? 'Produto ausente na contagem utilizada.' : 'Loja sem contagem finalizada.',
+      }];
+    }));
+    if (count && missingProducts) {
+      warnings.push(`${store.displayName}: ${missingProducts} produto(s) ausente(s) na contagem receberam estoque zero.`);
+    }
+    return [store.displayName, storeItems];
+  }));
+
+  const uniqueDates = Array.from(new Set(Object.values(stockDates).filter(Boolean)));
+  return {
+    stockDate: uniqueDates.length === 1 ? uniqueDates[0] : '',
+    stockDates,
+    status: warnings.length ? 'partial' : 'available',
+    warnings,
+    items,
+  };
+}
+
+async function resolveStockSnapshot({ stockSource, stores, productCodes, importedStock, warnIgnoredStores = true }) {
+  if (stockSource === 'preserved') {
+    return {
+      stockDate: '',
+      stockDates: {},
+      status: 'preserved',
+      warnings: [],
+      items: Object.fromEntries(stores.map((store) => [
+        store.displayName,
+        Object.fromEntries(productCodes.map((code) => [code, {
+          quantity: 0,
+          status: 'not_found',
+          reason: 'Produto sem snapshot anterior de estoque.',
+        }])),
+      ])),
+    };
+  }
+  if (stockSource === 'faq') return getFaqStockSnapshot({ stores, productCodes });
+  if (stockSource === 'spreadsheet') {
+    return buildImportedStockSnapshot({ importedStock, stores, productCodes, warnIgnoredStores });
+  }
+  const snapshot = await getEverestStockSnapshot({
+    stores: stores.map((store) => store.displayName),
+    productCodes,
+  });
+  return {
+    ...snapshot,
+    stockDates: Object.fromEntries(stores.map((store) => [store.displayName, snapshot.stockDate])),
   };
 }
 
@@ -98,7 +295,7 @@ function normalizeStores(stores) {
       const normalizedDays = days
         .map((day) => ({
           day: String(day?.day || '').trim(),
-          increasePercent: toNullableNumber(day?.increasePercent),
+          increasePercent: parseRequestDecimal(day?.increasePercent, 'O percentual de aumento', { nullable: true }),
         }))
         .filter((day) => isValidDate(day.day));
 
@@ -184,7 +381,14 @@ async function suggestProduction(req, res) {
   const comparisonStartDate = String(req.body?.comparisonStartDate || '').trim();
   const comparisonEndDate = String(req.body?.comparisonEndDate || '').trim();
   const planningDay = String(req.body?.planningDay || '').trim();
-  const stores = normalizeStores(req.body?.stores);
+  let stores;
+  let stockSource;
+  try {
+    stores = normalizeStores(req.body?.stores);
+    stockSource = normalizeStockSource(req.body?.stockSource, { allowPreserved: Boolean(planningDay && isValidDate(planningDay)) });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
 
   if (!isValidDate(comparisonStartDate) || !isValidDate(comparisonEndDate)) {
     return res.status(400).json({ error: 'Informe um periodo de comparacao valido.' });
@@ -246,7 +450,7 @@ async function suggestProduction(req, res) {
       prisma.productionProduct.findMany({
         where: { active: true },
         select: { id: true, code: true, name: true },
-        orderBy: { code: 'asc' },
+        orderBy: [{ name: 'asc' }, { code: 'asc' }],
       }),
       prisma.productionConversion.findMany({
         where: { active: true },
@@ -324,9 +528,11 @@ async function suggestProduction(req, res) {
       `,
       [comparisonStartDate, queryEndDate, sourceNames, activeProductCodes]
       ),
-      getEverestStockSnapshot({
-        stores: displayNames,
+      resolveStockSnapshot({
+        stockSource,
+        stores: activeStores,
         productCodes: activeProductCodes,
+        importedStock: req.body?.importedStock,
       }),
     ]);
 
@@ -363,7 +569,10 @@ async function suggestProduction(req, res) {
           const productRow = servedRows.find(Boolean);
           const increasePercent = day.increasePercent ?? 0;
           const stockItem = convertedStockByStore[store.displayName]?.[product.code];
-          const stockData = mapStockItem(stockItem, stockSnapshot.stockDate);
+          const stockData = mapStockItem(
+            stockItem,
+            stockSnapshot.stockDates?.[store.displayName] || stockSnapshot.stockDate || ''
+          );
           const suggestion = calculateProductionSuggestion({
             averageSold: accumulatedAverage,
             increasePercent,
@@ -377,7 +586,7 @@ async function suggestProduction(req, res) {
             averageSold: accumulatedAverage,
             servedDates,
             ...stockData,
-            stockSource: 'everest',
+            stockSource: stockSource === 'preserved' ? '' : stockSource,
             stockSources: stockItem?.sources || [],
             fixedOrderSources: [],
             increasePercent: day.increasePercent,
@@ -390,11 +599,16 @@ async function suggestProduction(req, res) {
     return res.json({
       comparisonDays,
       stockDate: stockSnapshot.stockDate,
+      stockDates: stockSnapshot.stockDates || {},
+      stockSource,
       stockLookupStatus: stockSnapshot.status,
       warnings: stockSnapshot.warnings,
       stores: suggestions,
     });
   } catch (error) {
+    if (error instanceof ProductionStockError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Falha ao sugerir producao:', error);
     return res.status(500).json({ error: 'Nao foi possivel consultar os dados de vendas.' });
   }
@@ -403,6 +617,12 @@ async function suggestProduction(req, res) {
 async function getProductionStocks(req, res) {
   const stores = normalizeStockRequestStores(req.body?.stores);
   const planningDay = String(req.body?.planningDay || '').trim();
+  let stockSource;
+  try {
+    stockSource = normalizeStockSource(req.body?.stockSource, { allowPreserved: Boolean(planningDay && isValidDate(planningDay)) });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
   if (!stores.length) {
     return res.status(400).json({ error: 'Informe pelo menos uma loja e um produto.' });
   }
@@ -456,7 +676,22 @@ async function getProductionStocks(req, res) {
 
   const conversionContext = buildConversionContext(activeProducts, activeConversions);
   const requiredStockCodes = getRequiredStockCodes(productCodes, conversionContext);
-  const stockSnapshot = await getEverestStockSnapshot({ stores: displayNames, productCodes: requiredStockCodes });
+  let stockSnapshot;
+  try {
+    stockSnapshot = await resolveStockSnapshot({
+      stockSource,
+      stores: activeStores,
+      productCodes: requiredStockCodes,
+      importedStock: req.body?.importedStock,
+      warnIgnoredStores: false,
+    });
+  } catch (error) {
+    if (error instanceof ProductionStockError) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    console.error('Falha ao consultar a origem de estoque:', error);
+    return res.status(500).json({ error: 'Nao foi possivel consultar o estoque.' });
+  }
   const responseStores = Object.fromEntries(stores.map((store) => [
     store.displayName,
     Object.fromEntries(convertStockItems(
@@ -467,14 +702,16 @@ async function getProductionStocks(req, res) {
       store.productCodes,
       conversionContext
     ).map((item) => [item.code, {
-      ...mapStockItem(item, stockSnapshot.stockDate),
-      stockSource: 'everest',
+      ...mapStockItem(item, stockSnapshot.stockDates?.[store.displayName] || stockSnapshot.stockDate || ''),
+      stockSource: stockSource === 'preserved' ? '' : stockSource,
       stockSources: item.sources,
     }])),
   ]));
 
   return res.json({
     stockDate: stockSnapshot.stockDate,
+    stockDates: stockSnapshot.stockDates || {},
+    stockSource,
     stockLookupStatus: stockSnapshot.status,
     warnings: stockSnapshot.warnings,
     stores: responseStores,
@@ -504,10 +741,13 @@ async function applyProductionConversions(req, res) {
       const key = String(group?.key || '').trim();
       const items = Array.isArray(group?.items) ? group.items : [];
       if (!key || items.length > 10000) throw new Error('INVALID_GROUP');
-      if (items.some((item) => {
+      items.forEach((item) => {
         const fields = mode === 'orders' ? ['fixedQuantity', 'orderQuantity'] : ['quantity'];
-        return fields.some((field) => item?.[field] !== null && item?.[field] !== undefined && toNumber(item[field], -1) < 0);
-      })) throw new Error('INVALID_QUANTITY');
+        fields.forEach((field) => {
+          if (item?.[field] === null || item?.[field] === undefined) return;
+          parseRequestDecimal(item[field], 'A quantidade para conversao');
+        });
+      });
 
       if (mode === 'orders') {
         return { key, items: convertOrderItems(items, context) };
@@ -519,7 +759,10 @@ async function applyProductionConversions(req, res) {
     });
     return res.json({ mode, groups: convertedGroups });
   } catch (error) {
-    if (['INVALID_GROUP', 'INVALID_QUANTITY'].includes(error.message)) {
+    if (error instanceof ProductionStockError) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    if (error.message === 'INVALID_GROUP') {
       return res.status(400).json({ error: 'Existem grupos ou quantidades invalidas para conversao.' });
     }
     console.error('Falha ao aplicar conversoes de producao:', error);
@@ -529,7 +772,12 @@ async function applyProductionConversions(req, res) {
 
 module.exports = {
   applyProductionConversions,
+  buildImportedStockSnapshot,
   calculateProductionSuggestion,
+  getBusinessDate,
+  getFaqStockSnapshot,
   getProductionStocks,
+  normalizeImportedStock,
+  normalizeStockSource,
   suggestProduction,
 };

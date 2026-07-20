@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ProductionProgressBar from "../components/ProductionProgressBar";
 import api from "../services/api";
+import { sortProductsByName } from "../utils/productSorting";
 
 let xlsxLibraryPromise;
 
@@ -109,12 +110,18 @@ function getConsolidatedProducts(productionDay) {
     });
   });
 
-  return Array.from(productMap.values());
+  return sortProductsByName(Array.from(productMap.values()));
+}
+
+function isDispatchableProduct(product) {
+  return Number(product?.suggestion || 0) > 0;
 }
 
 function getDispatchProgress(productionDay) {
   const storeProducts = Object.entries(productionDay.stores).flatMap(([storeName, storeProduction]) =>
-    storeProduction.products.map((product) => ({ storeName, productCode: product.code }))
+    storeProduction.products
+      .filter(isDispatchableProduct)
+      .map((product) => ({ storeName, productCode: product.code }))
   );
   const producedCount = storeProducts.reduce((count, item) => {
     const dispatchItem = getDispatchItem(productionDay, item.storeName, item.productCode);
@@ -162,6 +169,7 @@ function ProductionPlanning() {
   const [incompleteQuantity, setIncompleteQuantity] = useState("");
   const [incompleteJustification, setIncompleteJustification] = useState("");
   const [incompleteError, setIncompleteError] = useState("");
+  const [bulkDispatchSaving, setBulkDispatchSaving] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState("");
   const startDateInputRef = useRef(null);
@@ -174,6 +182,23 @@ function ProductionPlanning() {
     () => (viewingDay ? getConsolidatedProducts(viewingDay) : []),
     [viewingDay]
   );
+  const visibleConsolidatedProducts = showDispatchColumns
+    ? consolidatedProducts.filter(isDispatchableProduct)
+    : consolidatedProducts;
+  const visibleStoreProducts = sortProductsByName(
+    (selectedStoreProduction?.products || []).filter((product) =>
+      !showDispatchColumns || isDispatchableProduct(product)
+    )
+  );
+  const dispatchableStoreProducts = (selectedStoreProduction?.products || []).filter(isDispatchableProduct);
+  const storeDispatchItems = viewingDay && activeView !== "consolidado"
+    ? dispatchableStoreProducts.map((product) => getDispatchItem(viewingDay, activeView, product.code))
+    : [];
+  const allStoreProductsComplete = storeDispatchItems.length > 0
+    && storeDispatchItems.every((item) => item?.status === "complete");
+  const hasStoreProductMarked = storeDispatchItems.some((item) => (
+    item?.status === "complete" || item?.status === "incomplete"
+  ));
   const dispatchProgress = useMemo(
     () => (viewingDay ? getDispatchProgress(viewingDay) : { producedCount: 0, totalProducts: 0, percentage: 0 }),
     [viewingDay]
@@ -280,6 +305,23 @@ function ProductionPlanning() {
     );
   };
 
+  const handleCompleteAllChange = async (checked) => {
+    if (!viewingDay || activeView === "consolidado" || isFinalized || bulkDispatchSaving) return;
+    setBulkDispatchSaving(true);
+    setPlanningError("");
+    try {
+      const response = await api.put(`/admin/production-planning/${viewingDay.day}/dispatch/bulk`, {
+        storeName: activeView,
+        complete: checked,
+      });
+      applyUpdatedDay(response.data);
+    } catch (error) {
+      setPlanningError(error.response?.data?.error || "Não foi possível atualizar todos os produtos do despacho.");
+    } finally {
+      setBulkDispatchSaving(false);
+    }
+  };
+
   const handleIncompleteItemChange = (storeName, product, checked) => {
     if (!checked) {
       saveDispatchItem(storeName, product.code, null);
@@ -330,72 +372,88 @@ function ProductionPlanning() {
     setExportError("");
     try {
       const XLSX = await loadXlsxLibrary();
-      const storesToExport = activeView === "consolidado"
-        ? Object.entries(viewingDay.stores)
-        : [[activeView, viewingDay.stores[activeView]]];
+      const isConsolidatedExport = activeView === "consolidado";
       const includeDispatchData = isDispatchMode || isFinalized;
-      const headers = [
-        "Loja",
-        "Dia de produção",
-        "Início do período comparado",
-        "Fim do período comparado",
-        "Código",
-        "Nome",
-        "Média vendida",
-        "Quantidade em estoque",
-        "Data-base do estoque",
-        "Status do estoque",
-        "% de aumento",
-        "Fixos",
-        "Encomendas",
-        "Total adicional",
-        "Quantidade a produzir",
-        ...(includeDispatchData
-          ? ["Produzido", "Divergente", "Real produzido", "Justificativa"]
-          : []),
-      ];
-      const rows = storesToExport.flatMap(([storeName, storeProduction]) =>
-        (storeProduction?.products || []).map((product) => {
-          const dispatchItem = getDispatchItem(viewingDay, storeName, product.code);
-          const isComplete = dispatchItem?.status === "complete";
-          const isIncomplete = dispatchItem?.status === "incomplete";
-
-          return [
-            storeName,
+      const headers = isConsolidatedExport
+        ? [
+            "Dia de produção",
+            "Início do período comparado",
+            "Fim do período comparado",
+            "Código",
+            "Nome",
+            "Total a ser enviado",
+          ]
+        : [
+            "Loja",
+            "Dia de produção",
+            "Início do período comparado",
+            "Fim do período comparado",
+            "Código",
+            "Nome",
+            "Média vendida",
+            "Quantidade em estoque",
+            "Data-base do estoque",
+            "Status do estoque",
+            "% de aumento",
+            "Fixos",
+            "Encomendas",
+            "Total adicional",
+            "Quantidade a ser enviada",
+            ...(includeDispatchData
+              ? ["Produzido", "Divergente", "Real produzido", "Justificativa"]
+              : []),
+          ];
+      const rows = isConsolidatedExport
+        ? visibleConsolidatedProducts.map((product) => [
             viewingDay.day,
             viewingDay.comparisonStartDate,
             viewingDay.comparisonEndDate,
             product.code,
             product.name,
-            toSpreadsheetNumber(product.averageSold),
-            toSpreadsheetNumber(product.stockQuantity),
-            product.stockDate || "",
-            getStockStatusLabel(product.stockStatus),
-            toSpreadsheetNumber(product.increasePercent),
-            toSpreadsheetNumber(product.fixedQuantity || 0),
-            toSpreadsheetNumber(product.orderQuantity || 0),
-            toSpreadsheetNumber((Number(product.fixedQuantity) || 0) + (Number(product.orderQuantity) || 0)),
             toSpreadsheetNumber(product.suggestion),
+          ])
+        : (viewingDay.stores[activeView]?.products || []).map((product) => {
+            const dispatchItem = getDispatchItem(viewingDay, activeView, product.code);
+            const isComplete = dispatchItem?.status === "complete";
+            const isIncomplete = dispatchItem?.status === "incomplete";
+
+            return [
+              activeView,
+              viewingDay.day,
+              viewingDay.comparisonStartDate,
+              viewingDay.comparisonEndDate,
+              product.code,
+              product.name,
+              toSpreadsheetNumber(product.averageSold),
+              toSpreadsheetNumber(product.stockQuantity),
+              product.stockDate || "",
+              getStockStatusLabel(product.stockStatus),
+              toSpreadsheetNumber(product.increasePercent),
+              toSpreadsheetNumber(product.fixedQuantity || 0),
+              toSpreadsheetNumber(product.orderQuantity || 0),
+              toSpreadsheetNumber((Number(product.fixedQuantity) || 0) + (Number(product.orderQuantity) || 0)),
+              toSpreadsheetNumber(product.suggestion),
+              ...(includeDispatchData
+                ? [
+                    isComplete ? "Sim" : "Não",
+                    isIncomplete ? "Sim" : "Não",
+                    getActualProducedQuantity(product, dispatchItem),
+                    isIncomplete ? dispatchItem.justification || "" : "",
+                  ]
+                : []),
+            ];
+          });
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      worksheet["!cols"] = isConsolidatedExport
+        ? [{ wch: 18 }, { wch: 24 }, { wch: 22 }, { wch: 16 }, { wch: 38 }, { wch: 22 }]
+        : [
+            { wch: 32 }, { wch: 18 }, { wch: 24 }, { wch: 22 }, { wch: 16 },
+            { wch: 38 }, { wch: 16 }, { wch: 22 }, { wch: 20 }, { wch: 24 },
+            { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 22 },
             ...(includeDispatchData
-              ? [
-                  isComplete ? "Sim" : "Não",
-                  isIncomplete ? "Sim" : "Não",
-                  getActualProducedQuantity(product, dispatchItem),
-                  isIncomplete ? dispatchItem.justification || "" : "",
-                ]
+              ? [{ wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 48 }]
               : []),
           ];
-        })
-      );
-      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-      worksheet["!cols"] = [
-        { wch: 32 }, { wch: 18 }, { wch: 24 }, { wch: 22 }, { wch: 16 },
-        { wch: 38 }, { wch: 16 }, { wch: 22 }, { wch: 20 }, { wch: 24 },
-        { wch: 16 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 22 },
-        ...(includeDispatchData
-          ? [{ wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 48 }]
-          : []),
-      ];
       const workbook = XLSX.utils.book_new();
       const contextName = activeView === "consolidado" ? "Consolidado" : activeView;
       const sheetName = contextName.replace(/[\\/?*\[\]:]/g, " ").slice(0, 31) || "Planejamento";
@@ -640,15 +698,35 @@ function ProductionPlanning() {
                   </button>
                 ))}
               </div>
-              <button
-                type="button"
-                className="production-export-button"
-                onClick={handleExportActiveView}
-                disabled={exportLoading}
-                title={`Exportar ${activeView === "consolidado" ? "consolidado" : activeView} para Excel`}
-              >
-                {exportLoading ? "Exportando..." : "Exportar Excel"}
-              </button>
+              <div className="production-view-tabs-toolbar__actions">
+                {activeView !== "consolidado" && isDispatchMode && !isFinalized && (
+                  <label
+                    className="production-dispatch-select-all production-dispatch-select-all-toolbar"
+                    title="Marcar todos como produzidos"
+                  >
+                    <span>Selecionar todos</span>
+                    <input
+                      type="checkbox"
+                      aria-label={`Marcar todos os produtos de ${activeView} como produzidos`}
+                      checked={allStoreProductsComplete}
+                      ref={(input) => {
+                        if (input) input.indeterminate = hasStoreProductMarked && !allStoreProductsComplete;
+                      }}
+                      disabled={bulkDispatchSaving || !dispatchableStoreProducts.length}
+                      onChange={(event) => handleCompleteAllChange(event.target.checked)}
+                    />
+                  </label>
+                )}
+                <button
+                  type="button"
+                  className="production-export-button"
+                  onClick={handleExportActiveView}
+                  disabled={exportLoading}
+                  title={`Exportar ${activeView === "consolidado" ? "consolidado" : activeView} para Excel`}
+                >
+                  {exportLoading ? "Exportando..." : "Exportar Excel"}
+                </button>
+              </div>
               {exportError && <p className="production-export-error" role="alert">{exportError}</p>}
             </div>
 
@@ -659,11 +737,11 @@ function ProductionPlanning() {
                     <tr>
                       <th>Código</th>
                       <th>Nome</th>
-                      <th>Total a produzir</th>
+                      <th>Total a ser enviado</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {consolidatedProducts.map((product) => (
+                    {visibleConsolidatedProducts.map((product) => (
                       <tr key={product.code}>
                         <td>{product.code}</td>
                         <td>{product.name}</td>
@@ -673,19 +751,39 @@ function ProductionPlanning() {
                   </tbody>
                 </table>
               ) : (
+                <>
+                {isDispatchMode && !isFinalized && (
+                  <div className="production-dispatch-select-all-mobile">
+                    <label className="production-dispatch-select-all" title="Marcar todos como produzidos">
+                      <input
+                        type="checkbox"
+                        aria-label={`Marcar todos os produtos de ${activeView} como produzidos`}
+                        checked={allStoreProductsComplete}
+                        ref={(input) => {
+                          if (input) input.indeterminate = hasStoreProductMarked && !allStoreProductsComplete;
+                        }}
+                        disabled={bulkDispatchSaving || !dispatchableStoreProducts.length}
+                        onChange={(event) => handleCompleteAllChange(event.target.checked)}
+                      />
+                      <span>Marcar todos como produzidos</span>
+                    </label>
+                  </div>
+                )}
                 <table className={`production-table production-products-table ${showDispatchColumns ? "production-dispatch-store-table" : ""}`}>
                   <thead>
                     <tr>
                       <th>Código</th>
                       <th>Nome</th>
-                      <th>A produzir</th>
+                      <th>A ser enviado</th>
                       {showDispatchColumns && <th>Real produzido</th>}
-                      {showDispatchColumns && <th>Produzido</th>}
+                      {showDispatchColumns && (
+                        <th>Produzido</th>
+                      )}
                       {showDispatchColumns && <th>Divergente</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedStoreProduction?.products.map((product) => {
+                    {visibleStoreProducts.map((product) => {
                       const dispatchItem = getDispatchItem(viewingDay, activeView, product.code);
                       const isComplete = dispatchItem?.status === "complete";
                       const isIncomplete = dispatchItem?.status === "incomplete";
@@ -695,7 +793,7 @@ function ProductionPlanning() {
                         <tr key={product.code}>
                           <td data-label="Código">{product.code}</td>
                           <td data-label="Nome">{product.name}</td>
-                          <td data-label="A produzir">{product.suggestion}</td>
+                          <td data-label="A ser enviado">{product.suggestion}</td>
                           {showDispatchColumns && (
                             <td data-label="Real produzido">{actualProducedQuantity ?? ""}</td>
                           )}
@@ -706,7 +804,7 @@ function ProductionPlanning() {
                                   type="checkbox"
                                   aria-label={`Marcar ${product.name} como produzido`}
                                   checked={isComplete}
-                                  disabled={!isDispatchMode || isFinalized}
+                                  disabled={!isDispatchMode || isFinalized || bulkDispatchSaving}
                                   onChange={(event) => handleCompleteItemChange(activeView, product.code, event.target.checked)}
                                 />
                               </label>
@@ -720,7 +818,7 @@ function ProductionPlanning() {
                                     type="checkbox"
                                     aria-label={`Marcar ${product.name} como divergente`}
                                     checked={isIncomplete}
-                                    disabled={!isDispatchMode || isFinalized}
+                                    disabled={!isDispatchMode || isFinalized || bulkDispatchSaving}
                                     onChange={(event) => handleIncompleteItemChange(activeView, product, event.target.checked)}
                                   />
                                 </label>
@@ -740,8 +838,16 @@ function ProductionPlanning() {
                         </tr>
                       );
                     })}
+                    {!visibleStoreProducts.length && (
+                      <tr>
+                        <td colSpan={showDispatchColumns ? 6 : 3} className="production-dispatch-empty">
+                          Nenhum produto com quantidade a ser enviada.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
+                </>
               )}
             </div>
           </div>

@@ -8,7 +8,10 @@ const {
   convertStockItems,
   getRequiredStockCodes,
 } = require('../services/productionConversionService');
-const { validateConversionConfiguration } = require('../controllers/productionConversionController');
+const {
+  normalizeConversions,
+  validateConversionConfiguration,
+} = require('../controllers/productionConversionController');
 
 function context() {
   const products = [
@@ -93,4 +96,11 @@ test('conversion configuration rejects self conversion, chains and inconsistent 
     { sourceProductId: 1, conversionCode: 'C', conversionName: 'Destino C' },
     { sourceProductId: 2, conversionCode: 'C', conversionName: 'Destino C' },
   ], products), '');
+});
+
+test('conversion factors accept four decimal places and reject a fifth place', () => {
+  const base = { sourceProductId: 1, conversionCode: 'B', conversionName: 'Destino' };
+  assert.equal(normalizeConversions([{ ...base, conversionFactor: '1,2345' }])[0].conversionFactor, 1.2345);
+  assert.deepEqual(normalizeConversions([{ ...base, conversionFactor: '1.23456' }]), []);
+  assert.deepEqual(normalizeConversions([{ ...base, conversionFactor: '1.23000' }]), []);
 });

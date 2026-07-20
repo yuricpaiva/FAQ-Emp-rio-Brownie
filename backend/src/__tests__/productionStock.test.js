@@ -1,12 +1,21 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { PrismaClient } = require('@prisma/client');
 
 const {
   buildStockSnapshotFromRows,
   getEverestStockDate,
   getEverestStockSnapshot,
 } = require('../services/everestDatabase');
-const { calculateProductionSuggestion } = require('../controllers/productionPlanningController');
+const {
+  buildImportedStockSnapshot,
+  calculateProductionSuggestion,
+  getFaqStockSnapshot,
+  normalizeImportedStock,
+  normalizeStockSource,
+} = require('../controllers/productionPlanningController');
+
+const prisma = new PrismaClient();
 
 test('Everest stock rows preserve valid balances and classify missing, duplicate and negative values', () => {
   const originalWarn = console.warn;
@@ -89,4 +98,90 @@ test('disabled Everest integration returns unavailable balances without opening 
     if (originalEnabled === undefined) delete process.env.EVEREST_DB_ENABLED;
     else process.env.EVEREST_DB_ENABLED = originalEnabled;
   }
+});
+
+test('imported stock validates the source and fills missing stores and products with zero', () => {
+  assert.equal(normalizeStockSource(undefined), 'everest');
+  assert.equal(normalizeStockSource('faq'), 'faq');
+  assert.throws(() => normalizeStockSource('unknown'), /origem de estoque valida/);
+  assert.throws(() => normalizeImportedStock({ stockDate: 'invalid', stores: [] }), /arquivo de estoque valido/);
+  assert.throws(() => normalizeImportedStock({
+    stockDate: '2026-07-19',
+    stores: [{ displayName: 'Loja A', items: [{ code: '100', quantity: '1,23456' }] }],
+  }), /quatro casas/);
+  assert.throws(() => normalizeImportedStock({
+    stockDate: '2026-07-19',
+    stores: [{ displayName: 'Loja A', items: [{ code: '100', quantity: '1.23000' }] }],
+  }), /quatro casas/);
+
+  const snapshot = buildImportedStockSnapshot({
+    importedStock: {
+      stockDate: '2026-07-19',
+      stores: [
+        { displayName: 'Loja A', items: [{ code: '100', quantity: 2.5 }] },
+        { displayName: 'Loja ignorada', items: [{ code: '100', quantity: 8 }] },
+      ],
+    },
+    stores: [{ id: 1, displayName: 'Loja A' }, { id: 2, displayName: 'Loja B' }],
+    productCodes: ['100', '200'],
+  });
+
+  assert.deepEqual(snapshot.items['Loja A']['100'], { code: '100', quantity: 2.5, status: 'available', reason: '' });
+  assert.equal(snapshot.items['Loja A']['200'].quantity, 0);
+  assert.equal(snapshot.items['Loja A']['200'].status, 'not_found');
+  assert.equal(snapshot.items['Loja B']['100'].quantity, 0);
+  assert.match(snapshot.warnings.join(' '), /Loja B/);
+  assert.match(snapshot.warnings.join(' '), /nao fazem parte/);
+});
+
+test('FAQ stock uses the latest finalized count and ignores a newer draft', async (t) => {
+  const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const store = await prisma.productionStore.create({
+    data: { sourceCode: `FAQ-STOCK-${suffix}`, sourceName: `FAQ Stock ${suffix}`, displayName: `Loja FAQ ${suffix}` },
+  });
+  const product = await prisma.productionProduct.create({
+    data: { code: `FAQ-${suffix}`, name: `Produto FAQ ${suffix}` },
+  });
+  const user = await prisma.user.create({
+    data: { name: 'Contador FAQ', email: `faq-stock-${suffix}@test.local`, passwordHash: 'test', role: 'store', productionStoreId: store.id },
+  });
+  const finalized = await prisma.stockCount.create({
+    data: {
+      productionStoreId: store.id,
+      storeName: store.displayName,
+      stockDate: '2026-07-18',
+      status: 'finalized',
+      finalizedAt: new Date('2026-07-18T15:00:00.000Z'),
+      createdById: user.id,
+      createdByName: user.name,
+      items: { create: [{ productionProductId: product.id, code: product.code, name: product.name, quantity: 3.25 }] },
+    },
+  });
+  const draft = await prisma.stockCount.create({
+    data: {
+      productionStoreId: store.id,
+      storeName: store.displayName,
+      stockDate: '2026-07-19',
+      status: 'draft',
+      createdById: user.id,
+      createdByName: user.name,
+      items: { create: [{ productionProductId: product.id, code: product.code, name: product.name, quantity: 9 }] },
+    },
+  });
+
+  t.after(async () => {
+    await prisma.stockCount.deleteMany({ where: { id: { in: [finalized.id, draft.id] } } });
+    await prisma.user.delete({ where: { id: user.id } });
+    await prisma.productionProduct.delete({ where: { id: product.id } });
+    await prisma.productionStore.delete({ where: { id: store.id } });
+  });
+
+  const snapshot = await getFaqStockSnapshot({
+    stores: [{ id: store.id, displayName: store.displayName }],
+    productCodes: [product.code, `MISSING-${suffix}`],
+  });
+  assert.equal(snapshot.stockDates[store.displayName], '2026-07-18');
+  assert.equal(snapshot.items[store.displayName][product.code].quantity, 3.25);
+  assert.equal(snapshot.items[store.displayName][`MISSING-${suffix}`].quantity, 0);
+  assert.equal(snapshot.items[store.displayName][`MISSING-${suffix}`].status, 'not_found');
 });

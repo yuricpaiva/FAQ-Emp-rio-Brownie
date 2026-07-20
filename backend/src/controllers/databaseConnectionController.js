@@ -58,7 +58,7 @@ async function downloadEverestDiagnostic(req, res) {
       prisma.productionProduct.findMany({
         where: { active: true },
         select: { code: true, name: true },
-        orderBy: { code: 'asc' },
+        orderBy: [{ name: 'asc' }, { code: 'asc' }],
       }),
       getEverestDiagnosticSnapshot(),
     ]);

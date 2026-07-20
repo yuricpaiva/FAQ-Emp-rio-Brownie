@@ -1,6 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
+import { normalizeDecimalInput } from "../utils/decimalInput";
+import { compareProductsByName, sortProductsByName } from "../utils/productSorting";
+
+function sortConversionsByProductName(conversions, products) {
+  const productById = new Map(products.map((product) => [String(product.id), product]));
+  return [...conversions].sort((left, right) => compareProductsByName(
+    productById.get(String(left.sourceProductId)),
+    productById.get(String(right.sourceProductId))
+  ));
+}
 
 const settingsTabs = [
   {
@@ -248,10 +258,6 @@ function createConversionId() {
   return `conversion-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function normalizeDecimalInput(value) {
-  return value.replace(",", ".").replace(/[^\d.]/g, "");
-}
-
 function toDecimalNumber(value) {
   const number = Number(String(value || "").replace(",", "."));
   return Number.isFinite(number) ? number : NaN;
@@ -282,11 +288,11 @@ function ProductsSettings() {
     api.get("/admin/production-products")
       .then((response) => {
         if (!active) return;
-        setProducts(response.data.map((product) => ({
+        setProducts(sortProductsByName(response.data.map((product) => ({
           id: product.id || createProductId(),
           code: product.code,
           name: product.name,
-        })));
+        }))));
       })
       .catch(() => {
         if (active) {
@@ -340,7 +346,7 @@ function ProductsSettings() {
         });
       });
 
-      return Array.from(productsByCode.values());
+      return sortProductsByName(Array.from(productsByCode.values()));
     });
   };
 
@@ -392,11 +398,11 @@ function ProductsSettings() {
 
     try {
       const response = await api.put("/admin/production-products", { products: productsToSave });
-      setProducts(response.data.map((product) => ({
+      setProducts(sortProductsByName(response.data.map((product) => ({
         id: product.id || createProductId(),
         code: product.code,
         name: product.name,
-      })));
+      }))));
       setMessage("Produtos salvos com sucesso.");
     } catch (error) {
       setMessage(error.response?.data?.error || "Não foi possível salvar os produtos.");
@@ -779,14 +785,16 @@ function ConversionsSettings() {
     ])
       .then(([productsResponse, conversionsResponse]) => {
         if (!active) return;
-        setProducts(productsResponse.data);
-        setConversions(conversionsResponse.data.map((conversion) => ({
+        const sortedProducts = sortProductsByName(productsResponse.data);
+        const normalizedConversions = conversionsResponse.data.map((conversion) => ({
           id: conversion.id || createConversionId(),
           sourceProductId: String(conversion.sourceProductId),
           conversionCode: conversion.conversionCode,
           conversionName: conversion.conversionName,
           conversionFactor: String(conversion.conversionFactor),
-        })));
+        }));
+        setProducts(sortedProducts);
+        setConversions(sortConversionsByProductName(normalizedConversions, sortedProducts));
       })
       .catch(() => {
         if (active) {
@@ -819,6 +827,7 @@ function ConversionsSettings() {
 
   const updateConversion = (id, field, value) => {
     const nextValue = field === "conversionFactor" ? normalizeDecimalInput(value) : value;
+    if (nextValue === null) return;
     setConversions((currentConversions) => currentConversions.map((conversion) =>
       conversion.id === id ? { ...conversion, [field]: nextValue } : conversion
     ));
@@ -856,7 +865,7 @@ function ConversionsSettings() {
         });
       });
 
-      return Array.from(conversionsBySource.values());
+      return sortConversionsByProductName(Array.from(conversionsBySource.values()), products);
     });
 
     setMessage(`Importacao concluida com sucesso: ${importedConversions.length} conversao(oes). Clique em Salvar para confirmar.`);
@@ -921,13 +930,13 @@ function ConversionsSettings() {
 
     try {
       const response = await api.put("/admin/production-conversions", { conversions: conversionsToSave });
-      setConversions(response.data.map((conversion) => ({
+      setConversions(sortConversionsByProductName(response.data.map((conversion) => ({
         id: conversion.id || createConversionId(),
         sourceProductId: String(conversion.sourceProductId),
         conversionCode: conversion.conversionCode,
         conversionName: conversion.conversionName,
         conversionFactor: String(conversion.conversionFactor),
-      })));
+      })), products));
       setMessage("Conversões salvas com sucesso.");
     } catch (error) {
       setMessage(error.response?.data?.error || "Não foi possível salvar as conversões.");

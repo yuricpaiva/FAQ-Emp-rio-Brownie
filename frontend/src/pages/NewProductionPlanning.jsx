@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
+import { normalizeDecimalInput } from "../utils/decimalInput";
+import { compareProductsByName, sortProductsByName } from "../utils/productSorting";
 
 const today = new Date().toISOString().slice(0, 10);
 const calendarWeekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -9,6 +11,11 @@ const initialDefaultIncreasePercent = "";
 const consolidatedTab = "consolidado";
 const fixedNature = "VENDA NACIONAL";
 const orderNature = "ENCOMENDA - CUPOM FISCAL";
+const stockSourceLabels = {
+  everest: "Estoque Everest",
+  faq: "Último estoque do FAQ",
+  spreadsheet: "Estoque importado",
+};
 
 let xlsxLibraryPromise;
 
@@ -181,6 +188,15 @@ function parseStockQuantity(value) {
   return Number(normalizedValue);
 }
 
+function hasValidStockQuantityPrecision(value) {
+  if (typeof value === "number") return roundQuantity(value) === value;
+  const text = String(value ?? "").trim();
+  const normalizedValue = text.includes(",")
+    ? text.replace(/\./g, "").replace(",", ".")
+    : text;
+  return /^\d+(?:\.\d{1,4})?$/.test(normalizedValue);
+}
+
 async function parseStockWorkbook(buffer) {
   const XLSX = await loadXlsxLibrary();
   const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
@@ -227,8 +243,8 @@ async function parseStockWorkbook(buffer) {
       errors.push(`Linha ${rowNumber}: informe Fantasia e Data Base.`);
       return;
     }
-    if (!Number.isFinite(quantity) || quantity < 0) {
-      errors.push(`Linha ${rowNumber}: Q. Saldo deve ser um número maior ou igual a zero.`);
+    if (!Number.isFinite(quantity) || quantity < 0 || !hasValidStockQuantityPrecision(columns[indexes.quantity])) {
+      errors.push(`Linha ${rowNumber}: Q. Saldo deve ser maior ou igual a zero e ter até 4 casas decimais.`);
       return;
     }
     if (productsByCode.has(code)) {
@@ -298,8 +314,8 @@ function parseStockText(content, stockDate) {
     }
 
     const quantity = parseStockQuantity(quantityText);
-    if (!Number.isFinite(quantity) || quantity < 0) {
-      errors.push(`Linha ${lineNumber}: Q. Saldo deve ser um número maior ou igual a zero.`);
+    if (!Number.isFinite(quantity) || quantity < 0 || !hasValidStockQuantityPrecision(quantityText)) {
+      errors.push(`Linha ${lineNumber}: Q. Saldo deve ser maior ou igual a zero e ter até 4 casas decimais.`);
       return;
     }
 
@@ -536,12 +552,6 @@ function MultiStoreSelect({ stores, selectedStores, onToggleStore }) {
   );
 }
 
-function sanitizeDecimal(value) {
-  const cleanValue = value.replace("%", "").replace(",", ".").replace(/[^\d.]/g, "");
-  const [integerPart, ...decimalParts] = cleanValue.split(".");
-  return decimalParts.length ? `${integerPart}.${decimalParts.join("")}` : integerPart;
-}
-
 function displayPercent(value, focused) {
   if (value === "" || value === null || value === undefined) return "";
   return focused ? String(value) : `${value}%`;
@@ -611,7 +621,7 @@ function ServedDates({ dates }) {
 }
 
 function normalizeProducts(products) {
-  return products.map((product) => ({
+  return sortProductsByName(products.map((product) => ({
     ...product,
     suggestion: String(product.suggestion),
     fixedQuantity: roundQuantity(toNumber(product.fixedQuantity)),
@@ -623,7 +633,7 @@ function normalizeProducts(products) {
     increasePercent: product.increasePercent === null || product.increasePercent === undefined
       ? ""
       : String(product.increasePercent),
-  }));
+  })));
 }
 
 function normalizeDayProducts(products) {
@@ -638,13 +648,14 @@ function normalizeDayProducts(products) {
 
 function mergeRecalculatedProducts(recalculatedProducts, existingProducts, convertedOrders = [], convertedStocks = []) {
   const existingByCode = new Map((existingProducts || []).map((product) => [String(product.code), product]));
+  const fallbackStockProduct = (existingProducts || []).find((product) => product.stockSource);
   const ordersByCode = new Map(convertedOrders.map((item) => [String(item.code), item]));
   const stocksByCode = new Map(convertedStocks.map((item) => [String(item.code), item]));
   const mergedProducts = normalizeProducts(recalculatedProducts).map((recalculatedProduct) => {
     const existingProduct = existingByCode.get(String(recalculatedProduct.code));
     const convertedOrder = ordersByCode.get(String(recalculatedProduct.code));
     const convertedStock = stocksByCode.get(String(recalculatedProduct.code));
-    const preserveImportedStock = existingProduct?.stockSource === "spreadsheet";
+    const preserveExistingStock = Boolean(existingProduct?.stockSource);
     const hasTrackedOrderSources = Boolean(existingProduct?.fixedOrderSources?.length);
     const nextProduct = {
       ...recalculatedProduct,
@@ -656,11 +667,11 @@ function mergeRecalculatedProducts(recalculatedProducts, existingProducts, conve
       ...(convertedStock ? {
         stockQuantity: convertedStock.quantity,
         stockStatus: convertedStock.status,
-        stockDate: existingProduct?.stockDate || "",
+        stockDate: existingProduct?.stockDate || fallbackStockProduct?.stockDate || "",
         stockReason: convertedStock.reason || "",
-        stockSource: "spreadsheet",
+        stockSource: existingProduct?.stockSource || fallbackStockProduct?.stockSource || "",
         stockSources: convertedStock.sources || [],
-      } : preserveImportedStock ? {
+      } : preserveExistingStock ? {
         stockQuantity: existingProduct.stockQuantity,
         stockStatus: existingProduct.stockStatus,
         stockDate: existingProduct.stockDate,
@@ -686,11 +697,9 @@ function mergeRecalculatedProducts(recalculatedProducts, existingProducts, conve
     !recalculatedCodes.has(String(product.code)) &&
     !(product.fixedOrderSources || []).length &&
     !(product.stockSources || []).length &&
-    (toNumber(product.fixedQuantity) > 0 || toNumber(product.orderQuantity) > 0 || product.stockSource === "spreadsheet")
+    (toNumber(product.fixedQuantity) > 0 || toNumber(product.orderQuantity) > 0 || Boolean(product.stockSource))
   );
-  return [...mergedProducts, ...legacyProducts].sort((left, right) =>
-    String(left.code).localeCompare(String(right.code), "pt-BR", { numeric: true })
-  );
+  return [...mergedProducts, ...legacyProducts].sort(compareProductsByName);
 }
 
 function getConsolidatedStoreProducts(productsByDay) {
@@ -734,7 +743,7 @@ function getConsolidatedStoreProducts(productsByDay) {
     });
   });
 
-  return Array.from(productMap.values()).map((product) => ({
+  return sortProductsByName(Array.from(productMap.values()).map((product) => ({
     code: product.code,
     name: product.name,
     averageSold: product.averageSold,
@@ -749,7 +758,7 @@ function getConsolidatedStoreProducts(productsByDay) {
     increasePercent: product.increasePercentOccurrences
       ? Number((product.increasePercentTotal / product.increasePercentOccurrences).toFixed(2))
       : null,
-  }));
+  })));
 }
 
 function NewProductionPlanning() {
@@ -781,6 +790,8 @@ function NewProductionPlanning() {
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [productsMessage, setProductsMessage] = useState("");
+  const [stockSource, setStockSource] = useState("everest");
+  const [importedStock, setImportedStock] = useState(null);
   const [stockWarnings, setStockWarnings] = useState([]);
   const [importMessage, setImportMessage] = useState("");
   const [importLoading, setImportLoading] = useState(false);
@@ -1003,6 +1014,21 @@ function NewProductionPlanning() {
     );
   };
 
+  const handleStockSourceChange = (nextSource) => {
+    if (nextSource === stockSource) return;
+    setStockSource(nextSource);
+    setImportedStock(null);
+    setImportMessage("");
+    setStockImportWarning("");
+    setStockWarnings([]);
+    setProductsMessage("");
+    if (hasSuggested) {
+      setProductsByStoreAndDay({});
+      setHasSuggested(false);
+      setIsHeaderCollapsed(false);
+    }
+  };
+
   const handleToggleStore = (storeName) => {
     const isAddingStore = !selectedStores.includes(storeName);
     setSelectedStores((currentStores) => {
@@ -1021,11 +1047,16 @@ function NewProductionPlanning() {
     if (hasSuggested && isAddingStore) {
       setProductsMessage("Clique em Sugerir produção novamente para carregar a loja adicionada.");
     }
-    if (isEditing) setCalculationDirty(true);
+    if (hasSuggested) setCalculationDirty(true);
+    if (!isEditing && stockSource === "spreadsheet") {
+      setImportedStock(null);
+      setImportMessage("");
+      setStockImportWarning("As lojas foram alteradas. Importe novamente o arquivo de estoque.");
+    }
   };
 
   const handleSuggestProduction = async () => {
-    if (!validatePlanningFilters()) return;
+    if (!validatePlanningFilters() || (!isEditing && stockSource === "spreadsheet" && !importedStock)) return;
 
     const nextDefaultIncreaseByStoreAndDay = Object.fromEntries(
       selectedStores.map((storeName) => [
@@ -1051,6 +1082,8 @@ function NewProductionPlanning() {
         comparisonStartDate,
         comparisonEndDate,
         ...(isEditing ? { planningDay: editingDayParam } : {}),
+        stockSource: isEditing ? "preserved" : stockSource,
+        ...(!isEditing && stockSource === "spreadsheet" ? { importedStock } : {}),
         stores: selectedStores.map((storeName) => ({
           displayName: storeName,
           days: getProductionDaysForStore(storeName).map((day) => ({
@@ -1069,8 +1102,7 @@ function NewProductionPlanning() {
             const existingProducts = productsByStoreAndDay[storeName]?.[day] || [];
             const orderSources = existingProducts.flatMap((product) => product.fixedOrderSources || []);
             if (orderSources.length) orderGroups.push({ key: `${storeName}::${day}`, items: orderSources });
-            const spreadsheetProducts = existingProducts.filter((product) => product.stockSource === "spreadsheet");
-            const stockSources = spreadsheetProducts.flatMap((product) => product.stockSources || []);
+            const stockSources = existingProducts.flatMap((product) => product.stockSources || []);
             if (stockSources.length) {
               const sourceByCode = new Map(stockSources.map((source) => [String(source.code), source]));
               stockGroups.push({
@@ -1129,7 +1161,8 @@ function NewProductionPlanning() {
 
   const updateProduct = (code, field, value) => {
     if (isConsolidatedActive) return;
-    const nextValue = sanitizeDecimal(value);
+    const nextValue = normalizeDecimalInput(value, { allowPercent: field === "increasePercent" });
+    if (nextValue === null) return;
     setProductsByStoreAndDay((currentProductsByStoreAndDay) => ({
       ...currentProductsByStoreAndDay,
       [activeStore]: {
@@ -1160,7 +1193,8 @@ function NewProductionPlanning() {
 
   const handleDefaultIncreaseChange = (event) => {
     if (isConsolidatedActive) return;
-    const nextValue = sanitizeDecimal(event.target.value);
+    const nextValue = normalizeDecimalInput(event.target.value, { allowPercent: true });
+    if (nextValue === null) return;
     setDefaultIncreaseByStoreAndDay((currentValues) => ({
       ...currentValues,
       [activeStore]: {
@@ -1226,6 +1260,9 @@ function NewProductionPlanning() {
       const catalogByCode = new Map(
         (catalogResponse.data || []).map((product) => [String(product.code).trim(), product])
       );
+      const existingProductsByCode = new Map(
+        (productsByStoreAndDay[importStore]?.[importDay] || []).map((product) => [String(product.code), product])
+      );
 
       setImportPreview({
         storeName: importStore,
@@ -1233,11 +1270,23 @@ function NewProductionPlanning() {
         fileName: file.name,
         validLineCount: parsed.validLineCount,
         ignoredCount: parsed.ignoredCount,
-        products: convertedProducts.map((product) => ({
+        products: sortProductsByName(convertedProducts.map((product) => ({
           ...product,
           spreadsheetName: product.name,
           registeredProduct: catalogByCode.get(product.code) || null,
-        })),
+          currentFixedQuantity: roundQuantity(toNumber(existingProductsByCode.get(String(product.code))?.fixedQuantity)),
+          currentOrderQuantity: roundQuantity(toNumber(existingProductsByCode.get(String(product.code))?.orderQuantity)),
+          currentAdditionalQuantity: roundQuantity(
+            toNumber(existingProductsByCode.get(String(product.code))?.fixedQuantity) +
+            toNumber(existingProductsByCode.get(String(product.code))?.orderQuantity)
+          ),
+          nextAdditionalQuantity: roundQuantity(
+            toNumber(existingProductsByCode.get(String(product.code))?.fixedQuantity) +
+            toNumber(existingProductsByCode.get(String(product.code))?.orderQuantity) +
+            toNumber(product.fixedQuantity) +
+            toNumber(product.orderQuantity)
+          ),
+        }))),
       });
     } catch (error) {
       setProductsMessage(error.response?.data?.error || error.message || "Nao foi possivel importar a planilha.");
@@ -1249,28 +1298,28 @@ function NewProductionPlanning() {
   const handleStockFileChange = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || isConsolidatedActive || !activeStore || !activeDay) return;
+    if (!file || isEditing || stockSource !== "spreadsheet") return;
 
     setStockImportLoading(true);
+    setImportedStock(null);
     setImportMessage("");
     setStockImportWarning("");
     setProductsMessage("");
+    if (hasSuggested) {
+      setProductsByStoreAndDay({});
+      setHasSuggested(false);
+      setIsHeaderCollapsed(false);
+    }
 
     try {
       const isTextFile = /\.txt$/i.test(file.name) || file.type.startsWith("text/");
       const currentDate = toInputDate(new Date());
-      const [fileContent, catalogResponse] = await Promise.all([
-        isTextFile ? file.text() : file.arrayBuffer(),
-        api.get("/admin/production-products/planning"),
-      ]);
+      const fileContent = isTextFile ? await file.text() : await file.arrayBuffer();
       const parsed = isTextFile
         ? parseStockText(fileContent, currentDate)
         : await parseStockWorkbook(fileContent);
 
-      const activeProductCodes = new Set(
-        (catalogResponse.data || []).map((product) => normalizeItemCode(product.code))
-      );
-      const planningStoreNames = Object.keys(productsByStoreAndDay);
+      const planningStoreNames = selectedStores;
       const importedStoreByPlanningName = new Map(planningStoreNames.map((storeName) => [
         storeName,
         findImportedStockStore(parsed.storesByName, storeName),
@@ -1282,85 +1331,23 @@ function NewProductionPlanning() {
       const missingPlanningStoreCount = planningStoreNames.length - matchedStoreCount;
       const ignoredFileStores = Array.from(parsed.storesByName.keys())
         .filter((storeKey) => !matchedFileStoreKeys.has(storeKey));
-      let appliedStockCount = 0;
-      let ignoredProductCount = 0;
-      parsed.storesByName.forEach((store, storeKey) => {
-        store.productsByCode.forEach((quantity, code) => {
-          if (!matchedFileStoreKeys.has(storeKey) || !activeProductCodes.has(code)) {
-            ignoredProductCount += 1;
-          } else {
-            appliedStockCount += 1;
-          }
+      const normalizedStores = [];
+      planningStoreNames.forEach((storeName) => {
+        const matchedStore = importedStoreByPlanningName.get(storeName)?.store;
+        if (!matchedStore) return;
+        normalizedStores.push({
+          displayName: storeName,
+          items: Array.from(matchedStore.productsByCode.entries()).map(([code, quantity]) => ({ code, quantity })),
         });
       });
-
-      const stockConversionResponse = await api.post("/admin/production-planning/conversions/apply", {
-        mode: "stock",
-        groups: planningStoreNames.map((storeName) => {
-          const importedStore = importedStoreByPlanningName.get(storeName)?.store;
-          const importedProducts = importedStore?.productsByCode || new Map();
-          const outputCodes = Array.from(new Set(
-            Object.values(productsByStoreAndDay[storeName] || {}).flatMap((products) =>
-              products.map((product) => normalizeItemCode(product.code))
-            )
-          ));
-          return {
-            key: storeName,
-            outputCodes,
-            items: Array.from(importedProducts.entries())
-              .filter(([code]) => activeProductCodes.has(code))
-              .map(([code, quantity]) => ({ code, quantity, status: "available", reason: "" })),
-          };
-        }),
+      ignoredFileStores.forEach((storeKey) => {
+        const store = parsed.storesByName.get(storeKey);
+        normalizedStores.push({
+          displayName: store.storeName,
+          items: Array.from(store.productsByCode.entries()).map(([code, quantity]) => ({ code, quantity })),
+        });
       });
-      const convertedStockByStore = new Map(
-        (stockConversionResponse.data?.groups || []).map((group) => [
-          group.key,
-          new Map((group.items || []).map((item) => [String(item.code), item])),
-        ])
-      );
-
-      setProductsByStoreAndDay((currentProductsByStoreAndDay) => {
-        return Object.fromEntries(Object.entries(currentProductsByStoreAndDay).map(([storeName, storeDays]) => {
-          const convertedProducts = convertedStockByStore.get(storeName) || new Map();
-          const updatedStoreDays = Object.fromEntries(Object.entries(storeDays).map(([day, products]) => [
-            day,
-            products.map((product) => {
-              const code = normalizeItemCode(product.code);
-              if (!activeProductCodes.has(code)) return product;
-
-              const convertedStock = convertedProducts.get(code) || {
-                quantity: 0,
-                status: "not_found",
-                reason: "Produto não encontrado no arquivo de estoque importado.",
-                sources: [],
-              };
-              const stockQuantity = convertedStock.quantity;
-              const stockStatus = convertedStock.status;
-              const stockReason = convertedStock.reason || "";
-
-              return {
-                ...product,
-                stockQuantity,
-                stockStatus,
-                stockDate: parsed.stockDate,
-                stockReason,
-                stockSource: "spreadsheet",
-                stockSources: convertedStock.sources || [],
-                suggestion: calculateSuggestion(
-                  product.averageSold,
-                  product.increasePercent,
-                  product.fixedQuantity,
-                  product.orderQuantity,
-                  stockQuantity,
-                  stockStatus
-                ),
-              };
-            }),
-          ]));
-          return [storeName, updatedStoreDays];
-        }));
-      });
+      setImportedStock({ stockDate: parsed.stockDate, stores: normalizedStores, fileName: file.name });
 
       const warnings = [];
       if (parsed.stockDate !== currentDate) {
@@ -1376,14 +1363,10 @@ function NewProductionPlanning() {
         warnings.push(`${missingPlanningStoreCount} loja(s) do planejamento não foram encontradas no arquivo e receberam estoque zero.`);
       }
       setStockImportWarning(warnings.join(" "));
-      const ignoredNotice = ignoredProductCount
-        ? ` ${ignoredProductCount} item(ns) não cadastrados ou de lojas não selecionadas foram ignorados.`
-        : "";
-      setImportMessage(
-        `${appliedStockCount} saldo(s) aplicados em ${planningStoreNames.length} loja(s) do planejamento.` +
-        ignoredNotice
-      );
+      const itemCount = normalizedStores.reduce((total, store) => total + store.items.length, 0);
+      setImportMessage(`${file.name}: ${itemCount} saldo(s) lidos. Clique em Sugerir produção para aplicar o estoque.`);
     } catch (error) {
+      setImportedStock(null);
       setProductsMessage(error.response?.data?.error || error.message || "Não foi possível importar a planilha de estoque.");
     } finally {
       setStockImportLoading(false);
@@ -1422,6 +1405,8 @@ function NewProductionPlanning() {
     try {
       const response = await api.post("/admin/production-planning/stocks", {
         ...(isEditing ? { planningDay: editingDayParam } : {}),
+        stockSource: isEditing ? "preserved" : stockSource,
+        ...(!isEditing && stockSource === "spreadsheet" ? { importedStock } : {}),
         stores: [{
           displayName: preview.storeName,
           productCodes: preview.products.map((product) => product.code),
@@ -1445,14 +1430,14 @@ function NewProductionPlanning() {
 
     const importedByCode = new Map(preview.products.map((product) => [product.code, product]));
     setProductsByStoreAndDay((currentProductsByStoreAndDay) => {
-      const currentDayProducts = (currentProductsByStoreAndDay[preview.storeName]?.[preview.day] || [])
-        .filter((product) => !product.importedOnly || importedByCode.has(String(product.code)));
+      const currentDayProducts = currentProductsByStoreAndDay[preview.storeName]?.[preview.day] || [];
       const existingCodes = new Set(currentDayProducts.map((product) => String(product.code)));
       const updatedProducts = currentDayProducts.map((product) => {
         const importedProduct = importedByCode.get(String(product.code));
-        const fixedQuantity = importedProduct?.fixedQuantity || 0;
-        const orderQuantity = importedProduct?.orderQuantity || 0;
-        const stockData = importedProduct && product.stockSource !== "spreadsheet"
+        if (!importedProduct) return product;
+        const fixedQuantity = roundQuantity(toNumber(product.fixedQuantity) + toNumber(importedProduct.fixedQuantity));
+        const orderQuantity = roundQuantity(toNumber(product.orderQuantity) + toNumber(importedProduct.orderQuantity));
+        const stockData = importedProduct && !product.stockSource
           ? stockByCode[String(product.code)] || {}
           : {};
         const nextProduct = {
@@ -1460,7 +1445,10 @@ function NewProductionPlanning() {
           ...stockData,
           fixedQuantity,
           orderQuantity,
-          fixedOrderSources: importedProduct?.sources || [],
+          fixedOrderSources: [
+            ...(product.fixedOrderSources || []),
+            ...(importedProduct.sources || []),
+          ],
         };
         return {
           ...nextProduct,
@@ -1511,14 +1499,13 @@ function NewProductionPlanning() {
         ...currentProductsByStoreAndDay,
         [preview.storeName]: {
           ...(currentProductsByStoreAndDay[preview.storeName] || {}),
-          [preview.day]: [...updatedProducts, ...addedProducts]
-            .sort((left, right) => String(left.code).localeCompare(String(right.code), "pt-BR", { numeric: true })),
+          [preview.day]: [...updatedProducts, ...addedProducts].sort(compareProductsByName),
         },
       };
     });
 
     setImportMessage(
-      `${preview.products.length} produto(s) importado(s) para ${preview.storeName} em ${formatDate(preview.day)}.`
+      `Valores de ${preview.products.length} produto(s) adicionados ao acumulado de ${preview.storeName} em ${formatDate(preview.day)}.`
     );
     setImportPreview(null);
     setImportLoading(false);
@@ -1632,7 +1619,7 @@ function NewProductionPlanning() {
               <span aria-hidden="true">⌄</span>
             </button>
           ) : (
-            <div className="production-form-grid production-form-grid--suggestion">
+            <div className={`production-form-grid production-form-grid--suggestion ${isEditing ? "production-form-grid--editing" : ""}`}>
               <label className="production-form-grid__period">
                 <span>Período da produção</span>
                 {isEditing ? (
@@ -1668,13 +1655,47 @@ function NewProductionPlanning() {
                 <span>Loja</span>
                 <MultiStoreSelect stores={selectableProductionStores} selectedStores={selectedStores} onToggleStore={handleToggleStore} />
               </label>
+              {!isEditing && (
+                <div className="production-form-grid__stock-source">
+                  <label>
+                    <span>Origem do estoque</span>
+                    <select value={stockSource} onChange={(event) => handleStockSourceChange(event.target.value)}>
+                      <option value="everest">Estoque Everest</option>
+                      <option value="faq">Último estoque do FAQ</option>
+                      <option value="spreadsheet">Importar estoque</option>
+                    </select>
+                  </label>
+                  {stockSource === "spreadsheet" && (
+                    <div className="production-stock-source-import">
+                      <input
+                        ref={stockFileInputRef}
+                        type="file"
+                        accept=".txt,.xlsx,.xls,text/plain"
+                        onChange={handleStockFileChange}
+                        hidden
+                      />
+                      <button
+                        type="button"
+                        className="button button--ghost"
+                        onClick={() => stockFileInputRef.current?.click()}
+                        disabled={stockImportLoading}
+                      >
+                        {stockImportLoading ? "Lendo estoque..." : importedStock ? "Trocar arquivo" : "Selecionar arquivo"}
+                      </button>
+                      {importedStock?.fileName && <small title={importedStock.fileName}>{importedStock.fileName}</small>}
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="production-form-grid__suggest">
                 <span>Ação</span>
                 <button
                   type="button"
                   className="button"
                   onClick={handleSuggestProduction}
-                  disabled={suggestionLoading || storesLoading || !validatePlanningFilters()}
+                  disabled={suggestionLoading || storesLoading || !validatePlanningFilters() || (
+                    !isEditing && stockSource === "spreadsheet" && !importedStock
+                  )}
                 >
                   {suggestionLoading || storesLoading
                     ? "Carregando dados..."
@@ -1697,7 +1718,7 @@ function NewProductionPlanning() {
         )}
         {stockWarnings.length > 0 && (
           <div className="production-stock-warning" role="status">
-            <strong>Estoque do Everest</strong>
+            <strong>{isEditing ? "Estoque preservado" : stockSourceLabels[stockSource]}</strong>
             {stockWarnings.map((warning) => <span key={warning}>{warning}</span>)}
           </div>
         )}
@@ -1803,21 +1824,6 @@ function NewProductionPlanning() {
                   >
                     {importLoading ? "Lendo planilha..." : "Importar Fixos e Encomendas"}
                   </button>
-                  <input
-                    ref={stockFileInputRef}
-                    type="file"
-                    accept=".txt,.xlsx,.xls,text/plain"
-                    onChange={handleStockFileChange}
-                    hidden
-                  />
-                  <button
-                    type="button"
-                    className="button button--ghost"
-                    onClick={() => stockFileInputRef.current?.click()}
-                    disabled={stockImportLoading || importLoading}
-                  >
-                    {stockImportLoading ? "Lendo estoque..." : "Importar Estoque"}
-                  </button>
                 </div>
               )}
             </div>
@@ -1846,7 +1852,7 @@ function NewProductionPlanning() {
                     <th>Quantidade em estoque</th>
                     <th>Fixos/Encomendas</th>
                     <th>{isConsolidatedActive ? "% aumento médio" : "% aumento"}</th>
-                    <th>A produzir</th>
+                    <th>A ser enviado</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1874,7 +1880,7 @@ function NewProductionPlanning() {
                           />
                         )}
                       </td>
-                      <td data-label="A produzir">
+                      <td data-label="A ser enviado">
                         {isConsolidatedActive ? (
                           product.suggestion
                         ) : (
@@ -1938,9 +1944,10 @@ function NewProductionPlanning() {
                   <tr>
                     <th>Código</th>
                     <th>Nome</th>
-                    <th>Fixos</th>
-                    <th>Encomendas</th>
-                    <th>Total adicional</th>
+                    <th>Fixos adicionados</th>
+                    <th>Encomendas adicionadas</th>
+                    <th>Acumulado atual</th>
+                    <th>Total após confirmar</th>
                     <th>Situação</th>
                     <th>Ação</th>
                   </tr>
@@ -1958,7 +1965,8 @@ function NewProductionPlanning() {
                         <td title={compositionTitle}>{product.registeredProduct?.name || product.spreadsheetName}</td>
                         <td>{formatQuantity(product.fixedQuantity)}</td>
                         <td>{formatQuantity(product.orderQuantity)}</td>
-                        <td title={compositionTitle}>{formatQuantity(product.fixedQuantity + product.orderQuantity)}</td>
+                        <td>{formatQuantity(product.currentAdditionalQuantity)}</td>
+                        <td title={compositionTitle}>{formatQuantity(product.nextAdditionalQuantity)}</td>
                         <td>
                           <span className={`production-import-status production-import-status--${isRegistered ? "registered" : "unknown"}`}>
                             {isRegistered ? "Cadastrado" : "Não cadastrado"}

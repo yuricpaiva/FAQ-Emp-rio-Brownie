@@ -3,9 +3,18 @@ const assert = require('node:assert/strict');
 
 const {
   comparisonServesDay,
+  isDispatchableItem,
   itemFingerprint,
   normalizeStores,
 } = require('../controllers/productionPlanningPersistenceController');
+
+test('dispatch includes only products with a positive production quantity', () => {
+  assert.equal(isDispatchableItem({ suggestion: 1 }), true);
+  assert.equal(isDispatchableItem({ suggestion: '0.0001' }), true);
+  assert.equal(isDispatchableItem({ suggestion: 0 }), false);
+  assert.equal(isDispatchableItem({ suggestion: '0' }), false);
+  assert.equal(isDispatchableItem({ suggestion: null }), false);
+});
 
 test('comparison period must contain the production weekday', () => {
   assert.equal(comparisonServesDay('2026-07-06', '2026-07-08', '2026-07-13'), true);
@@ -65,6 +74,27 @@ test('planning normalization rejects duplicate products and negative values', ()
   assert.throws(() => normalizeStores({
     'Loja A': { products: [buildProduct({ suggestion: -1 })] },
   }), /maior ou igual a zero/);
+});
+
+test('planning normalization rejects decimal values with more than four places', () => {
+  for (const product of [
+    buildProduct({ increasePercent: '10,00001' }),
+    buildProduct({ suggestion: '1.23456' }),
+    buildProduct({ fixedQuantity: '0.00001' }),
+    buildProduct({ stockQuantity: '2.00000' }),
+    buildProduct({ fixedOrderSources: [{
+      code: 'KIT', name: 'Kit', fixedQuantity: 1, orderQuantity: 0,
+      factor: '1.00001', convertedCode: '100', convertedName: 'Brownie',
+    }] }),
+  ]) {
+    assert.throws(() => normalizeStores({
+      'Loja A': { defaultIncreasePercent: 0, products: [product] },
+    }), /quatro casas/);
+  }
+
+  assert.throws(() => normalizeStores({
+    'Loja A': { defaultIncreasePercent: '10.00001', products: [buildProduct()] },
+  }), /quatro casas/);
 });
 
 test('planning item fingerprint changes only when planning data changes', () => {
