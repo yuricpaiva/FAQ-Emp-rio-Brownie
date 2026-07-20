@@ -28,11 +28,12 @@ test('sales replace source kits and aggregate direct sales in the final product'
     { store_name: 'Loja A', sale_date: '2026-07-01', codigo_produto: 'KIT6', quantidade_total: 5 },
     { store_name: 'Loja A', sale_date: '2026-07-01', codigo_produto: 'KIT3', quantidade_total: 2 },
     { store_name: 'Loja A', sale_date: '2026-07-01', codigo_produto: 'BRIG', quantidade_total: 4 },
+    { store_name: 'Loja A', sale_date: '2026-07-01', codigo_produto: 'BRIG', quantidade_total: 3 },
     { store_name: 'Loja B', sale_date: '2026-07-01', codigo_produto: 'KIT6', quantidade_total: 1 },
   ], context());
 
   assert.equal(rows.length, 2);
-  assert.equal(rows.find((row) => row.store_name === 'Loja A').quantidade_total, 40);
+  assert.equal(rows.find((row) => row.store_name === 'Loja A').quantidade_total, 43);
   assert.equal(rows.find((row) => row.store_name === 'Loja B').quantidade_total, 6);
   assert.equal(rows.some((row) => row.codigo_produto.startsWith('KIT')), false);
 });

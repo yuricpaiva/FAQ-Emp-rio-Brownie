@@ -306,7 +306,7 @@ async function suggestProduction(req, res) {
         JOIN dw.vendas v
           ON v.id = p.venda_id
         WHERE COALESCE(v.cancelado, false) = false
-          AND p.item_type = 'PRODUCT'
+          AND p.item_type IN ('PRODUCT', 'CANADD')
           AND v.data_movimento >= $1::date
           AND v.data_movimento < ($2::date + INTERVAL '1 day')
           AND (v.loja = ANY($3::text[]) OR p.loja = ANY($3::text[]))
