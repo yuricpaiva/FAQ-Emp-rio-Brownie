@@ -187,7 +187,7 @@ function buildImportedStockSnapshot({ importedStock, stores, productCodes, warnI
   };
 }
 
-async function getFaqStockSnapshot({ stores, productCodes }) {
+async function getFaqStockSnapshot({ stores, productCodes, ignoredMissingProductCodes = [] }) {
   const counts = await prisma.stockCount.findMany({
     where: {
       productionStoreId: { in: stores.map((store) => store.id) },
@@ -204,6 +204,7 @@ async function getFaqStockSnapshot({ stores, productCodes }) {
   });
 
   const warnings = [];
+  const ignoredMissingCodes = new Set(Array.from(ignoredMissingProductCodes || [], String));
   const stockDates = {};
   const today = getBusinessDate();
   const items = Object.fromEntries(stores.map((store) => {
@@ -219,7 +220,7 @@ async function getFaqStockSnapshot({ stores, productCodes }) {
     const storeItems = Object.fromEntries(productCodes.map((code) => {
       const item = countItems.get(code);
       if (item) return [code, { quantity: Number(item.quantity), status: 'available', reason: '' }];
-      missingProducts += 1;
+      if (!ignoredMissingCodes.has(code)) missingProducts += 1;
       return [code, {
         quantity: 0,
         status: 'not_found',
@@ -242,7 +243,14 @@ async function getFaqStockSnapshot({ stores, productCodes }) {
   };
 }
 
-async function resolveStockSnapshot({ stockSource, stores, productCodes, importedStock, warnIgnoredStores = true }) {
+async function resolveStockSnapshot({
+  stockSource,
+  stores,
+  productCodes,
+  importedStock,
+  warnIgnoredStores = true,
+  ignoredMissingProductCodes = [],
+}) {
   if (stockSource === 'preserved') {
     return {
       stockDate: '',
@@ -259,7 +267,9 @@ async function resolveStockSnapshot({ stockSource, stores, productCodes, importe
       ])),
     };
   }
-  if (stockSource === 'faq') return getFaqStockSnapshot({ stores, productCodes });
+  if (stockSource === 'faq') {
+    return getFaqStockSnapshot({ stores, productCodes, ignoredMissingProductCodes });
+  }
   if (stockSource === 'spreadsheet') {
     return buildImportedStockSnapshot({ importedStock, stores, productCodes, warnIgnoredStores });
   }
@@ -533,6 +543,7 @@ async function suggestProduction(req, res) {
         stores: activeStores,
         productCodes: activeProductCodes,
         importedStock: req.body?.importedStock,
+        ignoredMissingProductCodes: conversionContext.sourceCodes,
       }),
     ]);
 
@@ -684,6 +695,7 @@ async function getProductionStocks(req, res) {
       productCodes: requiredStockCodes,
       importedStock: req.body?.importedStock,
       warnIgnoredStores: false,
+      ignoredMissingProductCodes: conversionContext.sourceCodes,
     });
   } catch (error) {
     if (error instanceof ProductionStockError) {

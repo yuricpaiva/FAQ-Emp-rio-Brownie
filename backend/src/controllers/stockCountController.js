@@ -17,6 +17,25 @@ const detailInclude = {
   items: { orderBy: [{ name: 'asc' }, { code: 'asc' }, { id: 'asc' }] },
 };
 
+function selectStockCountProducts(products, conversions) {
+  const convertedSourceIds = new Set(
+    (conversions || [])
+      .filter((conversion) => conversion?.active !== false)
+      .map((conversion) => Number(conversion?.sourceProductId))
+      .filter(Number.isInteger)
+  );
+  const productsByCode = new Map(
+    (products || [])
+      .filter((product) => !convertedSourceIds.has(Number(product?.id)))
+      .map((product) => [String(product?.code || '').trim(), product])
+      .filter(([code]) => code)
+  );
+  return Array.from(productsByCode.values()).sort((left, right) =>
+    String(left?.name || '').localeCompare(String(right?.name || ''), 'pt-BR', { sensitivity: 'base' }) ||
+    String(left?.code || '').localeCompare(String(right?.code || ''), 'pt-BR', { numeric: true })
+  );
+}
+
 function getStockDate(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Fortaleza',
@@ -150,11 +169,18 @@ async function createStockCount(req, res) {
       return res.json(serializeCount(existing));
     }
 
-    const products = await prisma.productionProduct.findMany({
-      where: { active: true },
-      select: { id: true, code: true, name: true },
-      orderBy: [{ name: 'asc' }, { code: 'asc' }],
-    });
+    const [activeProducts, activeConversions] = await Promise.all([
+      prisma.productionProduct.findMany({
+        where: { active: true },
+        select: { id: true, code: true, name: true },
+        orderBy: [{ name: 'asc' }, { code: 'asc' }],
+      }),
+      prisma.productionConversion.findMany({
+        where: { active: true },
+        select: { sourceProductId: true, active: true },
+      }),
+    ]);
+    const products = selectStockCountProducts(activeProducts, activeConversions);
     if (!products.length) throw new StockCountError(409, 'Nao existem produtos ativos para contar.');
 
     const count = await prisma.stockCount.create({
@@ -255,5 +281,6 @@ module.exports = {
   listStockCounts,
   listStockCountStores,
   parseQuantity,
+  selectStockCountProducts,
   updateStockCountItem,
 };
