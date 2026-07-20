@@ -52,6 +52,7 @@ const {
   getPlanning,
   listPlanning,
   updateDispatchItem,
+  updateDispatchItemsBulk,
   updatePlanning,
   updatePlanningStatus
 } = require('../controllers/productionPlanningPersistenceController');
@@ -147,6 +148,7 @@ router.get('/production-planning/:day', canPlanProduction, getPlanning);
 router.put('/production-planning/:day', canPlanProduction, updatePlanning);
 router.patch('/production-planning/:day/status', canPlanProduction, updatePlanningStatus);
 router.put('/production-planning/:day/dispatch', canPlanProduction, updateDispatchItem);
+router.put('/production-planning/:day/dispatch/bulk', canPlanProduction, updateDispatchItemsBulk);
 router.post('/production-planning/:day/finalize', canPlanProduction, finalizePlanning);
 
 module.exports = router;

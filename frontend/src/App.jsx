@@ -10,6 +10,8 @@ const PowerBI = lazy(() => import("./pages/PowerBI"));
 const ProductionPlanning = lazy(() => import("./pages/ProductionPlanning"));
 const NewProductionPlanning = lazy(() => import("./pages/NewProductionPlanning"));
 const ProductionPlanningSettings = lazy(() => import("./pages/ProductionPlanningSettings"));
+const StockCounts = lazy(() => import("./pages/StockCounts"));
+const StockCountEntry = lazy(() => import("./pages/StockCountEntry"));
 const PoolRanking = lazy(() => import("./pages/PoolRanking"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -54,6 +56,14 @@ function AppRoutes() {
         <Route
           path="/planejamento-producao/configuracoes"
           element={<ProtectedRoute roles={["admin"]}><ProductionPlanningSettings /></ProtectedRoute>}
+        />
+        <Route
+          path="/contagem-estoque"
+          element={<ProtectedRoute roles={["store", "admin", "production_manager"]}><StockCounts /></ProtectedRoute>}
+        />
+        <Route
+          path="/contagem-estoque/:id"
+          element={<ProtectedRoute roles={["store", "admin", "production_manager"]}><StockCountEntry /></ProtectedRoute>}
         />
         <Route path="/ranking-bolao" element={<ProtectedRoute><PoolRanking /></ProtectedRoute>} />
         <Route

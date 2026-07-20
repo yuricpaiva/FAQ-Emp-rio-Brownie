@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 const roleLabels = {
   reader: "Leitor",
   creator: "Criador",
+  store: "Loja",
   production_manager: "Gerente de produção",
   admin: "Administrador",
 };
@@ -22,6 +23,8 @@ function AdminDashboard() {
   const [userEmail, setUserEmail] = useState("");
   const [userPassword, setUserPassword] = useState("");
   const [userRole, setUserRole] = useState("reader");
+  const [userProductionStoreId, setUserProductionStoreId] = useState("");
+  const [productionStores, setProductionStores] = useState([]);
   const [userPhoto, setUserPhoto] = useState(null);
   const [userMessage, setUserMessage] = useState("");
   const [users, setUsers] = useState([]);
@@ -52,12 +55,23 @@ function AdminDashboard() {
     }
   };
 
+  const loadProductionStores = async () => {
+    if (!canManageUsers) return;
+    try {
+      const res = await api.get("/admin/production-stores", { params: { includeInactive: true } });
+      setProductionStores(res.data || []);
+    } catch {
+      setUserMessage("Não foi possível carregar as lojas.");
+    }
+  };
+
   useEffect(() => {
     loadArticles();
   }, [query, status]);
 
   useEffect(() => {
     loadUsers();
+    loadProductionStores();
   }, [canManageUsers]);
 
   const resetUserForm = () => {
@@ -66,6 +80,7 @@ function AdminDashboard() {
     setUserEmail("");
     setUserPassword("");
     setUserRole("reader");
+    setUserProductionStoreId("");
     setUserPhoto(null);
     setUserMessage("");
   };
@@ -139,6 +154,7 @@ function AdminDashboard() {
         name: userName,
         email: userEmail,
         role: userRole,
+        productionStoreId: userRole === "store" ? Number(userProductionStoreId) : null,
       };
 
       if (userPassword) payload.password = userPassword;
@@ -177,6 +193,7 @@ function AdminDashboard() {
     setUserName(user.name);
     setUserEmail(user.email);
     setUserRole(user.role || "reader");
+    setUserProductionStoreId(user.productionStoreId ? String(user.productionStoreId) : "");
     setUserPassword("");
     setUserPhoto(null);
     setUserMessage("");
@@ -338,6 +355,7 @@ function AdminDashboard() {
                         <p>{item.email}</p>
                         <div className="article-list__meta">
                           <span>{roleLabels[item.role] || item.role}</span>
+                          {item.productionStore?.displayName && <span>{item.productionStore.displayName}</span>}
                         </div>
                       </div>
                       <div className="admin-list__actions">
@@ -386,13 +404,40 @@ function AdminDashboard() {
                   </label>
                   <label>
                     <span>Permissão</span>
-                    <select value={userRole} onChange={(event) => setUserRole(event.target.value)}>
+                    <select
+                      value={userRole}
+                      onChange={(event) => {
+                        const nextRole = event.target.value;
+                        setUserRole(nextRole);
+                        if (nextRole !== "store") setUserProductionStoreId("");
+                      }}
+                    >
                       <option value="reader">Leitor</option>
                       <option value="creator">Criador</option>
+                      <option value="store">Loja</option>
                       <option value="production_manager">Gerente de produção</option>
                       <option value="admin">Administrador</option>
                     </select>
                   </label>
+                  {userRole === "store" && (
+                    <label>
+                      <span>Loja</span>
+                      <select
+                        value={userProductionStoreId}
+                        onChange={(event) => setUserProductionStoreId(event.target.value)}
+                        required
+                      >
+                        <option value="">Selecione a loja</option>
+                        {productionStores
+                          .filter((store) => store.active || store.id === Number(userProductionStoreId))
+                          .map((store) => (
+                            <option key={store.id} value={store.id}>
+                              {store.displayName}{store.active ? "" : " (inativa)"}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  )}
                   <label>
                     <span>{editingUserId ? "Senha (opcional)" : "Senha"}</span>
                     <input

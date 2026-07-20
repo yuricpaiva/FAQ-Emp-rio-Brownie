@@ -1,4 +1,4 @@
-const VALID_ROLES = ['reader', 'creator', 'production_manager', 'admin'];
+const VALID_ROLES = ['reader', 'creator', 'store', 'production_manager', 'admin'];
 const VALID_ARTICLE_STATUS = ['draft', 'published'];
 const VALID_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const VALID_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
@@ -106,6 +106,7 @@ function validateCreateUserInput(body = {}) {
   const password = typeof body.password === 'string' ? body.password : '';
   const role = normalizeString(body.role || 'reader');
   const photoUrl = normalizeOptionalString(body.photoUrl) || '';
+  const productionStoreId = Number(body.productionStoreId);
 
   if (!name || !email || !password) {
     return { error: 'Nome, email e senha são obrigatórios.' };
@@ -123,6 +124,10 @@ function validateCreateUserInput(body = {}) {
     return { error: 'Permissão inválida.' };
   }
 
+  if (role === 'store' && (!Number.isInteger(productionStoreId) || productionStoreId <= 0)) {
+    return { error: 'Selecione a loja do usuário.' };
+  }
+
   if (!isValidHttpUrl(photoUrl)) {
     return { error: 'A foto precisa ser uma URL http/https válida.' };
   }
@@ -133,7 +138,8 @@ function validateCreateUserInput(body = {}) {
       email,
       password,
       role,
-      photoUrl
+      photoUrl,
+      productionStoreId: role === 'store' ? productionStoreId : null
     }
   };
 }
@@ -177,6 +183,11 @@ function validateAdminUserUpdateInput(body = {}) {
   const photoUrl = normalizeOptionalString(body.photoUrl);
   const role = body.role !== undefined ? normalizeString(body.role) : undefined;
   const active = body.active;
+  const productionStoreId = body.productionStoreId === undefined
+    ? undefined
+    : body.productionStoreId === null || body.productionStoreId === ''
+      ? null
+      : Number(body.productionStoreId);
 
   if (name !== undefined && !name) {
     return { error: 'Nome inválido.' };
@@ -202,6 +213,11 @@ function validateAdminUserUpdateInput(body = {}) {
     return { error: 'O campo active deve ser booleano.' };
   }
 
+  if (productionStoreId !== undefined && productionStoreId !== null
+      && (!Number.isInteger(productionStoreId) || productionStoreId <= 0)) {
+    return { error: 'Loja inválida.' };
+  }
+
   return {
     value: {
       name,
@@ -209,7 +225,8 @@ function validateAdminUserUpdateInput(body = {}) {
       password,
       photoUrl,
       role,
-      active
+      active,
+      productionStoreId
     }
   };
 }

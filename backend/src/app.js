@@ -6,6 +6,7 @@ const path = require('path');
 const authRoutes = require('./routes/authRoutes');
 const knowledgeRoutes = require('./routes/knowledgeRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const stockCountRoutes = require('./routes/stockCountRoutes');
 
 dotenv.config();
 
@@ -49,6 +50,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/stock-counts', stockCountRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });

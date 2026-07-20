@@ -1,9 +1,10 @@
 const { PrismaClient } = require('@prisma/client');
+const { hasAtMostFourDecimalPlaces, normalizeDecimalText } = require('../utils/decimal');
 
 const prisma = new PrismaClient();
 
 function toPositiveNumber(value) {
-  const number = Number(String(value ?? '').replace(',', '.'));
+  const number = Number(normalizeDecimalText(value));
   return Number.isFinite(number) ? number : NaN;
 }
 
@@ -19,17 +20,15 @@ function normalizeConversions(conversions) {
     const conversionCode = String(conversion?.conversionCode || '').trim();
     const conversionName = String(conversion?.conversionName || '').trim();
     const conversionFactor = toPositiveNumber(conversion?.conversionFactor);
-    const roundedFactor = Math.round((conversionFactor + Number.EPSILON) * 10000) / 10000;
-
     if (!Number.isInteger(sourceProductId) || sourceProductId <= 0) return;
     if (!conversionCode || !conversionName) return;
-    if (conversionFactor <= 0 || roundedFactor !== conversionFactor) return;
+    if (conversionFactor <= 0 || !hasAtMostFourDecimalPlaces(conversion?.conversionFactor)) return;
 
     conversionsBySource.set(sourceProductId, {
       sourceProductId,
       conversionCode,
       conversionName,
-      conversionFactor: roundedFactor
+      conversionFactor
     });
   });
 
@@ -90,6 +89,7 @@ async function listProductionConversions(req, res) {
       sourceProduct: true
     },
     orderBy: [
+      { sourceProduct: { name: 'asc' } },
       { sourceProduct: { code: 'asc' } },
       { id: 'asc' }
     ]
@@ -105,7 +105,7 @@ async function saveProductionConversions(req, res) {
   const productIds = Array.from(new Set(conversions.map((conversion) => conversion.sourceProductId)));
 
   if (rawConversions.length !== conversions.length) {
-    return res.status(400).json({ error: 'Informe produtos, codigos, nomes e fatores validos.' });
+    return res.status(400).json({ error: 'Informe produtos, codigos, nomes e fatores validos com no maximo quatro casas decimais.' });
   }
 
   let sourceProducts = [];
@@ -176,6 +176,7 @@ async function saveProductionConversions(req, res) {
       sourceProduct: true
     },
     orderBy: [
+      { sourceProduct: { name: 'asc' } },
       { sourceProduct: { code: 'asc' } },
       { id: 'asc' }
     ]
@@ -186,6 +187,7 @@ async function saveProductionConversions(req, res) {
 
 module.exports = {
   listProductionConversions,
+  normalizeConversions,
   saveProductionConversions,
   validateConversionConfiguration,
 };
