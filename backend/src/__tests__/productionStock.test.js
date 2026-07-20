@@ -7,6 +7,7 @@ const {
   getEverestStockDate,
   getEverestStockSnapshot,
 } = require('../services/everestDatabase');
+const { buildConversionContext, convertStockItems } = require('../services/productionConversionService');
 const {
   buildImportedStockSnapshot,
   calculateProductionSuggestion,
@@ -179,9 +180,28 @@ test('FAQ stock uses the latest finalized count and ignores a newer draft', asyn
   const snapshot = await getFaqStockSnapshot({
     stores: [{ id: store.id, displayName: store.displayName }],
     productCodes: [product.code, `MISSING-${suffix}`],
+    ignoredMissingProductCodes: [`MISSING-${suffix}`],
   });
   assert.equal(snapshot.stockDates[store.displayName], '2026-07-18');
   assert.equal(snapshot.items[store.displayName][product.code].quantity, 3.25);
   assert.equal(snapshot.items[store.displayName][`MISSING-${suffix}`].quantity, 0);
   assert.equal(snapshot.items[store.displayName][`MISSING-${suffix}`].status, 'not_found');
+  assert.doesNotMatch(snapshot.warnings.join(' '), /produto\(s\) ausente\(s\)/);
+
+  const conversionContext = buildConversionContext(
+    [product, { code: `MISSING-${suffix}`, name: 'Produto de venda' }],
+    [{
+      sourceProduct: { code: `MISSING-${suffix}`, name: 'Produto de venda' },
+      conversionCode: product.code,
+      conversionName: product.name,
+      conversionFactor: 8,
+    }]
+  );
+  const [convertedStock] = convertStockItems(
+    Object.entries(snapshot.items[store.displayName]).map(([code, item]) => ({ code, ...item })),
+    [product.code],
+    conversionContext
+  );
+  assert.equal(convertedStock.quantity, 3.25);
+  assert.equal(convertedStock.status, 'available');
 });
