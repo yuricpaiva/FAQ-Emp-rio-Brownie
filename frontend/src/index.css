@@ -1387,6 +1387,25 @@ textarea:focus {
   font-size: 0.88rem;
 }
 
+.production-timer-cell,
+.production-timer {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.production-timer {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid rgba(92, 57, 40, 0.18);
+  border-radius: 4px;
+  background: rgba(92, 57, 40, 0.06);
+  color: #3f302a;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .production-table tbody tr:hover {
   background: rgba(92, 57, 40, 0.045);
 }

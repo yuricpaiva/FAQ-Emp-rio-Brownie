@@ -173,6 +173,28 @@ function parseJsonArray(value) {
   }
 }
 
+function getProductionElapsedSeconds(day, now = new Date()) {
+  if (!day?.productionStartedAt) return null;
+  const startedAt = new Date(day.productionStartedAt).getTime();
+  const finishedAt = day.productionFinishedAt
+    ? new Date(day.productionFinishedAt).getTime()
+    : new Date(now).getTime();
+  if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt)) return null;
+  return Math.max(0, Math.floor((finishedAt - startedAt) / 1000));
+}
+
+function assertCanStartProduction(day) {
+  if (day.status !== 'nao_iniciado' || day.productionStartedAt) {
+    throw new PlanningError(409, 'Esta producao ja foi iniciada e o cronometro nao pode ser reiniciado.');
+  }
+}
+
+function assertCanFinalizeProduction(day) {
+  if (day.status !== 'em_producao' || !day.productionStartedAt || day.productionFinishedAt) {
+    throw new PlanningError(409, 'Inicie a producao antes de finalizar a expedicao.');
+  }
+}
+
 function serializePlanningDay(day) {
   const dispatchItems = {};
   const stores = Object.fromEntries(day.stores.map((store) => {
@@ -219,6 +241,9 @@ function serializePlanningDay(day) {
     comparisonStartDate: day.comparisonStartDate,
     comparisonEndDate: day.comparisonEndDate,
     status: day.status,
+    productionStartedAt: day.productionStartedAt?.toISOString() || null,
+    productionFinishedAt: day.productionFinishedAt?.toISOString() || null,
+    productionElapsedSeconds: getProductionElapsedSeconds(day),
     createdAt: day.createdAt.toISOString(),
     updatedAt: day.updatedAt.toISOString(),
     stores,
@@ -549,13 +574,23 @@ async function updatePlanning(req, res) {
 
 async function updatePlanningStatus(req, res) {
   const status = String(req.body?.status || '');
-  if (!editableStatuses.has(status)) return res.status(400).json({ error: 'Status invalido.' });
+  if (status !== 'em_producao') {
+    return res.status(400).json({ error: 'A producao nao pode ser pausada depois de iniciada.' });
+  }
   try {
     const current = await prisma.productionPlanningDay.findUnique({ where: { day: req.params.day } });
     if (!current) throw new PlanningError(404, 'Planejamento nao encontrado.');
-    if (!editableStatuses.has(current.status)) throw new PlanningError(409, 'Planejamento finalizado nao pode mudar de status.');
-    const updated = await prisma.productionPlanningDay.update({
-      where: { id: current.id }, data: { status }, include: planningInclude,
+    assertCanStartProduction(current);
+    const startedAt = new Date();
+    const updateResult = await prisma.productionPlanningDay.updateMany({
+      where: { id: current.id, status: 'nao_iniciado', productionStartedAt: null },
+      data: { status: 'em_producao', productionStartedAt: startedAt },
+    });
+    if (updateResult.count !== 1) {
+      throw new PlanningError(409, 'Esta producao ja foi iniciada e o cronometro nao pode ser reiniciado.');
+    }
+    const updated = await prisma.productionPlanningDay.findUnique({
+      where: { id: current.id }, include: planningInclude,
     });
     return res.json(serializePlanningDay(updated));
   } catch (error) {
@@ -630,12 +665,25 @@ async function finalizePlanning(req, res) {
     const day = await prisma.productionPlanningDay.findUnique({ where: { day: req.params.day }, include: planningInclude });
     if (!day) throw new PlanningError(404, 'Planejamento nao encontrado.');
     if (day.status === 'finalizado') return res.json(serializePlanningDay(day));
+    assertCanFinalizeProduction(day);
     const items = day.stores.flatMap((store) => store.products).filter(isDispatchableItem);
     if (!items.length || items.some((item) => !dispatchStatuses.has(item.dispatchStatus))) {
       throw new PlanningError(409, 'Marque todos os produtos antes de finalizar a expedicao.');
     }
-    const updated = await prisma.productionPlanningDay.update({
-      where: { id: day.id }, data: { status: 'finalizado' }, include: planningInclude,
+    const finishedAt = new Date();
+    const updateResult = await prisma.productionPlanningDay.updateMany({
+      where: { id: day.id, status: 'em_producao', productionFinishedAt: null },
+      data: { status: 'finalizado', productionFinishedAt: finishedAt },
+    });
+    if (updateResult.count !== 1) {
+      const current = await prisma.productionPlanningDay.findUnique({
+        where: { id: day.id }, include: planningInclude,
+      });
+      if (current?.status === 'finalizado') return res.json(serializePlanningDay(current));
+      throw new PlanningError(409, 'Nao foi possivel finalizar a expedicao porque o status foi alterado.');
+    }
+    const updated = await prisma.productionPlanningDay.findUnique({
+      where: { id: day.id }, include: planningInclude,
     });
     return res.json(serializePlanningDay(updated));
   } catch (error) {
@@ -655,12 +703,15 @@ function handleError(res, error, fallback) {
 }
 
 module.exports = {
+  assertCanFinalizeProduction,
+  assertCanStartProduction,
   comparisonServesDay,
   createPlanning,
   finalizePlanning,
   getPlanning,
   isDispatchableItem,
   itemFingerprint,
+  getProductionElapsedSeconds,
   listPlanning,
   normalizeStores,
   serializePlanningDay,

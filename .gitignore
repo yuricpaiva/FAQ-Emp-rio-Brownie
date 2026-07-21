@@ -15,6 +15,7 @@ build/
 backend/.env
 frontend/.env
 backend/src/prisma/*.db
+backend/src/prisma/*.db-*
 backend/src/uploads/
 backend/uploads/
 

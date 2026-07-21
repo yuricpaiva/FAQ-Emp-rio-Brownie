@@ -2,11 +2,48 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  assertCanFinalizeProduction,
+  assertCanStartProduction,
   comparisonServesDay,
+  getProductionElapsedSeconds,
   isDispatchableItem,
   itemFingerprint,
   normalizeStores,
 } = require('../controllers/productionPlanningPersistenceController');
+
+test('production timer returns null before start and counts active elapsed time', () => {
+  assert.equal(getProductionElapsedSeconds({ productionStartedAt: null }), null);
+  assert.equal(getProductionElapsedSeconds({
+    productionStartedAt: new Date('2026-07-21T10:00:00.000Z'),
+    productionFinishedAt: null,
+  }, new Date('2026-07-21T11:02:03.900Z')), 3723);
+});
+
+test('production timer freezes at the persisted finish time', () => {
+  const production = {
+    productionStartedAt: new Date('2026-07-21T10:00:00.000Z'),
+    productionFinishedAt: new Date('2026-07-22T12:15:04.000Z'),
+  };
+  assert.equal(getProductionElapsedSeconds(production, new Date('2026-07-30T00:00:00.000Z')), 94504);
+});
+
+test('production cannot restart, pause, or finalize before starting', () => {
+  assert.doesNotThrow(() => assertCanStartProduction({
+    status: 'nao_iniciado', productionStartedAt: null,
+  }));
+  assert.throws(() => assertCanStartProduction({
+    status: 'em_producao', productionStartedAt: new Date(),
+  }), /ja foi iniciada/);
+  assert.throws(() => assertCanStartProduction({
+    status: 'nao_iniciado', productionStartedAt: new Date(),
+  }), /nao pode ser reiniciado/);
+  assert.throws(() => assertCanFinalizeProduction({
+    status: 'nao_iniciado', productionStartedAt: null, productionFinishedAt: null,
+  }), /Inicie a producao/);
+  assert.doesNotThrow(() => assertCanFinalizeProduction({
+    status: 'em_producao', productionStartedAt: new Date(), productionFinishedAt: null,
+  }));
+});
 
 test('dispatch includes only products with a positive production quantity', () => {
   assert.equal(isDispatchableItem({ suggestion: 1 }), true);

@@ -178,14 +178,16 @@ model StockCountItem {
 }
 
 model ProductionPlanningDay {
-  id                  Int                       @id @default(autoincrement())
-  day                 String                    @unique
-  comparisonStartDate String
-  comparisonEndDate   String
-  status              String                    @default("nao_iniciado")
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-  stores              ProductionPlanningStore[]
+  id                   Int                       @id @default(autoincrement())
+  day                  String                    @unique
+  comparisonStartDate  String
+  comparisonEndDate    String
+  status               String                    @default("nao_iniciado")
+  productionStartedAt  DateTime?
+  productionFinishedAt DateTime?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  stores               ProductionPlanningStore[]
 
   @@index([day, status])
   @@index([createdAt])

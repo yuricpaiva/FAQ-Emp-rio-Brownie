@@ -81,6 +81,27 @@ function formatDateTime(value) {
   });
 }
 
+function formatElapsedSeconds(value) {
+  if (!Number.isFinite(value) || value < 0) return "—";
+  const totalSeconds = Math.floor(value);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatProductionTime(production, now = Date.now()) {
+  if (!production?.productionStartedAt) return "—";
+  const startedAt = new Date(production.productionStartedAt).getTime();
+  const finishedAt = production.productionFinishedAt
+    ? new Date(production.productionFinishedAt).getTime()
+    : now;
+  if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt)) {
+    return formatElapsedSeconds(production.productionElapsedSeconds);
+  }
+  return formatElapsedSeconds(Math.max(0, (finishedAt - startedAt) / 1000));
+}
+
 function getStatusLabel(status) {
   if (status === "finalizado") return "Finalizado";
   if (status === "em_producao") return "Em produção";
@@ -172,11 +193,14 @@ function ProductionPlanning() {
   const [bulkDispatchSaving, setBulkDispatchSaving] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [timerNow, setTimerNow] = useState(() => Date.now());
   const startDateInputRef = useRef(null);
   const endDateInputRef = useRef(null);
   const selectedStoreProduction = viewingDay?.stores?.[activeView];
   const isDispatchMode = modalMode === "dispatch";
   const isFinalized = viewingDay?.status === "finalizado";
+  const hasStartedProduction = viewingDay?.status === "em_producao"
+    && Boolean(viewingDay?.productionStartedAt);
   const showDispatchColumns = isDispatchMode || isFinalized;
   const consolidatedProducts = useMemo(
     () => (viewingDay ? getConsolidatedProducts(viewingDay) : []),
@@ -212,6 +236,9 @@ function ProductionPlanning() {
   const filterDescription = hasPeriodSearch
     ? `Producoes de ${formatPeriodBoundary(appliedPeriodSearch.startDate, "inicio")} a ${formatPeriodBoundary(appliedPeriodSearch.endDate, "fim")}`
     : "Producoes do mes atual";
+  const hasRunningTimer = productionDays.some((production) => (
+    production.status === "em_producao" && production.productionStartedAt
+  ));
 
   const loadProductionDays = async (period = getCurrentMonthRange()) => {
     setPlanningLoading(true);
@@ -230,6 +257,13 @@ function ProductionPlanning() {
   useEffect(() => {
     loadProductionDays();
   }, []);
+
+  useEffect(() => {
+    if (!hasRunningTimer) return undefined;
+    setTimerNow(Date.now());
+    const intervalId = window.setInterval(() => setTimerNow(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [hasRunningTimer]);
 
   const applyUpdatedDay = (updatedDay) => {
     setProductionDays((currentDays) => currentDays.map((day) =>
@@ -269,11 +303,10 @@ function ProductionPlanning() {
   };
 
   const handleStatusAction = async () => {
-    if (!viewingDay) return;
-    const nextStatus = viewingDay.status === "nao_iniciado" ? "em_producao" : "nao_iniciado";
+    if (!viewingDay || viewingDay.status !== "nao_iniciado") return;
     setPlanningError("");
     try {
-      const response = await api.patch(`/admin/production-planning/${viewingDay.day}/status`, { status: nextStatus });
+      const response = await api.patch(`/admin/production-planning/${viewingDay.day}/status`, { status: "em_producao" });
       applyUpdatedDay(response.data);
     } catch (error) {
       setPlanningError(error.response?.data?.error || "Não foi possível alterar o status.");
@@ -470,7 +503,7 @@ function ProductionPlanning() {
   };
 
   const handleFinalizeDispatch = async () => {
-    if (!viewingDay || isFinalized || dispatchProgress.percentage < 100) return;
+    if (!viewingDay || isFinalized || !hasStartedProduction || dispatchProgress.percentage < 100) return;
     const confirmed = window.confirm("Confirma a finalização da expedição deste dia de produção?");
     if (!confirmed) return;
 
@@ -556,6 +589,7 @@ function ProductionPlanning() {
               <th>Período comparado</th>
               <th>Criado em</th>
               <th>Status</th>
+              <th>Tempo</th>
               <th>% produção</th>
               <th>Ação</th>
             </tr>
@@ -573,6 +607,7 @@ function ProductionPlanning() {
                     {getStatusLabel(production.status)}
                   </span>
                 </td>
+                <td className="production-timer-cell">{formatProductionTime(production, timerNow)}</td>
                 <td>
                   {(() => {
                     const progress = getDispatchProgress(production);
@@ -637,6 +672,9 @@ function ProductionPlanning() {
                   <span className={`production-status production-status--${viewingDay.status}`}>
                     {getStatusLabel(viewingDay.status)}
                   </span>
+                  <span className="production-timer" aria-label={`Tempo de produção: ${formatProductionTime(viewingDay, timerNow)}`}>
+                    Tempo {formatProductionTime(viewingDay, timerNow)}
+                  </span>
                 </div>
                 <p className="section-copy">
                   Comparado com {formatDate(viewingDay.comparisonStartDate)} a {formatDate(viewingDay.comparisonEndDate)}
@@ -648,22 +686,24 @@ function ProductionPlanning() {
                     type="button"
                     className="production-dispatch-action"
                     onClick={handleFinalizeDispatch}
-                    disabled={dispatchProgress.percentage < 100}
-                    title={dispatchProgress.percentage < 100
-                      ? "Marque todos os produtos antes de finalizar a expedição."
-                      : "Finalizar expedição"}
+                    disabled={dispatchProgress.percentage < 100 || !hasStartedProduction}
+                    title={!hasStartedProduction
+                      ? "Inicie a produção antes de finalizar a expedição."
+                      : dispatchProgress.percentage < 100
+                        ? "Marque todos os produtos antes de finalizar a expedição."
+                        : "Finalizar expedição"}
                   >
                     Finalizar Expedição
                   </button>
                 )}
-                {!isDispatchMode && viewingDay.status !== "finalizado" && (
+                {!isDispatchMode && viewingDay.status === "nao_iniciado" && (
                   <button
                     type="button"
                     className={`production-status-action production-status-action--${viewingDay.status}`}
                     onClick={handleStatusAction}
                   >
-                    <span aria-hidden="true">{viewingDay.status === "nao_iniciado" ? "▶" : "⏸"}</span>
-                    {viewingDay.status === "nao_iniciado" ? "Iniciar" : "Pausar"}
+                    <span aria-hidden="true">▶</span>
+                    Iniciar
                   </button>
                 )}
                 <button type="button" onClick={closeModal}>
