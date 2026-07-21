@@ -34,19 +34,11 @@ function PowerBI() {
 
   return (
     <section className="power-bi-page">
-      <div className="power-bi-stage">
-        <h1 className="power-bi-title">De olho no resultado!</h1>
-        <div className="power-bi-frame">
-          <iframe
-            title="BI_OPERACIONAL_DQ"
-            src={configuration.url}
-            allowFullScreen
-          />
-        </div>
-        <img
-          src="/power-bi-presenter.png"
-          alt="Gerente financeira apresentando o painel de resultados"
-          className="power-bi-presenter"
+      <div className="power-bi-frame">
+        <iframe
+          title="BI_OPERACIONAL_DQ"
+          src={configuration.url}
+          allowFullScreen
         />
       </div>
     </section>
