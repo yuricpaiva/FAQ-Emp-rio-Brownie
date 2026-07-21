@@ -517,55 +517,19 @@ textarea:focus {
 }
 
 .power-bi-page {
+  width: 100%;
   height: 100vh;
-  min-height: 640px;
-  padding: clamp(1rem, 2.2vh, 1.5rem) clamp(1rem, 2.5vw, 2rem);
+  min-height: 0;
   box-sizing: border-box;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 28%),
-    linear-gradient(135deg, #f6efe8 0%, #f0e0d2 45%, #ecd8c9 100%);
-}
-
-.power-bi-title {
-  margin: 0;
-  color: #fff;
-  font-size: clamp(1.8rem, 3.4vw, 3.2rem);
-  line-height: 1;
-  text-align: center;
-  text-shadow: 0 3px 14px rgba(5, 24, 34, 0.72);
-}
-
-.power-bi-stage {
-  --power-bi-presenter-width: clamp(250px, 18vw, 220px);
-  position: relative;
-  width: min(100%, 1500px);
-  height: 100%;
-  margin: 0 auto;
-  padding-bottom: 0;
-  box-sizing: border-box;
-  display: grid;
-  grid-template-columns: var(--power-bi-presenter-width) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
-  align-items: end;
-  gap: clamp(0.5rem, 1.2vw, 1rem);
-}
-
-.power-bi-title {
-  grid-column: 2;
-  grid-row: 1;
+  overflow: hidden;
+  background: var(--surface-strong);
 }
 
 .power-bi-frame {
-  position: relative;
-  grid-column: 2;
-  grid-row: 2;
   width: 100%;
   height: 100%;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.72);
   overflow: hidden;
   background: var(--surface-strong);
-  box-shadow: 0 20px 50px rgba(5, 24, 34, 0.3);
 }
 
 .power-bi-frame iframe {
@@ -574,22 +538,6 @@ textarea:focus {
   height: 100%;
   min-height: inherit;
   border: 0;
-}
-
-.power-bi-presenter {
-  grid-column: 1;
-  grid-row: 1 / 3;
-  align-self: end;
-  justify-self: start;
-  margin-bottom: 0;
-  width: var(--power-bi-presenter-width);
-  max-width: none;
-  max-height: calc(100vh - 2rem);
-  object-fit: contain;
-  object-position: center bottom;
-  transform: translateY(1rem);
-  pointer-events: none;
-  filter: drop-shadow(0 12px 18px rgba(5, 18, 24, 0.45));
 }
 
 .power-bi-frame--placeholder {
@@ -3890,28 +3838,6 @@ textarea:focus {
 
   .power-bi-page {
     height: calc(100vh - 72px);
-    min-height: 560px;
-    padding: 0.8rem;
-    gap: 0.65rem;
-  }
-
-  .power-bi-title {
-    font-size: clamp(1.45rem, 7vw, 2rem);
-  }
-
-  .power-bi-stage {
-    --power-bi-presenter-width: clamp(72px, 19vw, 110px);
-    width: 100%;
-    padding-bottom: 0;
-    grid-template-columns: var(--power-bi-presenter-width) minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.35rem;
-  }
-
-  .power-bi-presenter {
-    width: var(--power-bi-presenter-width);
-    max-height: calc(100vh - 5rem);
-    transform: translateY(0.5rem);
   }
 
   .pool-ranking-page {
