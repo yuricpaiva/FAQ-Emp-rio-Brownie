@@ -109,9 +109,11 @@ async function parseFixedOrdersWorkbook(buffer, expectedDeliveryDate) {
   }
 
   const productsByCode = new Map();
+  const deliveryDates = new Set();
   const errors = [];
   let ignoredCount = 0;
   let validLineCount = 0;
+  let divergentDeliveryLineCount = 0;
 
   rows.slice(1).forEach((columns, rowIndex) => {
     const rowNumber = rowIndex + 2;
@@ -128,8 +130,8 @@ async function parseFixedOrdersWorkbook(buffer, expectedDeliveryDate) {
     const code = normalizeItemCode(columns[indexes.code]);
     const spreadsheetName = String(columns[indexes.name] || "").trim();
     const quantity = Number(String(columns[indexes.quantity] ?? "").replace(",", "."));
-    if (!deliveryDate || deliveryDate !== expectedDeliveryDate) {
-      errors.push(`Linha ${rowNumber}: a entrega deve ser ${formatDate(expectedDeliveryDate)}.`);
+    if (!deliveryDate) {
+      errors.push(`Linha ${rowNumber}: informe uma data de entrega válida.`);
       return;
     }
     if (!code || !spreadsheetName) {
@@ -140,6 +142,9 @@ async function parseFixedOrdersWorkbook(buffer, expectedDeliveryDate) {
       errors.push(`Linha ${rowNumber}: Q. Embalagem deve ser positiva e ter até 4 casas decimais.`);
       return;
     }
+
+    deliveryDates.add(deliveryDate);
+    if (deliveryDate !== expectedDeliveryDate) divergentDeliveryLineCount += 1;
 
     const currentProduct = productsByCode.get(code) || {
       code,
@@ -166,6 +171,8 @@ async function parseFixedOrdersWorkbook(buffer, expectedDeliveryDate) {
     products: Array.from(productsByCode.values()),
     validLineCount,
     ignoredCount,
+    deliveryDates: Array.from(deliveryDates).sort(),
+    divergentDeliveryLineCount,
   };
 }
 
@@ -1270,6 +1277,8 @@ function NewProductionPlanning() {
         fileName: file.name,
         validLineCount: parsed.validLineCount,
         ignoredCount: parsed.ignoredCount,
+        deliveryDates: parsed.deliveryDates,
+        divergentDeliveryLineCount: parsed.divergentDeliveryLineCount,
         products: sortProductsByName(convertedProducts.map((product) => ({
           ...product,
           spreadsheetName: product.name,
@@ -1936,6 +1945,21 @@ function NewProductionPlanning() {
               <span><strong>{importPreview.products.length}</strong> produtos</span>
               <span><strong>{importPreview.ignoredCount}</strong> linhas ignoradas</span>
               <span title={importPreview.fileName}>{importPreview.fileName}</span>
+            </div>
+
+            <div
+              className={`production-import-delivery-notice ${
+                importPreview.divergentDeliveryLineCount ? "production-import-delivery-notice--warning" : ""
+              }`}
+              role="status"
+            >
+              <strong>Destino: produção de {formatDate(importPreview.day)}</strong>
+              <span>
+                Entregas encontradas: {importPreview.deliveryDates.map(formatDate).join(", ")}.
+                {importPreview.divergentDeliveryLineCount
+                  ? ` ${importPreview.divergentDeliveryLineCount} linha(s) possuem data diferente e também serão adicionadas a este dia.`
+                  : " Todas as linhas possuem a mesma data do dia selecionado."}
+              </span>
             </div>
 
             <div className="production-import-table-shell">
