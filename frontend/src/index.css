@@ -2490,6 +2490,59 @@ textarea:focus {
   min-width: 0;
 }
 
+.production-view-modal .production-table-shell--consolidated {
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.production-view-modal .production-consolidated-matrix {
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
+}
+
+.production-consolidated-matrix th,
+.production-consolidated-matrix td {
+  min-width: 140px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.production-consolidated-matrix th:first-child,
+.production-consolidated-matrix td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  width: 110px;
+  min-width: 110px;
+  text-align: left;
+}
+
+.production-consolidated-matrix th:nth-child(2),
+.production-consolidated-matrix td:nth-child(2) {
+  position: sticky;
+  left: 110px;
+  z-index: 2;
+  width: 240px;
+  min-width: 240px;
+  text-align: left;
+}
+
+.production-consolidated-matrix td:first-child,
+.production-consolidated-matrix td:nth-child(2) {
+  background: #fffaf5;
+}
+
+.production-consolidated-matrix th:first-child,
+.production-consolidated-matrix th:nth-child(2) {
+  z-index: 3;
+  background: #eae5e1;
+}
+
+.production-consolidated-matrix__total {
+  font-weight: 800;
+}
+
 .production-view-modal .production-dispatch-store-table {
   width: 100%;
   min-width: 0;

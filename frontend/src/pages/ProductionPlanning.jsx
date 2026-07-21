@@ -115,18 +115,34 @@ function getStockStatusLabel(status) {
   return "Disponível";
 }
 
-function getConsolidatedProducts(productionDay) {
+function getProductionStoreNames(productionDay) {
+  return Object.keys(productionDay?.stores || {}).sort((left, right) =>
+    left.localeCompare(right, "pt-BR", { sensitivity: "base", numeric: true })
+  );
+}
+
+function addQuantities(left, right) {
+  return Math.round(((Number(left) || 0) + (Number(right) || 0) + Number.EPSILON) * 10000) / 10000;
+}
+
+function getConsolidatedProducts(productionDay, storeNames = getProductionStoreNames(productionDay)) {
   const productMap = new Map();
 
-  Object.values(productionDay.stores).forEach((storeProduction) => {
+  storeNames.forEach((storeName) => {
+    const storeProduction = productionDay.stores[storeName];
     storeProduction.products.forEach((product) => {
       const currentProduct = productMap.get(product.code) || {
         code: product.code,
         name: product.name,
         suggestion: 0,
+        suggestionsByStore: Object.fromEntries(storeNames.map((name) => [name, 0])),
       };
 
-      currentProduct.suggestion += Number(product.suggestion || 0);
+      currentProduct.suggestionsByStore[storeName] = addQuantities(
+        currentProduct.suggestionsByStore[storeName],
+        product.suggestion
+      );
+      currentProduct.suggestion = addQuantities(currentProduct.suggestion, product.suggestion);
       productMap.set(product.code, currentProduct);
     });
   });
@@ -202,9 +218,13 @@ function ProductionPlanning() {
   const hasStartedProduction = viewingDay?.status === "em_producao"
     && Boolean(viewingDay?.productionStartedAt);
   const showDispatchColumns = isDispatchMode || isFinalized;
-  const consolidatedProducts = useMemo(
-    () => (viewingDay ? getConsolidatedProducts(viewingDay) : []),
+  const productionStoreNames = useMemo(
+    () => (viewingDay ? getProductionStoreNames(viewingDay) : []),
     [viewingDay]
+  );
+  const consolidatedProducts = useMemo(
+    () => (viewingDay ? getConsolidatedProducts(viewingDay, productionStoreNames) : []),
+    [viewingDay, productionStoreNames]
   );
   const visibleConsolidatedProducts = showDispatchColumns
     ? consolidatedProducts.filter(isDispatchableProduct)
@@ -409,12 +429,10 @@ function ProductionPlanning() {
       const includeDispatchData = isDispatchMode || isFinalized;
       const headers = isConsolidatedExport
         ? [
-            "Dia de produção",
-            "Início do período comparado",
-            "Fim do período comparado",
             "Código",
-            "Nome",
-            "Total a ser enviado",
+            "Produto",
+            ...productionStoreNames,
+            "Total geral",
           ]
         : [
             "Loja",
@@ -438,11 +456,9 @@ function ProductionPlanning() {
           ];
       const rows = isConsolidatedExport
         ? visibleConsolidatedProducts.map((product) => [
-            viewingDay.day,
-            viewingDay.comparisonStartDate,
-            viewingDay.comparisonEndDate,
             product.code,
             product.name,
+            ...productionStoreNames.map((storeName) => toSpreadsheetNumber(product.suggestionsByStore[storeName]) || 0),
             toSpreadsheetNumber(product.suggestion),
           ])
         : (viewingDay.stores[activeView]?.products || []).map((product) => {
@@ -478,7 +494,14 @@ function ProductionPlanning() {
           });
       const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
       worksheet["!cols"] = isConsolidatedExport
-        ? [{ wch: 18 }, { wch: 24 }, { wch: 22 }, { wch: 16 }, { wch: 38 }, { wch: 22 }]
+        ? [
+            { wch: 16 },
+            { wch: 38 },
+            ...productionStoreNames.map((storeName) => ({
+              wch: Math.max(14, Math.min(32, storeName.length + 2)),
+            })),
+            { wch: 18 },
+          ]
         : [
             { wch: 32 }, { wch: 18 }, { wch: 24 }, { wch: 22 }, { wch: 16 },
             { wch: 38 }, { wch: 16 }, { wch: 22 }, { wch: 20 }, { wch: 24 },
@@ -724,7 +747,7 @@ function ProductionPlanning() {
                 >
                   Consolidado
                 </button>
-                {Object.keys(viewingDay.stores).map((storeName) => (
+                {productionStoreNames.map((storeName) => (
                   <button
                     key={storeName}
                     type="button"
@@ -770,14 +793,17 @@ function ProductionPlanning() {
               {exportError && <p className="production-export-error" role="alert">{exportError}</p>}
             </div>
 
-            <div className="production-table-shell">
+            <div className={`production-table-shell ${activeView === "consolidado" ? "production-table-shell--consolidated" : ""}`}>
               {activeView === "consolidado" ? (
-                <table className="production-table production-products-table">
+                <table className="production-table production-products-table production-consolidated-matrix">
                   <thead>
                     <tr>
                       <th>Código</th>
-                      <th>Nome</th>
-                      <th>Total a ser enviado</th>
+                      <th>Produto</th>
+                      {productionStoreNames.map((storeName) => (
+                        <th key={storeName}>{storeName}</th>
+                      ))}
+                      <th>Total geral</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -785,9 +811,19 @@ function ProductionPlanning() {
                       <tr key={product.code}>
                         <td>{product.code}</td>
                         <td>{product.name}</td>
-                        <td>{product.suggestion}</td>
+                        {productionStoreNames.map((storeName) => (
+                          <td key={storeName}>{product.suggestionsByStore[storeName] || 0}</td>
+                        ))}
+                        <td className="production-consolidated-matrix__total">{product.suggestion}</td>
                       </tr>
                     ))}
+                    {!visibleConsolidatedProducts.length && (
+                      <tr>
+                        <td colSpan={productionStoreNames.length + 3} className="production-dispatch-empty">
+                          Nenhum produto com quantidade a ser enviada.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               ) : (
