@@ -17,16 +17,9 @@ const detailInclude = {
   items: { orderBy: [{ name: 'asc' }, { code: 'asc' }, { id: 'asc' }] },
 };
 
-function selectStockCountProducts(products, conversions) {
-  const convertedSourceIds = new Set(
-    (conversions || [])
-      .filter((conversion) => conversion?.active !== false)
-      .map((conversion) => Number(conversion?.sourceProductId))
-      .filter(Number.isInteger)
-  );
+function selectStockCountProducts(products) {
   const productsByCode = new Map(
     (products || [])
-      .filter((product) => !convertedSourceIds.has(Number(product?.id)))
       .map((product) => [String(product?.code || '').trim(), product])
       .filter(([code]) => code)
   );
@@ -169,18 +162,12 @@ async function createStockCount(req, res) {
       return res.json(serializeCount(existing));
     }
 
-    const [activeProducts, activeConversions] = await Promise.all([
-      prisma.productionProduct.findMany({
-        where: { active: true },
-        select: { id: true, code: true, name: true },
-        orderBy: [{ name: 'asc' }, { code: 'asc' }],
-      }),
-      prisma.productionConversion.findMany({
-        where: { active: true },
-        select: { sourceProductId: true, active: true },
-      }),
-    ]);
-    const products = selectStockCountProducts(activeProducts, activeConversions);
+    const activeProducts = await prisma.productionProduct.findMany({
+      where: { active: true },
+      select: { id: true, code: true, name: true },
+      orderBy: [{ name: 'asc' }, { code: 'asc' }],
+    });
+    const products = selectStockCountProducts(activeProducts);
     if (!products.length) throw new StockCountError(409, 'Nao existem produtos ativos para contar.');
 
     const count = await prisma.stockCount.create({

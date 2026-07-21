@@ -33,7 +33,7 @@ test('stock count date uses America/Fortaleza and quantity accepts four decimals
   assert.throws(() => parseQuantity('1,23000'), /quatro casas/);
 });
 
-test('stock count replaces active conversion sources with one alphabetically ordered target', () => {
+test('stock count includes conversion sources and targets once in alphabetical order', () => {
   const products = [
     { id: 1, code: 'KIT-1', name: 'Kit um' },
     { id: 2, code: 'UNIT', name: 'Brigadeiro unitario' },
@@ -42,15 +42,9 @@ test('stock count replaces active conversion sources with one alphabetically ord
     { id: 5, code: 'CAKE', name: 'Bolo' },
     { id: 2, code: 'UNIT', name: 'Brigadeiro unitario' },
   ];
-  const conversions = [
-    { sourceProductId: 1, active: true },
-    { sourceProductId: 3, active: true },
-    { sourceProductId: 4, active: false },
-  ];
-
   assert.deepEqual(
-    selectStockCountProducts(products, conversions).map((product) => product.code),
-    ['CAKE', 'UNIT', 'BROWNIE']
+    selectStockCountProducts(products).map((product) => product.code),
+    ['CAKE', 'UNIT', 'BROWNIE', 'KIT-2', 'KIT-1']
   );
 });
 
@@ -82,6 +76,9 @@ test('stock counts are scoped by store, resumable and immutable after finalizati
   const convertedTarget = await prisma.productionProduct.create({
     data: { code: `COUNT-TARGET-${suffix}`, name: `Unidade Count ${suffix}`, active: true },
   });
+  const inactiveProduct = await prisma.productionProduct.create({
+    data: { code: `COUNT-INACTIVE-${suffix}`, name: `Inativo Count ${suffix}`, active: false },
+  });
   const conversion = await prisma.productionConversion.create({
     data: {
       sourceProductId: convertedSource.id,
@@ -105,7 +102,7 @@ test('stock counts are scoped by store, resumable and immutable after finalizati
     await prisma.user.deleteMany({ where: { id: { in: [userA.id, userB.id] } } });
     await prisma.productionConversion.delete({ where: { id: conversion.id } });
     await prisma.productionProduct.deleteMany({
-      where: { id: { in: [product.id, convertedSource.id, convertedTarget.id] } },
+      where: { id: { in: [product.id, convertedSource.id, convertedTarget.id, inactiveProduct.id] } },
     });
     await prisma.productionStore.deleteMany({ where: { id: { in: [storeA.id, storeB.id] } } });
     await prisma.$disconnect();
@@ -126,8 +123,9 @@ test('stock counts are scoped by store, resumable and immutable after finalizati
   assert.equal(count.productionStoreId, storeA.id);
   const testItem = count.items.find((item) => item.productionProductId === product.id);
   assert.ok(testItem);
-  assert.equal(count.items.some((item) => item.productionProductId === convertedSource.id), false);
+  assert.equal(count.items.filter((item) => item.productionProductId === convertedSource.id).length, 1);
   assert.equal(count.items.filter((item) => item.productionProductId === convertedTarget.id).length, 1);
+  assert.equal(count.items.some((item) => item.productionProductId === inactiveProduct.id), false);
 
   const resumed = await fetch(`${base}/stock-counts`, {
     method: 'POST', headers: { cookie: cookieA, 'Content-Type': 'application/json' }, body: '{}',

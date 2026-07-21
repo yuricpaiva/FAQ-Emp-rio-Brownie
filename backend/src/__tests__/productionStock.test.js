@@ -143,6 +143,9 @@ test('FAQ stock uses the latest finalized count and ignores a newer draft', asyn
   const product = await prisma.productionProduct.create({
     data: { code: `FAQ-${suffix}`, name: `Produto FAQ ${suffix}` },
   });
+  const conversionSource = await prisma.productionProduct.create({
+    data: { code: `FAQ-SOURCE-${suffix}`, name: `Produto de venda FAQ ${suffix}` },
+  });
   const user = await prisma.user.create({
     data: { name: 'Contador FAQ', email: `faq-stock-${suffix}@test.local`, passwordHash: 'test', role: 'store', productionStoreId: store.id },
   });
@@ -173,25 +176,25 @@ test('FAQ stock uses the latest finalized count and ignores a newer draft', asyn
   t.after(async () => {
     await prisma.stockCount.deleteMany({ where: { id: { in: [finalized.id, draft.id] } } });
     await prisma.user.delete({ where: { id: user.id } });
-    await prisma.productionProduct.delete({ where: { id: product.id } });
+    await prisma.productionProduct.deleteMany({ where: { id: { in: [product.id, conversionSource.id] } } });
     await prisma.productionStore.delete({ where: { id: store.id } });
   });
 
   const snapshot = await getFaqStockSnapshot({
     stores: [{ id: store.id, displayName: store.displayName }],
-    productCodes: [product.code, `MISSING-${suffix}`],
-    ignoredMissingProductCodes: [`MISSING-${suffix}`],
+    productCodes: [product.code, conversionSource.code],
+    ignoredMissingProductCodes: [conversionSource.code],
   });
   assert.equal(snapshot.stockDates[store.displayName], '2026-07-18');
   assert.equal(snapshot.items[store.displayName][product.code].quantity, 3.25);
-  assert.equal(snapshot.items[store.displayName][`MISSING-${suffix}`].quantity, 0);
-  assert.equal(snapshot.items[store.displayName][`MISSING-${suffix}`].status, 'not_found');
+  assert.equal(snapshot.items[store.displayName][conversionSource.code].quantity, 0);
+  assert.equal(snapshot.items[store.displayName][conversionSource.code].status, 'not_found');
   assert.doesNotMatch(snapshot.warnings.join(' '), /produto\(s\) ausente\(s\)/);
 
   const conversionContext = buildConversionContext(
-    [product, { code: `MISSING-${suffix}`, name: 'Produto de venda' }],
+    [product, conversionSource],
     [{
-      sourceProduct: { code: `MISSING-${suffix}`, name: 'Produto de venda' },
+      sourceProduct: conversionSource,
       conversionCode: product.code,
       conversionName: product.name,
       conversionFactor: 8,
@@ -204,4 +207,26 @@ test('FAQ stock uses the latest finalized count and ignores a newer draft', asyn
   );
   assert.equal(convertedStock.quantity, 3.25);
   assert.equal(convertedStock.status, 'available');
+
+  await prisma.stockCountItem.create({
+    data: {
+      stockCountId: finalized.id,
+      productionProductId: conversionSource.id,
+      code: conversionSource.code,
+      name: conversionSource.name,
+      quantity: 2,
+    },
+  });
+  const snapshotWithSource = await getFaqStockSnapshot({
+    stores: [{ id: store.id, displayName: store.displayName }],
+    productCodes: [product.code, conversionSource.code],
+    ignoredMissingProductCodes: [conversionSource.code],
+  });
+  const [stockWithConvertedSource] = convertStockItems(
+    Object.entries(snapshotWithSource.items[store.displayName]).map(([code, item]) => ({ code, ...item })),
+    [product.code],
+    conversionContext
+  );
+  assert.equal(stockWithConvertedSource.quantity, 19.25);
+  assert.equal(stockWithConvertedSource.sources.find((item) => item.code === conversionSource.code).convertedQuantity, 16);
 });
