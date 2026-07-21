@@ -2120,6 +2120,26 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.production-import-delivery-notice {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  margin: 0 0 0.8rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(47, 125, 76, 0.22);
+  border-radius: 6px;
+  background: #eef7f1;
+  color: #285f40;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.production-import-delivery-notice--warning {
+  border-color: rgba(162, 105, 21, 0.28);
+  background: #fff6df;
+  color: #765116;
+}
+
 .production-import-table-shell {
   min-height: 0;
   overflow: auto;
