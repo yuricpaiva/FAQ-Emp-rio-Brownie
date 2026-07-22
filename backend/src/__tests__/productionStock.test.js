@@ -163,6 +163,18 @@ test('FAQ stock uses the latest finalized count and ignores a newer draft', asyn
   const user = await prisma.user.create({
     data: { name: 'Contador FAQ', email: `faq-stock-${suffix}@test.local`, passwordHash: 'test', role: 'store', productionStoreId: store.id },
   });
+  const olderFinalized = await prisma.stockCount.create({
+    data: {
+      productionStoreId: store.id,
+      storeName: store.displayName,
+      stockDate: '2026-07-18',
+      status: 'finalized',
+      finalizedAt: new Date('2026-07-18T14:00:00.000Z'),
+      createdById: user.id,
+      createdByName: user.name,
+      items: { create: [{ productionProductId: product.id, code: product.code, name: product.name, quantity: 1 }] },
+    },
+  });
   const finalized = await prisma.stockCount.create({
     data: {
       productionStoreId: store.id,
@@ -188,7 +200,7 @@ test('FAQ stock uses the latest finalized count and ignores a newer draft', asyn
   });
 
   t.after(async () => {
-    await prisma.stockCount.deleteMany({ where: { id: { in: [finalized.id, draft.id] } } });
+    await prisma.stockCount.deleteMany({ where: { id: { in: [olderFinalized.id, finalized.id, draft.id] } } });
     await prisma.user.delete({ where: { id: user.id } });
     await prisma.productionProduct.deleteMany({ where: { id: { in: [product.id, conversionSource.id] } } });
     await prisma.productionStore.delete({ where: { id: store.id } });

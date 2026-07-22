@@ -157,7 +157,7 @@ model StockCount {
   createdBy         User             @relation("StockCountCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   items             StockCountItem[]
 
-  @@unique([productionStoreId, stockDate])
+  @@index([productionStoreId, stockDate, status])
   @@index([stockDate, status])
   @@index([createdById])
 }

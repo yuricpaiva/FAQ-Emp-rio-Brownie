@@ -1,4 +1,4 @@
-const { PrismaClient, Prisma } = require('@prisma/client');
+const { PrismaClient } = require('@prisma/client');
 const { hasAtMostFourDecimalPlaces, normalizeDecimalText } = require('../utils/decimal');
 
 const prisma = new PrismaClient();
@@ -146,19 +146,15 @@ async function listStockCountStores(req, res) {
 }
 
 async function createStockCount(req, res) {
-  let store;
-  let stockDate;
   try {
-    store = await resolveCreationStore(req.user, req.body?.productionStoreId);
-    stockDate = getStockDate();
-    const existing = await prisma.stockCount.findUnique({
-      where: { productionStoreId_stockDate: { productionStoreId: store.id, stockDate } },
+    const store = await resolveCreationStore(req.user, req.body?.productionStoreId);
+    const stockDate = getStockDate();
+    const existing = await prisma.stockCount.findFirst({
+      where: { productionStoreId: store.id, stockDate, status: 'draft' },
       include: detailInclude,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
     if (existing) {
-      if (existing.status === 'finalized') {
-        throw new StockCountError(409, 'A contagem desta loja ja foi finalizada hoje.', { countId: existing.id });
-      }
       return res.json(serializeCount(existing));
     }
 
@@ -189,17 +185,6 @@ async function createStockCount(req, res) {
     });
     return res.status(201).json(serializeCount(count));
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && store && stockDate) {
-      const existing = await prisma.stockCount.findUnique({
-        where: { productionStoreId_stockDate: { productionStoreId: store.id, stockDate } },
-        include: detailInclude,
-      });
-      if (existing?.status === 'draft') return res.json(serializeCount(existing));
-      return res.status(409).json({
-        error: 'A contagem desta loja ja foi finalizada hoje.',
-        ...(existing ? { countId: existing.id } : {}),
-      });
-    }
     return handleError(res, error, 'Nao foi possivel iniciar a contagem.');
   }
 }

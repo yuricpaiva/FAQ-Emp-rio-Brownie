@@ -67,7 +67,7 @@ test('store users require exactly one production store assignment', () => {
   assert.equal(validateCreateUserInput({ ...base, role: 'reader', productionStoreId: 12 }).value.productionStoreId, null);
 });
 
-test('stock counts are scoped by store, resumable and immutable after finalization', async (t) => {
+test('stock counts are scoped by store, resumable, immutable and allow multiple daily counts', async (t) => {
   const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const password = 'count123';
   const passwordHash = await bcrypt.hash(password, 4);
@@ -181,8 +181,29 @@ test('stock counts are scoped by store, resumable and immutable after finalizati
   });
   assert.equal(immutable.status, 409);
 
-  const duplicate = await fetch(`${base}/stock-counts`, {
+  const nextCountResponse = await fetch(`${base}/stock-counts`, {
     method: 'POST', headers: { cookie: cookieA, 'Content-Type': 'application/json' }, body: '{}',
   });
-  assert.equal(duplicate.status, 409);
+  assert.equal(nextCountResponse.status, 201, await nextCountResponse.clone().text());
+  const nextCount = await nextCountResponse.json();
+  createdCountIds.push(nextCount.id);
+  assert.notEqual(nextCount.id, count.id);
+  assert.equal(nextCount.productionStoreId, count.productionStoreId);
+  assert.equal(nextCount.stockDate, count.stockDate);
+  assert.equal(nextCount.status, 'draft');
+
+  const nextCountResumedResponse = await fetch(`${base}/stock-counts`, {
+    method: 'POST', headers: { cookie: cookieA, 'Content-Type': 'application/json' }, body: '{}',
+  });
+  assert.equal(nextCountResumedResponse.status, 200);
+  assert.equal((await nextCountResumedResponse.json()).id, nextCount.id);
+
+  const listResponse = await fetch(`${base}/stock-counts`, { headers: { cookie: cookieA } });
+  assert.equal(listResponse.status, 200);
+  const listedCounts = await listResponse.json();
+  const sameDayCounts = listedCounts.filter((listed) => (
+    listed.productionStoreId === count.productionStoreId && listed.stockDate === count.stockDate
+  ));
+  assert.equal(sameDayCounts.length, 2);
+  assert.equal(sameDayCounts[0].id, nextCount.id);
 });

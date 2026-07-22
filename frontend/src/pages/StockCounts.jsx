@@ -9,6 +9,15 @@ function formatDate(value) {
   return `${day}/${month}/${year}`;
 }
 
+function formatTime(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Fortaleza",
+  }).format(new Date(value));
+}
+
 function StockCounts() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -94,6 +103,7 @@ function StockCounts() {
                 <th>Loja</th>
                 <th>QNT. Produtos</th>
                 <th>Data do estoque</th>
+                <th>Horário</th>
                 <th>Status</th>
                 <th>Ações</th>
               </tr>
@@ -104,6 +114,7 @@ function StockCounts() {
                   <td data-label="Loja"><strong>{count.storeName}</strong></td>
                   <td data-label="QNT. Produtos">{count.productCount}</td>
                   <td data-label="Data do estoque">{formatDate(count.stockDate)}</td>
+                  <td data-label="Horário">{formatTime(count.createdAt)}</td>
                   <td data-label="Status">
                     <span className={`stock-count-status stock-count-status--${count.status}`}>
                       {count.status === "finalized" ? "Finalizada" : "Rascunho"}
