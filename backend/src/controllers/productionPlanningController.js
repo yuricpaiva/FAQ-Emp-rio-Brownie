@@ -187,7 +187,12 @@ function buildImportedStockSnapshot({ importedStock, stores, productCodes, warnI
   };
 }
 
-async function getFaqStockSnapshot({ stores, productCodes, ignoredMissingProductCodes = [] }) {
+async function getFaqStockSnapshot({
+  stores,
+  productCodes,
+  ignoredMissingProductCodes = [],
+  excludedProductCodes = [],
+}) {
   const counts = await prisma.stockCount.findMany({
     where: {
       productionStoreId: { in: stores.map((store) => store.id) },
@@ -205,6 +210,7 @@ async function getFaqStockSnapshot({ stores, productCodes, ignoredMissingProduct
 
   const warnings = [];
   const ignoredMissingCodes = new Set(Array.from(ignoredMissingProductCodes || [], String));
+  const excludedCodes = new Set(Array.from(excludedProductCodes || [], String));
   const stockDates = {};
   const today = getBusinessDate();
   const items = Object.fromEntries(stores.map((store) => {
@@ -218,6 +224,11 @@ async function getFaqStockSnapshot({ stores, productCodes, ignoredMissingProduct
     const countItems = new Map((count?.items || []).map((item) => [String(item.code), item]));
     let missingProducts = 0;
     const storeItems = Object.fromEntries(productCodes.map((code) => {
+      if (excludedCodes.has(code)) return [code, {
+        quantity: 0,
+        status: 'not_found',
+        reason: 'Produto oculto na contagem de estoque.',
+      }];
       const item = countItems.get(code);
       if (item) return [code, { quantity: Number(item.quantity), status: 'available', reason: '' }];
       if (!ignoredMissingCodes.has(code)) missingProducts += 1;
@@ -243,6 +254,19 @@ async function getFaqStockSnapshot({ stores, productCodes, ignoredMissingProduct
   };
 }
 
+function getHiddenStockCountProductCodes(products) {
+  return new Set((products || [])
+    .filter((product) => product.showInStockCount === false)
+    .map((product) => String(product.code)));
+}
+
+function getIgnoredFaqStockCodes(products, conversionContext) {
+  return new Set([
+    ...Array.from(conversionContext?.sourceCodes || []),
+    ...getHiddenStockCountProductCodes(products),
+  ]);
+}
+
 async function resolveStockSnapshot({
   stockSource,
   stores,
@@ -250,6 +274,7 @@ async function resolveStockSnapshot({
   importedStock,
   warnIgnoredStores = true,
   ignoredMissingProductCodes = [],
+  excludedProductCodes = [],
 }) {
   if (stockSource === 'preserved') {
     return {
@@ -268,7 +293,7 @@ async function resolveStockSnapshot({
     };
   }
   if (stockSource === 'faq') {
-    return getFaqStockSnapshot({ stores, productCodes, ignoredMissingProductCodes });
+    return getFaqStockSnapshot({ stores, productCodes, ignoredMissingProductCodes, excludedProductCodes });
   }
   if (stockSource === 'spreadsheet') {
     return buildImportedStockSnapshot({ importedStock, stores, productCodes, warnIgnoredStores });
@@ -459,7 +484,7 @@ async function suggestProduction(req, res) {
     const [activeProducts, activeConversions] = await Promise.all([
       prisma.productionProduct.findMany({
         where: { active: true },
-        select: { id: true, code: true, name: true },
+        select: { id: true, code: true, name: true, showInStockCount: true },
         orderBy: [{ name: 'asc' }, { code: 'asc' }],
       }),
       prisma.productionConversion.findMany({
@@ -468,6 +493,8 @@ async function suggestProduction(req, res) {
       }),
     ]);
     const conversionContext = buildConversionContext(activeProducts, activeConversions);
+    const hiddenStockCountProductCodes = getHiddenStockCountProductCodes(activeProducts);
+    const ignoredFaqStockCodes = getIgnoredFaqStockCodes(activeProducts, conversionContext);
     const outputProducts = activeProducts.filter((product) => !conversionContext.sourceCodes.has(product.code));
 
     const sourceNameByDisplayName = new Map(activeStores.map((store) => [store.displayName, store.sourceName]));
@@ -543,7 +570,8 @@ async function suggestProduction(req, res) {
         stores: activeStores,
         productCodes: activeProductCodes,
         importedStock: req.body?.importedStock,
-        ignoredMissingProductCodes: conversionContext.sourceCodes,
+        ignoredMissingProductCodes: ignoredFaqStockCodes,
+        excludedProductCodes: hiddenStockCountProductCodes,
       }),
     ]);
 
@@ -647,7 +675,7 @@ async function getProductionStocks(req, res) {
     }),
     prisma.productionProduct.findMany({
       where: { active: true },
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, name: true, showInStockCount: true },
     }),
     prisma.productionConversion.findMany({
       where: { active: true },
@@ -686,6 +714,8 @@ async function getProductionStocks(req, res) {
   }
 
   const conversionContext = buildConversionContext(activeProducts, activeConversions);
+  const hiddenStockCountProductCodes = getHiddenStockCountProductCodes(activeProducts);
+  const ignoredFaqStockCodes = getIgnoredFaqStockCodes(activeProducts, conversionContext);
   const requiredStockCodes = getRequiredStockCodes(productCodes, conversionContext);
   let stockSnapshot;
   try {
@@ -695,7 +725,8 @@ async function getProductionStocks(req, res) {
       productCodes: requiredStockCodes,
       importedStock: req.body?.importedStock,
       warnIgnoredStores: false,
-      ignoredMissingProductCodes: conversionContext.sourceCodes,
+      ignoredMissingProductCodes: ignoredFaqStockCodes,
+      excludedProductCodes: hiddenStockCountProductCodes,
     });
   } catch (error) {
     if (error instanceof ProductionStockError) {
@@ -788,6 +819,8 @@ module.exports = {
   calculateProductionSuggestion,
   getBusinessDate,
   getFaqStockSnapshot,
+  getHiddenStockCountProductCodes,
+  getIgnoredFaqStockCodes,
   getProductionStocks,
   normalizeImportedStock,
   normalizeStockSource,

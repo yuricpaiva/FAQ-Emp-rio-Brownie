@@ -11,6 +11,7 @@ const {
   parseQuantity,
   selectStockCountProducts,
 } = require('../controllers/stockCountController');
+const { normalizeProducts } = require('../controllers/productionProductController');
 const { validateCreateUserInput } = require('../utils/validation');
 const prisma = new PrismaClient();
 
@@ -31,6 +32,17 @@ test('stock count date uses America/Fortaleza and quantity accepts four decimals
   assert.throws(() => parseQuantity('-1'), /zero ou positiva/);
   assert.throws(() => parseQuantity('1.23456'), /quatro casas/);
   assert.throws(() => parseQuantity('1,23000'), /quatro casas/);
+});
+
+test('product visibility normalization preserves explicit flags and legacy omissions', () => {
+  const products = normalizeProducts([
+    { code: 'VISIBLE', name: 'Visivel', showInStockCount: true },
+    { code: 'HIDDEN', name: 'Oculto', showInStockCount: false },
+    { code: 'LEGACY', name: 'Legado' },
+  ]);
+  assert.equal(products.find((product) => product.code === 'VISIBLE').showInStockCount, true);
+  assert.equal(products.find((product) => product.code === 'HIDDEN').showInStockCount, false);
+  assert.equal(products.find((product) => product.code === 'LEGACY').showInStockCount, undefined);
 });
 
 test('stock count includes conversion sources and targets once in alphabetical order', () => {
@@ -79,6 +91,10 @@ test('stock counts are scoped by store, resumable and immutable after finalizati
   const inactiveProduct = await prisma.productionProduct.create({
     data: { code: `COUNT-INACTIVE-${suffix}`, name: `Inativo Count ${suffix}`, active: false },
   });
+  const hiddenProduct = await prisma.productionProduct.create({
+    data: { code: `COUNT-HIDDEN-${suffix}`, name: `Oculto Count ${suffix}`, active: true, showInStockCount: false },
+  });
+  assert.equal(product.showInStockCount, true);
   const conversion = await prisma.productionConversion.create({
     data: {
       sourceProductId: convertedSource.id,
@@ -102,7 +118,7 @@ test('stock counts are scoped by store, resumable and immutable after finalizati
     await prisma.user.deleteMany({ where: { id: { in: [userA.id, userB.id] } } });
     await prisma.productionConversion.delete({ where: { id: conversion.id } });
     await prisma.productionProduct.deleteMany({
-      where: { id: { in: [product.id, convertedSource.id, convertedTarget.id, inactiveProduct.id] } },
+      where: { id: { in: [product.id, convertedSource.id, convertedTarget.id, inactiveProduct.id, hiddenProduct.id] } },
     });
     await prisma.productionStore.deleteMany({ where: { id: { in: [storeA.id, storeB.id] } } });
     await prisma.$disconnect();
@@ -126,6 +142,7 @@ test('stock counts are scoped by store, resumable and immutable after finalizati
   assert.equal(count.items.filter((item) => item.productionProductId === convertedSource.id).length, 1);
   assert.equal(count.items.filter((item) => item.productionProductId === convertedTarget.id).length, 1);
   assert.equal(count.items.some((item) => item.productionProductId === inactiveProduct.id), false);
+  assert.equal(count.items.some((item) => item.productionProductId === hiddenProduct.id), false);
 
   const resumed = await fetch(`${base}/stock-counts`, {
     method: 'POST', headers: { cookie: cookieA, 'Content-Type': 'application/json' }, body: '{}',

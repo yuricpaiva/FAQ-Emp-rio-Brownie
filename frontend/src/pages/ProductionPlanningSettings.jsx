@@ -292,6 +292,7 @@ function ProductsSettings() {
           id: product.id || createProductId(),
           code: product.code,
           name: product.name,
+          showInStockCount: product.showInStockCount !== false,
         }))));
       })
       .catch(() => {
@@ -313,7 +314,7 @@ function ProductsSettings() {
   const addProduct = () => {
     setProducts((currentProducts) => [
       ...currentProducts,
-      { id: createProductId(), code: "", name: "" },
+      { id: createProductId(), code: "", name: "", showInStockCount: true },
     ]);
   };
 
@@ -343,6 +344,7 @@ function ProductsSettings() {
           id: currentProduct?.id || createProductId(),
           code,
           name: importedProduct.name,
+          showInStockCount: currentProduct?.showInStockCount ?? true,
         });
       });
 
@@ -379,7 +381,11 @@ function ProductsSettings() {
       const name = product.name.trim();
       if (!code) return;
 
-      productsByCode.set(code, { code, name });
+      productsByCode.set(code, {
+        code,
+        name,
+        showInStockCount: product.showInStockCount !== false,
+      });
     });
 
     return Array.from(productsByCode.values());
@@ -402,6 +408,7 @@ function ProductsSettings() {
         id: product.id || createProductId(),
         code: product.code,
         name: product.name,
+        showInStockCount: product.showInStockCount !== false,
       }))));
       setMessage("Produtos salvos com sucesso.");
     } catch (error) {
@@ -462,11 +469,12 @@ function ProductsSettings() {
       )}
 
       <div className="production-table-shell">
-        <table className="production-table production-products-settings-table">
+        <table className="production-table production-products-settings-table production-products-catalog-table">
           <thead>
             <tr>
               <th>Código do produto vendido</th>
               <th>Nome do produto vendido</th>
+              <th>Mostrar na contagem?</th>
               <th>Ação</th>
             </tr>
           </thead>
@@ -488,6 +496,17 @@ function ProductsSettings() {
                     onChange={(event) => updateProduct(product.id, "name", event.target.value)}
                     placeholder="Nome do produto"
                   />
+                </td>
+                <td>
+                  <label className="production-store-active-check">
+                    <input
+                      type="checkbox"
+                      checked={product.showInStockCount !== false}
+                      onChange={(event) => updateProduct(product.id, "showInStockCount", event.target.checked)}
+                      aria-label={`Mostrar ${product.name || product.code || "produto"} na contagem`}
+                    />
+                    <span>{product.showInStockCount !== false ? "Sim" : "Não"}</span>
+                  </label>
                 </td>
                 <td>
                   <button

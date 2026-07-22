@@ -12,10 +12,13 @@ function normalizeProducts(products) {
   products.forEach((product) => {
     const code = String(product?.code || '').trim();
     const name = String(product?.name || '').trim();
+    const showInStockCount = typeof product?.showInStockCount === 'boolean'
+      ? product.showInStockCount
+      : undefined;
 
     if (!code) return;
 
-    productsByCode.set(code, { code, name });
+    productsByCode.set(code, { code, name, showInStockCount });
   });
 
   return Array.from(productsByCode.values());
@@ -27,6 +30,7 @@ function mapProduct(product) {
     code: product.code,
     name: product.name,
     active: product.active,
+    showInStockCount: product.showInStockCount,
     createdAt: product.createdAt,
     updatedAt: product.updatedAt
   };
@@ -71,12 +75,16 @@ async function saveProductionProducts(req, res) {
         where: { code: product.code },
         update: {
           name: product.name,
-          active: true
+          active: true,
+          ...(typeof product.showInStockCount === 'boolean'
+            ? { showInStockCount: product.showInStockCount }
+            : {}),
         },
         create: {
           code: product.code,
           name: product.name,
-          active: true
+          active: true,
+          showInStockCount: product.showInStockCount ?? true,
         }
       })
     ));
@@ -107,7 +115,7 @@ async function upsertProductionProduct(req, res) {
   const product = await prisma.productionProduct.upsert({
     where: { code },
     update: { name, active: true },
-    create: { code, name, active: true }
+    create: { code, name, active: true, showInStockCount: true }
   });
 
   return res.status(201).json(mapProduct(product));
@@ -115,6 +123,7 @@ async function upsertProductionProduct(req, res) {
 
 module.exports = {
   listProductionProducts,
+  normalizeProducts,
   saveProductionProducts,
   upsertProductionProduct
 };

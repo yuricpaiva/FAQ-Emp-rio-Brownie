@@ -2751,6 +2751,10 @@ textarea:focus {
   min-width: 720px;
 }
 
+.production-products-catalog-table {
+  min-width: 880px;
+}
+
 .production-products-settings-table input,
 .production-products-settings-table select {
   width: 100%;

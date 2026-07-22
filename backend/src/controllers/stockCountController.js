@@ -163,7 +163,7 @@ async function createStockCount(req, res) {
     }
 
     const activeProducts = await prisma.productionProduct.findMany({
-      where: { active: true },
+      where: { active: true, showInStockCount: true },
       select: { id: true, code: true, name: true },
       orderBy: [{ name: 'asc' }, { code: 'asc' }],
     });

@@ -12,11 +12,25 @@ const {
   buildImportedStockSnapshot,
   calculateProductionSuggestion,
   getFaqStockSnapshot,
+  getHiddenStockCountProductCodes,
+  getIgnoredFaqStockCodes,
   normalizeImportedStock,
   normalizeStockSource,
 } = require('../controllers/productionPlanningController');
 
 const prisma = new PrismaClient();
+
+test('FAQ stock ignores missing warnings for conversion sources and hidden count products', () => {
+  const ignoredCodes = getIgnoredFaqStockCodes([
+    { code: 'VISIBLE', showInStockCount: true },
+    { code: 'HIDDEN', showInStockCount: false },
+  ], { sourceCodes: new Set(['CONVERSION-SOURCE']) });
+  assert.deepEqual(Array.from(ignoredCodes).sort(), ['CONVERSION-SOURCE', 'HIDDEN']);
+  assert.deepEqual(Array.from(getHiddenStockCountProductCodes([
+    { code: 'VISIBLE', showInStockCount: true },
+    { code: 'HIDDEN', showInStockCount: false },
+  ])), ['HIDDEN']);
+});
 
 test('Everest stock rows preserve valid balances and classify missing, duplicate and negative values', () => {
   const originalWarn = console.warn;
@@ -207,6 +221,16 @@ test('FAQ stock uses the latest finalized count and ignores a newer draft', asyn
   );
   assert.equal(convertedStock.quantity, 3.25);
   assert.equal(convertedStock.status, 'available');
+
+  const snapshotWithExcludedProduct = await getFaqStockSnapshot({
+    stores: [{ id: store.id, displayName: store.displayName }],
+    productCodes: [product.code],
+    ignoredMissingProductCodes: [product.code],
+    excludedProductCodes: [product.code],
+  });
+  assert.equal(snapshotWithExcludedProduct.items[store.displayName][product.code].quantity, 0);
+  assert.equal(snapshotWithExcludedProduct.items[store.displayName][product.code].status, 'not_found');
+  assert.doesNotMatch(snapshotWithExcludedProduct.warnings.join(' '), /produto\(s\) ausente\(s\)/);
 
   await prisma.stockCountItem.create({
     data: {
