@@ -58,7 +58,7 @@ function LoginCarousel() {
 
   useEffect(() => {
     if (paused || reducedMotion) return undefined;
-    const timer = window.setInterval(showNext, 4500);
+    const timer = window.setInterval(showNext, 2000);
     return () => window.clearInterval(timer);
   }, [paused, reducedMotion, showNext]);
 
