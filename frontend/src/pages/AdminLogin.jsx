@@ -7,7 +7,6 @@ const carouselSlides = [
   { src: "/login-carousel/loja-02.jpg", alt: "Balcão de uma unidade Empório Brownie" },
   { src: "/login-carousel/loja-03.jpg", alt: "Interior de uma unidade Empório Brownie" },
   { src: "/login-carousel/loja-04.jpg", alt: "Entrada de uma unidade Empório Brownie" },
-  { src: "/login-carousel/loja-05.jpg", alt: "Salão de uma unidade Empório Brownie" },
   { src: "/login-carousel/loja-06.jpg", alt: "Vitrine de uma unidade Empório Brownie" },
 ];
 
