@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',
-      filename: 'sw.js',
+      filename: 'sw-v2.js',
       registerType: 'prompt',
       injectRegister: null,
       injectManifest: {
