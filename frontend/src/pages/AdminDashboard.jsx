@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 
 const roleLabels = {
   reader: "Leitor",
@@ -12,7 +13,8 @@ const roleLabels = {
 };
 
 function AdminDashboard() {
-  const { hasRole } = useAuth();
+  const { confirm } = useSystemNotification();
+  const { user, hasRole, endSession } = useAuth();
   const canManageUsers = hasRole(["admin"]);
   const [articles, setArticles] = useState([]);
   const [query, setQuery] = useState("");
@@ -125,7 +127,10 @@ function AdminDashboard() {
   }, [users]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Deseja remover este artigo?")) return;
+    if (!(await confirm("O artigo será removido permanentemente.", {
+      title: "Remover artigo?",
+      confirmLabel: "Remover",
+    }))) return;
     try {
       await api.delete(`/admin/articles/${id}`);
       loadArticles();
@@ -140,6 +145,7 @@ function AdminDashboard() {
     setUserMessage("");
 
     try {
+      let successMessage = "";
       let photoUrl;
       if (userPhoto) {
         const formData = new FormData();
@@ -162,18 +168,25 @@ function AdminDashboard() {
 
       if (editingUserId) {
         await api.put(`/admin/users/${editingUserId}`, payload);
-        setUserMessage("Usuário atualizado com sucesso.");
+        if (userPassword && editingUserId === user?.id) {
+          endSession("Senha alterada. Entre novamente com sua nova senha.");
+          return;
+        }
+        successMessage = userPassword
+          ? "Senha redefinida com sucesso. Todas as sessões do usuário foram encerradas."
+          : "Usuário atualizado com sucesso.";
       } else {
         await api.post("/admin/users", {
           ...payload,
           password: userPassword,
           photoUrl: photoUrl || "",
         });
-        setUserMessage("Usuário criado com sucesso.");
+        successMessage = "Usuário criado com sucesso.";
       }
 
       await loadUsers();
       resetUserForm();
+      setUserMessage(successMessage);
     } catch (err) {
       setUserMessage(err.response?.data?.error || "Não foi possível salvar o usuário.");
     }
@@ -182,7 +195,12 @@ function AdminDashboard() {
   const handleToggleActive = async (id, active) => {
     try {
       await api.put(`/admin/users/${id}`, { active });
-      loadUsers();
+      await loadUsers();
+      setUserMessage(
+        active
+          ? "Usuário reativado com sucesso."
+          : "Usuário inativado com sucesso. Todas as sessões foram encerradas."
+      );
     } catch {
       setUserMessage("Não foi possível atualizar o status do usuário.");
     }
@@ -258,7 +276,7 @@ function AdminDashboard() {
           </div>
         </div>
 
-        {error && <p className="form-message form-message--error">{error}</p>}
+        {error && <SystemNotification variant="error">{error}</SystemNotification>}
 
         <div className="admin-filter-panel">
           <label className="admin-filter-field">
@@ -457,15 +475,11 @@ function AdminDashboard() {
                   </label>
 
                   {userMessage && (
-                    <p
-                      className={`form-message ${
-                        userMessage.toLowerCase().includes("sucesso")
-                          ? "form-message--success"
-                          : "form-message--error"
-                      }`}
+                    <SystemNotification
+                      variant={userMessage.toLowerCase().includes("sucesso") ? "success" : "error"}
                     >
                       {userMessage}
-                    </p>
+                    </SystemNotification>
                   )}
 
                   <div className="form-actions">

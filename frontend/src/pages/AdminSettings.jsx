@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
+import SystemNotification from "../components/SystemNotification";
 
 function AdminSettings() {
   const [poolEnabled, setPoolEnabled] = useState(true);
@@ -137,9 +138,7 @@ function AdminSettings() {
         </div>
 
         {message && (
-          <p className={`form-message ${messageIsSuccess ? "form-message--success" : "form-message--error"}`}>
-            {message}
-          </p>
+          <SystemNotification variant={messageIsSuccess ? "success" : "error"}>{message}</SystemNotification>
         )}
       </section>
 
@@ -238,9 +237,9 @@ function AdminSettings() {
         </div>
 
         {powerBiMessage && (
-          <p className={`form-message ${powerBiMessageIsSuccess ? "form-message--success" : "form-message--error"}`}>
+          <SystemNotification variant={powerBiMessageIsSuccess ? "success" : "error"}>
             {powerBiMessage}
-          </p>
+          </SystemNotification>
         )}
       </form>
     </section>

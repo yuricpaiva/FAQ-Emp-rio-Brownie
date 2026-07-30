@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import SystemNotification from "../components/SystemNotification";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -91,7 +92,7 @@ function StockCounts() {
         </button>
       </header>
 
-      {error && <p className="form-message form-message--error">{error}</p>}
+      {error && <SystemNotification variant="error">{error}</SystemNotification>}
 
       <div className="stock-count-table-wrap">
         {loading ? (

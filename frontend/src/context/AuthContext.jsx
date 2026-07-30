@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api, { setUnauthorizedHandler } from "../services/api";
 
 const AuthContext = createContext(null);
@@ -7,11 +7,10 @@ const AUTH_MESSAGE_KEY = "faq_auth_message";
 
 export function AuthProvider({ children }) {
   const navigate = useNavigate();
-  const location = useLocation();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const res = await api.get("/auth/me", { skipAuthHandling: true });
       setUser(res.data);
@@ -22,26 +21,70 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    refreshUser();
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => {
-      setUser(null);
-      if (location.pathname !== "/login") {
-        sessionStorage.setItem(
-          AUTH_MESSAGE_KEY,
-          "Sua sessão expirou. Faça login novamente."
-        );
-        navigate("/login", { replace: true });
-      }
-    });
+    refreshUser();
+  }, [refreshUser]);
+
+  const endSession = useCallback((message = "Sua sessão expirou. Faça login novamente.") => {
+    setUser(null);
+    if (message) {
+      sessionStorage.setItem(AUTH_MESSAGE_KEY, message);
+    }
+    if (window.location.pathname !== "/login") {
+      navigate("/login", { replace: true });
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => endSession());
 
     return () => setUnauthorizedHandler(null);
-  }, [location.pathname, navigate]);
+  }, [endSession]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    let cancelled = false;
+    let validating = false;
+
+    const validateSession = async () => {
+      if (
+        cancelled
+        || validating
+        || !navigator.onLine
+        || document.visibilityState !== "visible"
+      ) {
+        return;
+      }
+
+      validating = true;
+      try {
+        const res = await api.get("/auth/me");
+        if (!cancelled) setUser(res.data);
+      } catch {
+        // Falhas de rede não encerram a sessão. O interceptor trata apenas HTTP 401.
+      } finally {
+        validating = false;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") validateSession();
+    };
+
+    const intervalId = window.setInterval(validateSession, 60 * 1000);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("online", validateSession);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("online", validateSession);
+    };
+  }, [user?.id]);
 
   const login = async (email, password) => {
     const res = await api.post(
@@ -63,13 +106,13 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const consumeAuthMessage = () => {
+  const consumeAuthMessage = useCallback(() => {
     const message = sessionStorage.getItem(AUTH_MESSAGE_KEY) || "";
     if (message) {
       sessionStorage.removeItem(AUTH_MESSAGE_KEY);
     }
     return message;
-  };
+  }, []);
 
   const updateUser = (nextUser) => {
     setUser(nextUser);
@@ -83,10 +126,11 @@ export function AuthProvider({ children }) {
       logout,
       refreshUser,
       updateUser,
+      endSession,
       consumeAuthMessage,
       hasRole: (roles) => !!user && roles.includes(user.role)
     }),
-    [user, loading]
+    [user, loading, refreshUser, endSession, consumeAuthMessage]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

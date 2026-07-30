@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import { normalizeDecimalInput } from "../utils/decimalInput";
 import { compareProductsByName, sortProductsByName } from "../utils/productSorting";
+import SystemNotification from "../components/SystemNotification";
 
 function sortConversionsByProductName(conversions, products) {
   const productById = new Map(products.map((product) => [String(product.id), product]));
@@ -15,34 +16,27 @@ function sortConversionsByProductName(conversions, products) {
 const settingsTabs = [
   {
     id: "general",
-    label: "Geral",
-    title: "Configurações gerais",
-    items: [
-      "Definir regras padrão de sugestão de produção.",
-      "Controlar parâmetros gerais por período.",
-      "Preparar integrações futuras com estoque e vendas.",
-    ],
+    label: "Lojas e rotas",
+    title: "Lojas e rotas",
+    description: "Defina quais lojas participam do planejamento e os dias de entrega de cada operação.",
   },
   {
     id: "products",
-    label: "Produtos vendidos",
-    title: "Produtos vendidos",
+    label: "Catálogo",
+    title: "Catálogo de produtos",
+    description: "Mantenha os produtos vendidos que servem de base para a sugestão de produção.",
   },
   {
     id: "conversions",
     label: "Conversões",
-    title: "Conversões",
-    items: [
-      "Configurar equivalências entre unidade e embalagem.",
-      "Definir conversões para produção e expedição.",
-      "Preparar cálculo consolidado por produto.",
-    ],
+    title: "Conversões de produtos",
+    description: "Relacione itens vendidos aos produtos de produção e defina seus fatores de conversão.",
   },
   {
     id: "connections",
-    label: "Conexões",
-    title: "Conexões externas",
-    description: "Configure e valide os bancos usados pelo planejamento de produção.",
+    label: "Integrações",
+    title: "Integrações de dados",
+    description: "Configure e valide as conexões usadas para consultar vendas, produtos e estoque.",
   },
 ];
 
@@ -463,9 +457,9 @@ function ProductsSettings() {
       </div>
 
       {message && (
-        <p className={`form-message ${message.toLowerCase().includes("sucesso") ? "form-message--success" : "form-message--error"}`}>
+        <SystemNotification variant={message.toLowerCase().includes("sucesso") ? "success" : "error"}>
           {message}
-        </p>
+        </SystemNotification>
       )}
 
       <div className="production-table-shell">
@@ -778,9 +772,9 @@ function GeneralSettings() {
       </section>
 
       {message && (
-        <p className={`form-message ${message.toLowerCase().includes("sucesso") ? "form-message--success" : "form-message--error"}`}>
+        <SystemNotification variant={message.toLowerCase().includes("sucesso") ? "success" : "error"}>
           {message}
-        </p>
+        </SystemNotification>
       )}
     </div>
   );
@@ -1011,9 +1005,9 @@ function ConversionsSettings() {
       </div>
 
       {message && (
-        <p className={`form-message ${message.toLowerCase().includes("sucesso") ? "form-message--success" : "form-message--error"}`}>
+        <SystemNotification variant={message.toLowerCase().includes("sucesso") ? "success" : "error"}>
           {message}
-        </p>
+        </SystemNotification>
       )}
 
       <div className="production-table-shell">
@@ -1331,9 +1325,11 @@ function DatabaseConnectionSection({ system, title, description, state, setState
 
       <ConnectionLog result={state.testResult} />
       {state.message && (
-        <p className={`form-message ${state.validationToken || state.message.toLowerCase().includes("sucesso") ? "form-message--success" : "form-message--error"}`}>
+        <SystemNotification
+          variant={state.validationToken || state.message.toLowerCase().includes("sucesso") ? "success" : "error"}
+        >
           {state.message}
-        </p>
+        </SystemNotification>
       )}
     </section>
   );
@@ -1363,7 +1359,7 @@ function ConnectionsSettings() {
   }, []);
 
   if (loading) return <p className="empty-state production-empty-state">Carregando conexões...</p>;
-  if (loadError) return <p className="form-message form-message--error">{loadError}</p>;
+  if (loadError) return <SystemNotification variant="error">{loadError}</SystemNotification>;
 
   return (
     <div className="database-connections-settings">
@@ -1387,59 +1383,117 @@ function ConnectionsSettings() {
 
 function ProductionPlanningSettings() {
   const [activeTab, setActiveTab] = useState(settingsTabs[0].id);
+  const tabListRef = useRef(null);
   const currentTab = settingsTabs.find((tab) => tab.id === activeTab) || settingsTabs[0];
+  const currentTabIndex = settingsTabs.findIndex((tab) => tab.id === activeTab);
+
+  const selectTabByIndex = (index) => {
+    const nextIndex = (index + settingsTabs.length) % settingsTabs.length;
+    const nextTab = settingsTabs[nextIndex];
+    setActiveTab(nextTab.id);
+    tabListRef.current?.querySelector(`[data-tab-id="${nextTab.id}"]`)?.focus();
+  };
+
+  const handleTabKeyDown = (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault();
+      selectTabByIndex(currentTabIndex + 1);
+    } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      selectTabByIndex(currentTabIndex - 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      selectTabByIndex(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      selectTabByIndex(settingsTabs.length - 1);
+    }
+  };
 
   return (
     <section className="production-planning-page production-settings-page">
-      <div className="production-planning-toolbar">
-        <div>
-          <h1>Configurações do Planejamento</h1>
+      <nav className="production-settings-breadcrumb" aria-label="Navegação estrutural">
+        <Link to="/planejamento-producao">Planejamento de produção</Link>
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">Configurações</span>
+      </nav>
+
+      <header className="production-settings-header">
+        <div className="production-settings-header__index" aria-hidden="true">04</div>
+        <div className="production-settings-header__copy">
+          <h1>Configurações do planejamento</h1>
+          <p>Gerencie as bases e regras que sustentam a sugestão de produção.</p>
         </div>
-        <Link to="/planejamento-producao" className="button button--ghost">
-          Voltar ao planejamento
+        <Link to="/planejamento-producao" className="button production-settings-header__back">
+          Voltar
         </Link>
-      </div>
+      </header>
 
-      <div className="production-settings-tabs" role="tablist" aria-label="Configurações do planejamento">
-        {settingsTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            className={activeTab === tab.id ? "production-settings-tabs__item--active" : ""}
-            onClick={() => setActiveTab(tab.id)}
+      <div className="production-settings-workspace">
+        <aside className="production-settings-nav" aria-label="Seções de configuração">
+          <div className="production-settings-nav__heading">
+            <span>Seções</span>
+            <span>{settingsTabs.length}</span>
+          </div>
+          <div
+            ref={tabListRef}
+            className="production-settings-tabs"
+            role="tablist"
+            aria-orientation="vertical"
+            aria-label="Configurações do planejamento"
+            onKeyDown={handleTabKeyDown}
           >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <section className="production-settings-panel">
-        <div>
-          <h2>{currentTab.title}</h2>
-          <p>{currentTab.description}</p>
-        </div>
-
-        {activeTab === "general" ? (
-          <GeneralSettings />
-        ) : activeTab === "products" ? (
-          <ProductsSettings />
-        ) : activeTab === "conversions" ? (
-          <ConversionsSettings />
-        ) : activeTab === "connections" ? (
-          <ConnectionsSettings />
-        ) : (
-          <div className="production-settings-placeholder">
-            {currentTab.items.map((item) => (
-              <div key={item}>
-                <span aria-hidden="true">•</span>
-                <p>{item}</p>
-              </div>
+            {settingsTabs.map((tab, index) => (
+              <button
+                key={tab.id}
+                id={`production-settings-tab-${tab.id}`}
+                data-tab-id={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`production-settings-panel-${tab.id}`}
+                tabIndex={activeTab === tab.id ? 0 : -1}
+                className={activeTab === tab.id ? "production-settings-tabs__item--active" : ""}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <span className="production-settings-tabs__number">{String(index + 1).padStart(2, "0")}</span>
+                <span className="production-settings-tabs__label">
+                  <strong>{tab.label}</strong>
+                  <small>{tab.description}</small>
+                </span>
+              </button>
             ))}
           </div>
-        )}
-      </section>
+        </aside>
+
+        <section
+          id={`production-settings-panel-${activeTab}`}
+          className="production-settings-panel"
+          role="tabpanel"
+          aria-labelledby={`production-settings-tab-${activeTab}`}
+          tabIndex="0"
+        >
+          <header className="production-settings-panel__header">
+            <span>{String(currentTabIndex + 1).padStart(2, "0")}</span>
+            <div>
+              <h2>{currentTab.title}</h2>
+              <p>{currentTab.description}</p>
+            </div>
+          </header>
+
+          <div className="production-settings-panel__content">
+            {activeTab === "general" ? (
+              <GeneralSettings />
+            ) : activeTab === "products" ? (
+              <ProductsSettings />
+            ) : activeTab === "conversions" ? (
+              <ConversionsSettings />
+            ) : (
+              <ConnectionsSettings />
+            )}
+          </div>
+        </section>
+      </div>
     </section>
   );
 }

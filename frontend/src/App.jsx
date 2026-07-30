@@ -1,7 +1,9 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
+import PwaManager from "./components/PwaManager";
 import Sidebar from "./components/Sidebar";
+import { SystemNotificationProvider } from "./components/SystemNotification";
 
 const Home = lazy(() => import("./pages/Home"));
 const Category = lazy(() => import("./pages/Category"));
@@ -96,20 +98,26 @@ function App() {
   const isLoginPage = location.pathname === "/login" || location.pathname === "/admin/login";
   const isFullPage = ["/power-bi", "/ranking-bolao"].includes(location.pathname);
 
-  if (isLoginPage) {
-    return <AppRoutes />;
-  }
-
-  return (
-    <div className="app-shell">
-      <Sidebar />
-      <main className={`app-shell__content ${isFullPage ? "app-shell__content--full" : ""}`}>
-        <div className={`app-shell__inner ${isFullPage ? "app-shell__inner--full" : ""}`}>
-          <AppRoutes />
-        </div>
-      </main>
-    </div>
+  const content = isLoginPage ? (
+      <>
+        <AppRoutes />
+        <PwaManager />
+      </>
+    ) : (
+    <>
+      <div className="app-shell">
+        <Sidebar />
+        <main className={`app-shell__content ${isFullPage ? "app-shell__content--full" : ""}`}>
+          <div className={`app-shell__inner ${isFullPage ? "app-shell__inner--full" : ""}`}>
+            <AppRoutes />
+          </div>
+        </main>
+      </div>
+      <PwaManager />
+    </>
   );
+
+  return <SystemNotificationProvider>{content}</SystemNotificationProvider>;
 }
 
 export default App;

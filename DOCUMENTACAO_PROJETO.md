@@ -1,10 +1,10 @@
-# FAQ Empório Brownie — Documentação do Sistema
+# FAQ EB — Documentação do Sistema
 
 > Documento técnico e funcional baseado no estado da branch `main` em 23/07/2026, commit `91ff6ae`.
 
 ## 1. Visão geral
 
-O **FAQ Empório Brownie** é uma plataforma web interna que começou como uma base de conhecimento e evoluiu para concentrar processos operacionais da empresa.
+O **FAQ EB** é uma plataforma web interna que começou como uma base de conhecimento e evoluiu para concentrar processos operacionais da empresa.
 
 Atualmente, o sistema reúne:
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
+import SystemNotification from "../components/SystemNotification";
 
 function PowerBI() {
   const [configuration, setConfiguration] = useState(null);
@@ -19,7 +20,7 @@ function PowerBI() {
   }
 
   if (error) {
-    return <p className="form-message form-message--error">{error}</p>;
+    return <SystemNotification variant="error">{error}</SystemNotification>;
   }
 
   if (!configuration?.enabled || !configuration?.hasAccess || !configuration?.url) {

@@ -15,12 +15,30 @@ model User {
   role              String           @default("reader")
   photoUrl          String           @default("")
   active            Boolean          @default(true)
+  authVersion       Int              @default(0)
   productionStoreId Int?
   powerBiAccess     PowerBiAccess?
   productionStore   ProductionStore? @relation("UserProductionStore", fields: [productionStoreId], references: [id], onDelete: SetNull)
   createdStockCounts StockCount[]     @relation("StockCountCreatedBy")
 
   @@index([productionStoreId])
+}
+
+model LoginThrottle {
+  id              Int       @id @default(autoincrement())
+  scope           String
+  keyHash         String
+  failureCount    Int       @default(0)
+  lockLevel       Int       @default(0)
+  windowStartedAt DateTime
+  lockedUntil     DateTime?
+  lastFailedAt    DateTime
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([scope, keyHash])
+  @@index([lockedUntil])
+  @@index([updatedAt])
 }
 
 model Category {

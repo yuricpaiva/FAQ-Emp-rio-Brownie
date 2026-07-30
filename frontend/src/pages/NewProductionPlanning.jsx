@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
 import { normalizeDecimalInput } from "../utils/decimalInput";
 import { compareProductsByName, sortProductsByName } from "../utils/productSorting";
+import SystemNotification from "../components/SystemNotification";
 
 const today = new Date().toISOString().slice(0, 10);
 const calendarWeekdays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -13,7 +14,7 @@ const fixedNature = "VENDA NACIONAL";
 const orderNature = "ENCOMENDA - CUPOM FISCAL";
 const stockSourceLabels = {
   everest: "Estoque Everest",
-  faq: "Último estoque do FAQ",
+  faq: "Último estoque do FAQ EB",
   spreadsheet: "Estoque importado",
 };
 
@@ -1584,7 +1585,7 @@ function NewProductionPlanning() {
             Voltar
           </Link>
         </div>
-        <p className="form-message form-message--error" role="alert">{editLoadError}</p>
+        <SystemNotification variant="error">{editLoadError}</SystemNotification>
       </section>
     );
   }
@@ -1613,7 +1614,7 @@ function NewProductionPlanning() {
         </Link>
       </div>
 
-      {editLoadError && <p className="form-message form-message--error" role="alert">{editLoadError}</p>}
+      {editLoadError && <SystemNotification variant="error">{editLoadError}</SystemNotification>}
 
       <form className="production-form" onSubmit={handleSubmit}>
         <div className={`production-form-panel ${isHeaderCollapsed ? "production-form-panel--collapsed" : ""}`}>
@@ -1670,7 +1671,7 @@ function NewProductionPlanning() {
                     <span>Origem do estoque</span>
                     <select value={stockSource} onChange={(event) => handleStockSourceChange(event.target.value)}>
                       <option value="everest">Estoque Everest</option>
-                      <option value="faq">Último estoque do FAQ</option>
+                      <option value="faq">Último estoque do FAQ EB</option>
                       <option value="spreadsheet">Importar estoque</option>
                     </select>
                   </label>
@@ -1723,24 +1724,28 @@ function NewProductionPlanning() {
         </div>
 
         {productsMessage && (
-          <p className="form-message form-message--error">{productsMessage}</p>
+          <SystemNotification variant="error">{productsMessage}</SystemNotification>
         )}
         {stockWarnings.length > 0 && (
-          <div className="production-stock-warning" role="status">
-            <strong>{isEditing ? "Estoque preservado" : stockSourceLabels[stockSource]}</strong>
+          <SystemNotification
+            variant="warning"
+            title={isEditing ? "Estoque preservado" : stockSourceLabels[stockSource]}
+          >
             {stockWarnings.map((warning) => <span key={warning}>{warning}</span>)}
-          </div>
+          </SystemNotification>
         )}
         {importMessage && (
-          <p className="form-message production-import-message">{importMessage}</p>
+          <SystemNotification variant="success" title="Importação concluída">
+            {importMessage}
+          </SystemNotification>
         )}
         {stockImportWarning && (
-          <p className="production-stock-warning" role="status">{stockImportWarning}</p>
+          <SystemNotification variant="warning">{stockImportWarning}</SystemNotification>
         )}
         {isEditing && calculationDirty && (
-          <p className="production-stock-warning" role="status">
+          <SystemNotification variant="warning">
             O período ou as lojas foram alterados. Recalcule a produção antes de salvar.
-          </p>
+          </SystemNotification>
         )}
 
         {hasSuggested && (
@@ -1947,20 +1952,17 @@ function NewProductionPlanning() {
               <span title={importPreview.fileName}>{importPreview.fileName}</span>
             </div>
 
-            <div
-              className={`production-import-delivery-notice ${
-                importPreview.divergentDeliveryLineCount ? "production-import-delivery-notice--warning" : ""
-              }`}
-              role="status"
+            <SystemNotification
+              variant={importPreview.divergentDeliveryLineCount ? "warning" : "info"}
+              title={`Destino: produção de ${formatDate(importPreview.day)}`}
             >
-              <strong>Destino: produção de {formatDate(importPreview.day)}</strong>
               <span>
                 Entregas encontradas: {importPreview.deliveryDates.map(formatDate).join(", ")}.
                 {importPreview.divergentDeliveryLineCount
                   ? ` ${importPreview.divergentDeliveryLineCount} linha(s) possuem data diferente e também serão adicionadas a este dia.`
                   : " Todas as linhas possuem a mesma data do dia selecionado."}
               </span>
-            </div>
+            </SystemNotification>
 
             <div className="production-import-table-shell">
               <table className="production-table production-import-table">

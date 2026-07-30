@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
 import { normalizeDecimalInput } from "../utils/decimalInput";
 import { sortProductsByName } from "../utils/productSorting";
+import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 
 function formatDate(value) {
   if (!value) return "-";
@@ -11,6 +12,7 @@ function formatDate(value) {
 }
 
 function StockCountEntry() {
+  const { confirm } = useSystemNotification();
   const { id } = useParams();
   const navigate = useNavigate();
   const [count, setCount] = useState(null);
@@ -120,7 +122,10 @@ function StockCountEntry() {
   };
 
   const handleFinalize = async () => {
-    if (!window.confirm("Finalizar esta contagem? Depois disso, ela não poderá ser alterada.")) return;
+    if (!(await confirm("Depois de finalizada, esta contagem não poderá ser alterada.", {
+      title: "Finalizar contagem?",
+      confirmLabel: "Finalizar",
+    }))) return;
     setFinalizing(true);
     setError("");
     try {
@@ -143,7 +148,7 @@ function StockCountEntry() {
   if (!count) {
     return (
       <section className="page-stack">
-        <p className="form-message form-message--error">{error}</p>
+        <SystemNotification variant="error">{error}</SystemNotification>
         <button type="button" className="button button--ghost" onClick={() => navigate("/contagem-estoque")}>Voltar</button>
       </section>
     );
@@ -163,7 +168,7 @@ function StockCountEntry() {
         {!readonly && <span className="stock-count-save-state">{savingCount ? "Salvando..." : "Alterações salvas"}</span>}
       </header>
 
-      {error && <p className="form-message form-message--error">{error}</p>}
+      {error && <SystemNotification variant="error">{error}</SystemNotification>}
 
       <form onSubmit={(event) => event.preventDefault()} className="stock-count-entry-form">
         <div className="stock-count-table-wrap">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ProductionProgressBar from "../components/ProductionProgressBar";
+import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 import api from "../services/api";
 import { sortProductsByName } from "../utils/productSorting";
 
@@ -191,6 +192,7 @@ function getActualProducedQuantity(product, dispatchItem) {
 }
 
 function ProductionPlanning() {
+  const { confirm } = useSystemNotification();
   const navigate = useNavigate();
   const { hasRole } = useAuth();
   const canAccessSettings = hasRole(["admin"]);
@@ -527,7 +529,10 @@ function ProductionPlanning() {
 
   const handleFinalizeDispatch = async () => {
     if (!viewingDay || isFinalized || !hasStartedProduction || dispatchProgress.percentage < 100) return;
-    const confirmed = window.confirm("Confirma a finalização da expedição deste dia de produção?");
+    const confirmed = await confirm("A expedição deste dia de produção será finalizada.", {
+      title: "Finalizar expedição?",
+      confirmLabel: "Finalizar",
+    });
     if (!confirmed) return;
 
     setPlanningError("");
@@ -602,7 +607,7 @@ function ProductionPlanning() {
         )}
       </div>
 
-      {planningError && <p className="form-message form-message--error" role="alert">{planningError}</p>}
+      {planningError && <SystemNotification variant="error">{planningError}</SystemNotification>}
 
       <div className="production-table-shell">
         <table className="production-table">
@@ -790,7 +795,11 @@ function ProductionPlanning() {
                   {exportLoading ? "Exportando..." : "Exportar Excel"}
                 </button>
               </div>
-              {exportError && <p className="production-export-error" role="alert">{exportError}</p>}
+              {exportError && (
+                <SystemNotification variant="error" title="Não foi possível exportar">
+                  {exportError}
+                </SystemNotification>
+              )}
             </div>
 
             <div className={`production-table-shell ${activeView === "consolidado" ? "production-table-shell--consolidated" : ""}`}>
@@ -972,7 +981,7 @@ function ProductionPlanning() {
               />
             </label>
 
-            {incompleteError && <p className="production-incomplete-error">{incompleteError}</p>}
+            {incompleteError && <SystemNotification variant="error">{incompleteError}</SystemNotification>}
 
             <div className="production-incomplete-actions">
               <button type="button" className="button button--ghost" onClick={closeIncompleteModal}>

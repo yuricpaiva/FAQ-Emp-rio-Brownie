@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#3f2418" />
+    <title>FAQ EB — Sem conexão</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #f4eee7;
+        color: #42281d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top left, #fff 0, transparent 34%),
+          linear-gradient(135deg, #f6efe8, #ecd8c9);
+      }
+
+      main {
+        width: min(100%, 460px);
+        padding: 36px;
+        border: 1px solid rgba(107, 70, 52, 0.14);
+        border-radius: 24px;
+        background: rgba(255, 252, 248, 0.94);
+        box-shadow: 0 24px 55px rgba(73, 44, 31, 0.12);
+        text-align: center;
+      }
+
+      img {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 20px;
+        border-radius: 22px;
+      }
+
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(1.6rem, 5vw, 2rem);
+      }
+
+      p {
+        margin: 0 0 24px;
+        color: #73574b;
+        line-height: 1.55;
+      }
+
+      button {
+        width: 100%;
+        min-height: 48px;
+        border: 0;
+        border-radius: 12px;
+        background: #3f2418;
+        color: #fffaf5;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:focus-visible {
+        outline: 3px solid rgba(63, 36, 24, 0.35);
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/pwa/faq-eb-pwa-icon-192-v2.png" alt="" />
+      <h1>Você está sem conexão</h1>
+      <p>
+        O FAQ EB precisa de internet para acessar dados e salvar alterações.
+        Reconecte-se e tente novamente.
+      </p>
+      <button type="button" id="retry">Tentar novamente</button>
+    </main>
+    <script>
+      const retry = () => window.location.reload();
+      document.getElementById("retry").addEventListener("click", retry);
+      window.addEventListener("online", retry);
+    </script>
+  </body>
+</html>

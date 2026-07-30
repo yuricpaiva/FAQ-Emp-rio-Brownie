@@ -83,7 +83,7 @@ function Home() {
           </p>
         </div>
         <div className="hero-card__media">
-          <img src="/brand-placeholder.png" alt="FAQ Empório Brownie" />
+          <img src="/brand-placeholder.png" alt="FAQ EB" />
         </div>
       </div>
 

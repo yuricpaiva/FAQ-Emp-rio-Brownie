@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ParticipantAvatar from "../components/ParticipantAvatar";
 import api from "../services/api";
+import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 
 function AdminPool() {
+  const { confirm } = useSystemNotification();
   const [participants, setParticipants] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState("");
@@ -93,7 +95,10 @@ function AdminPool() {
   };
 
   const handleDelete = async (participant) => {
-    if (!window.confirm(`Deseja remover ${participant.name} do ranking?`)) return;
+    if (!(await confirm(`${participant.name} será removido do ranking.`, {
+      title: "Remover participante?",
+      confirmLabel: "Remover",
+    }))) return;
 
     try {
       await api.delete(`/admin/pool-participants/${participant.id}`);
@@ -172,9 +177,7 @@ function AdminPool() {
             )}
 
             {message && (
-              <p className={`form-message ${messageIsSuccess ? "form-message--success" : "form-message--error"}`}>
-                {message}
-              </p>
+              <SystemNotification variant={messageIsSuccess ? "success" : "error"}>{message}</SystemNotification>
             )}
 
             <div className="form-actions">

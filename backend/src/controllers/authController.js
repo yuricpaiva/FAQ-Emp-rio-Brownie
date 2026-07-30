@@ -3,6 +3,13 @@ const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const { getJwtSecret } = require('../middleware/authAdmin');
 const {
+  checkLoginThrottle,
+  recordLoginFailure,
+  clearAccountThrottle,
+  cleanupStaleThrottles,
+  getThrottleIdentity
+} = require('../services/loginThrottle');
+const {
   validateLoginInput,
   validateCreateUserInput,
   validateSelfUserUpdateInput,
@@ -11,6 +18,7 @@ const {
 } = require('../utils/validation');
 
 const prisma = new PrismaClient();
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('faq-invalid-login-placeholder', 10);
 
 function getCookieOptions() {
   const isProduction = process.env.NODE_ENV === 'production';
@@ -22,6 +30,24 @@ function getCookieOptions() {
     secure: isProduction,
     maxAge: 7 * 24 * 60 * 60 * 1000
   };
+}
+
+function clearAuthCookie(res) {
+  const cookieOptions = getCookieOptions();
+  res.clearCookie('auth', {
+    httpOnly: cookieOptions.httpOnly,
+    sameSite: cookieOptions.sameSite,
+    secure: cookieOptions.secure
+  });
+}
+
+function sendThrottleResponse(res, retryAfterSeconds) {
+  const retry = Math.max(1, Math.ceil(retryAfterSeconds));
+  res.set('Retry-After', String(retry));
+  return res.status(429).json({
+    error: 'Muitas tentativas de login. Tente novamente mais tarde.',
+    retryAfterSeconds: retry
+  });
 }
 
 function publicUser(user) {
@@ -47,33 +73,51 @@ async function login(req, res) {
     return res.status(400).json({ error });
   }
   const { email, password } = value;
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+  let secret;
+  try {
+    secret = getJwtSecret();
+    await cleanupStaleThrottles();
+    const throttle = await checkLoginThrottle({ email, ip });
+    if (throttle.blocked) {
+      return sendThrottleResponse(res, throttle.retryAfterSeconds);
+    }
+  } catch (err) {
+    return res.status(500).json({ error: 'Não foi possível validar o acesso.' });
+  }
 
   const user = await prisma.user.findUnique({
     where: { email },
     include: { productionStore: true }
   });
-  if (!user) {
+  const passwordValid = await bcrypt.compare(
+    password,
+    user?.passwordHash || DUMMY_PASSWORD_HASH
+  );
+
+  if (!user || !user.active || !passwordValid) {
+    try {
+      const throttle = await recordLoginFailure({ email, ip });
+      if (throttle.blocked) {
+        return sendThrottleResponse(res, throttle.retryAfterSeconds);
+      }
+    } catch (err) {
+      return res.status(500).json({ error: 'Não foi possível validar o acesso.' });
+    }
     return res.status(401).json({ error: 'Credenciais inválidas.' });
   }
 
-  const passwordValid = await bcrypt.compare(password, user.passwordHash);
-  if (!passwordValid) {
-    return res.status(401).json({ error: 'Credenciais inválidas.' });
-  }
-
-  if (!user.active) {
-    return res.status(403).json({ error: 'Usuário inativo.' });
-  }
-
-  let secret;
-  try {
-    secret = getJwtSecret();
-  } catch (err) {
-    return res.status(500).json({ error: 'JWT_SECRET não configurado.' });
-  }
+  await clearAccountThrottle(email);
 
   const token = jwt.sign(
-    { id: user.id, name: user.name, email: user.email, role: user.role, photoUrl: user.photoUrl || '' },
+    {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      photoUrl: user.photoUrl || '',
+      authVersion: user.authVersion
+    },
     secret,
     { expiresIn: '7d' }
   );
@@ -84,12 +128,7 @@ async function login(req, res) {
 }
 
 function logout(_req, res) {
-  const cookieOptions = getCookieOptions();
-  res.clearCookie('auth', {
-    httpOnly: cookieOptions.httpOnly,
-    sameSite: cookieOptions.sameSite,
-    secure: cookieOptions.secure
-  });
+  clearAuthCookie(res);
   return res.status(204).send();
 }
 
@@ -153,6 +192,7 @@ async function updateUserMe(req, res) {
   if (photoUrl !== undefined) data.photoUrl = photoUrl;
   if (password) {
     data.passwordHash = await bcrypt.hash(password, 10);
+    data.authVersion = { increment: 1 };
   }
 
   if (email) {
@@ -168,11 +208,25 @@ async function updateUserMe(req, res) {
   }
 
   try {
-    const user = await prisma.user.update({
+    const updateOperation = prisma.user.update({
       where: { id: userId },
       data,
       include: { productionStore: true }
     });
+    const operations = [updateOperation];
+
+    if (password) {
+      const accountIdentities = [
+        getThrottleIdentity('account', req.user.email),
+        getThrottleIdentity('account', email || req.user.email)
+      ];
+      operations.push(prisma.loginThrottle.deleteMany({
+        where: { OR: accountIdentities }
+      }));
+    }
+
+    const [user] = await prisma.$transaction(operations);
+    if (password) clearAuthCookie(res);
     return res.json(publicUser(user));
   } catch (err) {
     return res.status(500).json({ error: 'Não foi possível atualizar o usuário.', details: err.message });
@@ -221,6 +275,11 @@ async function updateUserAdmin(req, res) {
   if (password) {
     data.passwordHash = await bcrypt.hash(password, 10);
   }
+  const shouldRevokeSessions = Boolean(password)
+    || (currentUser.active && data.active === false);
+  if (shouldRevokeSessions) {
+    data.authVersion = { increment: 1 };
+  }
 
   if (email) {
     const exists = await prisma.user.findFirst({
@@ -239,11 +298,25 @@ async function updateUserAdmin(req, res) {
   }
 
   try {
-    const user = await prisma.user.update({
+    const updateOperation = prisma.user.update({
       where: { id: targetId },
       data,
       include: { productionStore: true }
     });
+    const operations = [updateOperation];
+
+    if (password) {
+      const accountIdentities = [
+        getThrottleIdentity('account', currentUser.email),
+        getThrottleIdentity('account', email || currentUser.email)
+      ];
+      operations.push(prisma.loginThrottle.deleteMany({
+        where: { OR: accountIdentities }
+      }));
+    }
+
+    const [user] = await prisma.$transaction(operations);
+    if (password && targetId === req.user?.id) clearAuthCookie(res);
     return res.json(publicUser(user));
   } catch (err) {
     return res.status(500).json({ error: 'Não foi possível atualizar o usuário.', details: err.message });

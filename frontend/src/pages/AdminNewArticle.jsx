@@ -5,6 +5,7 @@ import ArticleEmojiPicker from "../components/ArticleEmojiPicker";
 import ReactQuill, { Quill } from "react-quill";
 import ImageResize from "quill-image-resize-module-react";
 import "react-quill/dist/quill.snow.css";
+import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 
 Quill.register("modules/imageResize", ImageResize);
 
@@ -18,6 +19,7 @@ function slugify(text) {
 }
 
 function AdminNewArticle() {
+  const { confirm } = useSystemNotification();
   const navigate = useNavigate();
   const quillRef = useRef(null);
   const wordInputRef = useRef(null);
@@ -108,7 +110,10 @@ function AdminNewArticle() {
 
     if (!file) return;
 
-    if ((title.trim() || content.trim()) && !window.confirm("Importar o arquivo vai substituir o conteudo atual. Deseja continuar?")) {
+    if ((title.trim() || content.trim()) && !(await confirm("O arquivo importado substituirá o conteúdo atual.", {
+      title: "Substituir conteúdo?",
+      confirmLabel: "Importar arquivo",
+    }))) {
       return;
     }
 
@@ -187,10 +192,9 @@ function AdminNewArticle() {
       </div>
 
       {importWarnings.length > 0 && (
-        <div className="import-note">
-          <strong>Importação concluída com observações.</strong>
-          <p>Revise a formatação antes de publicar.</p>
-        </div>
+        <SystemNotification variant="warning" title="Importação concluída com observações">
+          Revise a formatação antes de publicar.
+        </SystemNotification>
       )}
 
       <form className="form-grid" onSubmit={handleSubmit}>
@@ -247,7 +251,7 @@ function AdminNewArticle() {
           </div>
         </label>
 
-        {error && <p className="form-message form-message--error">{error}</p>}
+        {error && <SystemNotification variant="error">{error}</SystemNotification>}
 
         <div className="form-actions">
           <button type="button" className="button button--ghost" onClick={() => navigate("/admin/dashboard")}>

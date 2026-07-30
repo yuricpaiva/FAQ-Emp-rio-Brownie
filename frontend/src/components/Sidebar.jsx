@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { getCategoryIcon } from "../constants/categoryIcons";
+import SystemNotification from "./SystemNotification";
 
 const STORAGE_KEY = "faq_sidebar_collapsed";
 const MOBILE_QUERY = "(max-width: 720px)";
@@ -10,7 +11,7 @@ const MOBILE_QUERY = "(max-width: 720px)";
 function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, updateUser, hasRole } = useAuth();
+  const { user, logout, updateUser, endSession, hasRole } = useAuth();
   const [collapsed, setCollapsed] = useState(() => {
     return window.localStorage.getItem(STORAGE_KEY) === "true";
   });
@@ -145,6 +146,11 @@ function Sidebar() {
       if (formPassword) payload.password = formPassword;
 
       const res = await api.put("/admin/users/me", payload);
+      if (formPassword) {
+        setShowProfile(false);
+        endSession("Senha alterada. Entre novamente com sua nova senha.");
+        return;
+      }
       updateUser(res.data);
       setShowProfile(false);
     } catch (err) {
@@ -172,7 +178,7 @@ function Sidebar() {
               closeNavigation();
             }}
           >
-            <strong>{isMobile ? "FAQ Empório Brownie" : "FAQ Empório Brownie"}</strong>
+            <strong>FAQ EB</strong>
           </Link>
 
           <div className="sidebar__top-actions">
@@ -220,38 +226,58 @@ function Sidebar() {
 
         <div className="sidebar__nav">
           <div className="sidebar__group">
-            <NavLink to="/" end className="sidebar__link" onClick={closeNavigation}>
+            <NavLink to="/" end className="sidebar__link" onClick={closeNavigation} aria-label="Início">
               <img src="/icon-home.svg" alt="" className="sidebar__nav-icon" />
-              {(isMobile || !collapsed) && <span>Início</span>}
+              <span className="sidebar__label">Início</span>
             </NavLink>
             {powerBiAccess && (
-              <NavLink to="/power-bi" className="sidebar__link" onClick={closeNavigation}>
+              <NavLink to="/power-bi" className="sidebar__link" onClick={closeNavigation} aria-label="Power BI">
                 <img src="/icon-power-bi.svg" alt="" className="sidebar__nav-icon" />
-                {(isMobile || !collapsed) && <span>Power BI</span>}
+                <span className="sidebar__label">Power BI</span>
               </NavLink>
             )}
             {hasRole(["admin", "production_manager"]) && (
-              <NavLink to="/planejamento-producao" className="sidebar__link" onClick={closeNavigation}>
+              <NavLink
+                to="/planejamento-producao"
+                className="sidebar__link"
+                onClick={closeNavigation}
+                aria-label="Planejamento de Produção"
+              >
                 <img src="/icon-producao-expedicao.svg" alt="" className="sidebar__nav-icon" />
-                {(isMobile || !collapsed) && <span>Planejamento de Produção</span>}
+                <span className="sidebar__label">Planejamento de Produção</span>
               </NavLink>
             )}
             {hasRole(["store", "admin", "production_manager"]) && (
-              <NavLink to="/contagem-estoque" className="sidebar__link" onClick={closeNavigation}>
+              <NavLink
+                to="/contagem-estoque"
+                className="sidebar__link"
+                onClick={closeNavigation}
+                aria-label="Contagem de Estoque"
+              >
                 <img src="/icon-operacao.svg" alt="" className="sidebar__nav-icon" />
-                {(isMobile || !collapsed) && <span>Contagem de Estoque</span>}
+                <span className="sidebar__label">Contagem de Estoque</span>
               </NavLink>
             )}
             {poolEnabled && (
-              <NavLink to="/ranking-bolao" className="sidebar__link" onClick={closeNavigation}>
+              <NavLink
+                to="/ranking-bolao"
+                className="sidebar__link"
+                onClick={closeNavigation}
+                aria-label="Ranking do Bolão"
+              >
                 <img src="/icon-ranking.svg" alt="" className="sidebar__nav-icon" />
-                {(isMobile || !collapsed) && <span>Ranking do Bolão</span>}
+                <span className="sidebar__label">Ranking do Bolão</span>
               </NavLink>
             )}
             {hasRole(["creator", "admin"]) && (
-              <NavLink to="/admin/dashboard" className="sidebar__link" onClick={closeNavigation}>
+              <NavLink
+                to="/admin/dashboard"
+                className="sidebar__link"
+                onClick={closeNavigation}
+                aria-label="Painel"
+              >
                 <img src="/icon-painel.svg" alt="" className="sidebar__nav-icon" />
-                {(isMobile || !collapsed) && <span>Painel</span>}
+                <span className="sidebar__label">Painel</span>
               </NavLink>
             )}
           </div>
@@ -265,20 +291,25 @@ function Sidebar() {
               onClick={handleKnowledgeToggle}
               aria-expanded={knowledgeOpen}
               aria-controls="knowledge-menu"
+              aria-label="Base de conhecimento"
             >
               <img src="/icon-base-conhecimento.svg" alt="" className="sidebar__nav-icon" />
-              {(isMobile || !collapsed) && (
-                <>
-                  <span>Base de conhecimento</span>
-                  <span className={`sidebar__chevron ${knowledgeOpen ? "sidebar__chevron--open" : ""}`}>
-                    v
-                  </span>
-                </>
-              )}
+              <span className="sidebar__label">Base de conhecimento</span>
+              <span
+                className={`sidebar__chevron ${knowledgeOpen ? "sidebar__chevron--open" : ""}`}
+                aria-hidden="true"
+              >
+                v
+              </span>
             </button>
 
-            {(isMobile || !collapsed) && knowledgeOpen && (
-              <div id="knowledge-menu" className="sidebar__submenu">
+            {knowledgeOpen && (
+              <div
+                id="knowledge-menu"
+                className="sidebar__submenu"
+                aria-hidden={!isMobile && collapsed}
+                inert={!isMobile && collapsed ? "" : undefined}
+              >
                 {categories.map((category) => (
                   <NavLink
                     key={category.id}
@@ -300,6 +331,7 @@ function Sidebar() {
               <button
                 type="button"
                 className="sidebar__profile"
+                aria-label="Editar perfil"
                 onClick={() => {
                   setMessage("");
                   setFormPassword("");
@@ -312,16 +344,14 @@ function Sidebar() {
                 ) : (
                   <div className="sidebar__avatar sidebar__avatar--fallback">{initials}</div>
                 )}
-                {!collapsed && (
-                  <div className="sidebar__profile-copy">
-                    <strong>{user?.name}</strong>
-                  </div>
-                )}
+                <div className="sidebar__profile-copy">
+                  <strong>{user?.name}</strong>
+                </div>
               </button>
 
-              <button type="button" className="sidebar__logout" onClick={handleLogout}>
+              <button type="button" className="sidebar__logout" onClick={handleLogout} aria-label="Sair">
                 <span className="sidebar__link-icon">↩</span>
-                {!collapsed && <span>Sair</span>}
+                <span className="sidebar__label">Sair</span>
               </button>
             </>
           )}
@@ -389,7 +419,7 @@ function Sidebar() {
                 <input type="file" accept="image/*" onChange={(e) => setFormPhoto(e.target.files?.[0] || null)} />
               </label>
 
-              {message && <p className="form-message form-message--error">{message}</p>}
+              {message && <SystemNotification variant="error">{message}</SystemNotification>}
 
               <div className="form-actions">
                 <button type="button" className="button button--ghost" onClick={() => setShowProfile(false)}>

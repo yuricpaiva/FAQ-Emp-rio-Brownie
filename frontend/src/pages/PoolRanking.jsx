@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ParticipantAvatar from "../components/ParticipantAvatar";
 import api from "../services/api";
+import SystemNotification from "../components/SystemNotification";
 
 const BAR_COLORS = ["#168847", "#f4c430", "#1769aa"];
 
@@ -90,7 +91,7 @@ function PoolRanking() {
 
       <section className="pool-ranking-board" aria-live="polite">
         {loading && <p className="empty-state">Carregando ranking...</p>}
-        {error && <p className="form-message form-message--error">{error}</p>}
+        {error && <SystemNotification variant="error">{error}</SystemNotification>}
         {!loading && !error && !poolEnabled && (
           <div className="pool-ranking-disabled">
             <img src="/icon-ranking.svg" alt="" />

@@ -1,4 +1,4 @@
-# FAQ Empório Brownie
+# FAQ EB
 
 Aplicação interna de base de conhecimento com:
 

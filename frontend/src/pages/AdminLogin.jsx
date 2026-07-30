@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import SystemNotification from "../components/SystemNotification";
 
 const carouselSlides = [
   { src: "/login-carousel/loja-01.jpg", alt: "Fachada iluminada de uma unidade Empório Brownie" },
@@ -163,7 +164,7 @@ function AdminLogin() {
   return (
     <main className="login-page">
       <section className="login-panel" aria-labelledby="login-title">
-        <div className="login-brand" aria-label="FAQ Empório Brownie">
+        <div className="login-brand" aria-label="FAQ EB">
           <span>FAQ</span>
           <strong>EB</strong>
         </div>
@@ -172,7 +173,7 @@ function AdminLogin() {
           <header className="login-heading">
             <h1 id="login-title">
               Bem-vindo ao
-              <span>FAQ</span>
+              <span>FAQ EB</span>
             </h1>
             <p>Acesse sua conta para continuar</p>
           </header>
@@ -226,15 +227,13 @@ function AdminLogin() {
             </button>
 
             {showRecoveryHelp && (
-              <p id="login-recovery-help" className="login-message login-message--info" role="status">
+              <SystemNotification id="login-recovery-help" variant="info" title="Recuperação de senha">
                 Entre em contato com o Administrador do sistema ou com a equipe de TI para redefinir sua senha.
-              </p>
+              </SystemNotification>
             )}
 
             {error && (
-              <p className="login-message login-message--error" role="alert">
-                {error}
-              </p>
+              <SystemNotification variant="error">{error}</SystemNotification>
             )}
 
             <button type="submit" className="login-submit" disabled={loading}>

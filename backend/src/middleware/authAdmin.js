@@ -21,7 +21,13 @@ async function authenticate(req, res, next) {
   try {
     const payload = jwt.verify(token, getJwtSecret());
     const user = await prisma.user.findUnique({ where: { id: payload.id } });
-    if (!user || !user.active) {
+    const tokenAuthVersion = Number(payload.authVersion ?? 0);
+    if (
+      !user
+      || !user.active
+      || !Number.isInteger(tokenAuthVersion)
+      || tokenAuthVersion !== user.authVersion
+    ) {
       return res.status(401).json({ error: 'Sessão inválida.' });
     }
     req.user = {
