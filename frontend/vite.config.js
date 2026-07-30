@@ -33,19 +33,19 @@ export default defineConfig({
         theme_color: '#3f2418',
         icons: [
           {
-            src: '/pwa/faq-eb-pwa-icon-192-v2.png',
+            src: '/pwa/icon-192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: '/pwa/faq-eb-pwa-icon-512-v2.png',
+            src: '/pwa/icon-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: '/pwa/faq-eb-pwa-icon-maskable-512-v2.png',
+            src: '/pwa/icon-maskable-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'

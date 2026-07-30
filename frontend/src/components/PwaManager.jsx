@@ -160,7 +160,7 @@ function PwaManager() {
           tabIndex="-1"
         >
           <div className="pwa-offline-card">
-            <img src="/pwa/faq-eb-pwa-icon-192-v2.png" alt="" />
+            <img src="/pwa/icon-192.png" alt="" />
             <h2 id="pwa-offline-title">Você está sem conexão</h2>
             <p>
               O FAQ EB precisa de internet para consultar dados e salvar alterações.

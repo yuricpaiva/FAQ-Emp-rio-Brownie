@@ -18,9 +18,9 @@ const CACHE_NAME = `${CACHE_PREFIX}${hashRelease(releaseEntries)}`;
 const OFFLINE_URL = "/offline.html";
 const OFFLINE_ASSETS = [
   OFFLINE_URL,
-  "/pwa/faq-eb-pwa-icon-192-v2.png",
-  "/pwa/faq-eb-pwa-icon-512-v2.png",
-  "/pwa/faq-eb-pwa-icon-maskable-512-v2.png",
+  "/pwa/icon-192.png",
+  "/pwa/icon-512.png",
+  "/pwa/icon-maskable-512.png",
   "/pwa/faq-eb-apple-touch-icon-v2.png",
 ];
 
