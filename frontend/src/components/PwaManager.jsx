@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { useAuth } from "../context/AuthContext";
@@ -29,7 +29,7 @@ function PwaManager() {
   const [checkingConnection, setCheckingConnection] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installDismissed, setInstallDismissed] = useState(false);
-  const [showIosInstructions, setShowIosInstructions] = useState(false);
+  const [showInstallInstructions, setShowInstallInstructions] = useState(false);
   const [installClosing, setInstallClosing] = useState(false);
   const [standalone, setStandalone] = useState(isStandaloneMode);
   const dismissTimerRef = useRef(null);
@@ -47,6 +47,7 @@ function PwaManager() {
     const handleBeforeInstall = (event) => {
       event.preventDefault();
       setInstallPrompt(event);
+      setShowInstallInstructions(false);
     };
     const handleInstalled = () => {
       setInstallPrompt(null);
@@ -80,7 +81,7 @@ function PwaManager() {
     const previousUser = previousUserRef.current;
     if (user && !previousUser) {
       setInstallDismissed(false);
-      setShowIosInstructions(false);
+      setShowInstallInstructions(false);
     }
     previousUserRef.current = user;
   }, [user]);
@@ -102,15 +103,10 @@ function PwaManager() {
     }
   }, [isOnline]);
 
-  const canOfferInstall = useMemo(
-    () =>
-      Boolean(
-        user &&
-          !standalone &&
-          !installDismissed &&
-          (installPrompt || isIosDevice())
-      ),
-    [installDismissed, installPrompt, standalone, user]
+  const canOfferInstall = Boolean(
+    user &&
+      !standalone &&
+      !installDismissed
   );
 
   const showUpdate =
@@ -119,12 +115,10 @@ function PwaManager() {
     !isProtectedEditingRoute(location.pathname);
 
   const handleInstall = async () => {
-    if (isIosDevice() && !installPrompt) {
-      setShowIosInstructions(true);
+    if (!installPrompt) {
+      setShowInstallInstructions(true);
       return;
     }
-
-    if (!installPrompt) return;
     await installPrompt.prompt();
     await installPrompt.userChoice;
     setInstallPrompt(null);
@@ -205,7 +199,7 @@ function PwaManager() {
           className={installClosing ? "system-notification--leaving" : ""}
           actions={
             <>
-              {showIosInstructions ? (
+              {showInstallInstructions ? (
                 <button type="button" onClick={dismissInstall}>
                   Entendi
                 </button>
@@ -214,7 +208,7 @@ function PwaManager() {
                   Instalar app
                 </button>
               )}
-              {!showIosInstructions && (
+              {!showInstallInstructions && (
                 <button type="button" className="system-notification__secondary" onClick={dismissInstall}>
                   Agora não
                 </button>
@@ -222,8 +216,10 @@ function PwaManager() {
             </>
           }
         >
-          {showIosInstructions
-            ? "No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”."
+          {showInstallInstructions
+            ? isIosDevice()
+              ? "No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”."
+              : "Abra o menu do navegador e escolha “Instalar FAQ EB” ou “Adicionar à tela inicial”."
             : "Acesse o FAQ EB pela tela inicial do seu dispositivo através do app."}
         </SystemNotification>
       )}
