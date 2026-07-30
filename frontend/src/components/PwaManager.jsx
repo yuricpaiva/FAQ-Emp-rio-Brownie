@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { useAuth } from "../context/AuthContext";
+import {
+  clearInstallPrompt,
+  subscribeToInstallPrompt,
+} from "../services/pwaInstallPrompt";
 import SystemNotification from "./SystemNotification";
 
 const isStandaloneMode = () =>
@@ -44,23 +48,14 @@ function PwaManager() {
   });
 
   useEffect(() => {
-    const handleBeforeInstall = (event) => {
-      event.preventDefault();
-      setInstallPrompt(event);
-      setShowInstallInstructions(false);
-    };
-    const handleInstalled = () => {
-      setInstallPrompt(null);
-      setInstallDismissed(true);
-      setStandalone(true);
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
-    window.addEventListener("appinstalled", handleInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
-      window.removeEventListener("appinstalled", handleInstalled);
-    };
+    return subscribeToInstallPrompt(({ installPrompt: nextPrompt, installed }) => {
+      setInstallPrompt(nextPrompt);
+      if (nextPrompt) setShowInstallInstructions(false);
+      if (installed) {
+        setInstallDismissed(true);
+        setStandalone(true);
+      }
+    });
   }, []);
 
   useEffect(
@@ -121,7 +116,7 @@ function PwaManager() {
     }
     await installPrompt.prompt();
     await installPrompt.userChoice;
-    setInstallPrompt(null);
+    clearInstallPrompt();
     setInstallDismissed(true);
   };
 

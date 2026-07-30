@@ -19,6 +19,7 @@ export default defineConfig({
         type: 'module'
       },
       manifest: {
+        id: '/',
         name: 'FAQ EB',
         short_name: 'FAQ EB',
         description: 'Central interna FAQ EB',
@@ -27,6 +28,7 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'any',
+        prefer_related_applications: false,
         background_color: '#f4eee7',
         theme_color: '#3f2418',
         icons: [
