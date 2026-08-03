@@ -12,14 +12,6 @@ const isStandaloneMode = () =>
   window.matchMedia("(display-mode: standalone)").matches ||
   window.navigator.standalone === true;
 
-const isIosDevice = () => {
-  const userAgent = window.navigator.userAgent;
-  return (
-    /iPad|iPhone|iPod/.test(userAgent) ||
-    (/Macintosh/.test(userAgent) && window.navigator.maxTouchPoints > 1)
-  );
-};
-
 const isProtectedEditingRoute = (pathname) =>
   pathname.startsWith("/contagem-estoque") ||
   pathname.startsWith("/planejamento-producao");
@@ -33,7 +25,6 @@ function PwaManager() {
   const [checkingConnection, setCheckingConnection] = useState(false);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [installDismissed, setInstallDismissed] = useState(false);
-  const [showInstallInstructions, setShowInstallInstructions] = useState(false);
   const [installClosing, setInstallClosing] = useState(false);
   const [standalone, setStandalone] = useState(isStandaloneMode);
   const dismissTimerRef = useRef(null);
@@ -50,7 +41,6 @@ function PwaManager() {
   useEffect(() => {
     return subscribeToInstallPrompt(({ installPrompt: nextPrompt, installed }) => {
       setInstallPrompt(nextPrompt);
-      if (nextPrompt) setShowInstallInstructions(false);
       if (installed) {
         setInstallDismissed(true);
         setStandalone(true);
@@ -76,7 +66,6 @@ function PwaManager() {
     const previousUser = previousUserRef.current;
     if (user && !previousUser) {
       setInstallDismissed(false);
-      setShowInstallInstructions(false);
     }
     previousUserRef.current = user;
   }, [user]);
@@ -100,6 +89,8 @@ function PwaManager() {
 
   const canOfferInstall = Boolean(
     user &&
+      isOnline &&
+      installPrompt &&
       !standalone &&
       !installDismissed
   );
@@ -110,14 +101,14 @@ function PwaManager() {
     !isProtectedEditingRoute(location.pathname);
 
   const handleInstall = async () => {
-    if (!installPrompt) {
-      setShowInstallInstructions(true);
-      return;
+    if (!installPrompt) return;
+    try {
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+    } finally {
+      clearInstallPrompt();
+      setInstallDismissed(true);
     }
-    await installPrompt.prompt();
-    await installPrompt.userChoice;
-    clearInstallPrompt();
-    setInstallDismissed(true);
   };
 
   const dismissInstall = () => {
@@ -194,28 +185,16 @@ function PwaManager() {
           className={installClosing ? "system-notification--leaving" : ""}
           actions={
             <>
-              {showInstallInstructions ? (
-                <button type="button" onClick={dismissInstall}>
-                  Entendi
-                </button>
-              ) : (
-                <button type="button" onClick={handleInstall}>
-                  Instalar app
-                </button>
-              )}
-              {!showInstallInstructions && (
-                <button type="button" className="system-notification__secondary" onClick={dismissInstall}>
-                  Agora não
-                </button>
-              )}
+              <button type="button" onClick={handleInstall}>
+                Instalar app
+              </button>
+              <button type="button" className="system-notification__secondary" onClick={dismissInstall}>
+                Agora não
+              </button>
             </>
           }
         >
-          {showInstallInstructions
-            ? isIosDevice()
-              ? "No Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”."
-              : "Abra o menu do navegador e escolha “Instalar FAQ EB” ou “Adicionar à tela inicial”."
-            : "Acesse o FAQ EB pela tela inicial do seu dispositivo através do app."}
+          Acesse o FAQ EB pela tela inicial do seu dispositivo através do app.
         </SystemNotification>
       )}
     </>
