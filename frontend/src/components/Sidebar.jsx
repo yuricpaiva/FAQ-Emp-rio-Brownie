@@ -269,6 +269,10 @@ function Sidebar() {
                 <span className="sidebar__label">Ranking do Bolão</span>
               </NavLink>
             )}
+            <NavLink to="/reservas" className="sidebar__link" onClick={closeNavigation} aria-label="Reservas">
+              <img src="/icon-reservas.svg" alt="" className="sidebar__nav-icon" />
+              <span className="sidebar__label">Reservas</span>
+            </NavLink>
             {hasRole(["creator", "admin"]) && (
               <NavLink
                 to="/admin/dashboard"

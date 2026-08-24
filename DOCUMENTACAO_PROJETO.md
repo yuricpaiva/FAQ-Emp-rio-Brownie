@@ -724,3 +724,30 @@ Nunca executar limpeza, reset ou checkout amplo no servidor: `.env`, SQLite, upl
 - Produção/expedição: `frontend/src/pages/ProductionPlanning.jsx`
 - Contagem: `frontend/src/pages/StockCounts.jsx` e `StockCountEntry.jsx`
 - Estilos: `frontend/src/index.css`
+
+## 18. Reservas de recursos compartilhados
+
+O módulo `/reservas` atende todos os perfis autenticados. A aba administrativa é exclusiva de `admin` e reutiliza `authenticate` e `requireRole`.
+
+### Modelos
+
+- `ReservationResourceType`: tipos configuráveis nos modos `TIME_SLOT` e `PERIOD`, com definições fixas de parâmetros e ícones;
+- `ReservationResource`: recurso genérico, localização, estado, aprovação futura e atributos JSON serializados;
+- `Reservation`: intervalo, finalidade, responsável, status e cancelamento lógico;
+- `ReservationBlock`: indisponibilidade administrativa com motivo e cancelamento lógico.
+
+O banco guarda instantes UTC. Horários são recebidos com offset de Fortaleza e exibidos com `America/Fortaleza`. Períodos de dias usam fim exclusivo internamente, no dia seguinte à data final escolhida.
+
+Cada definição de parâmetro possui chave estável, rótulo, formato (`BOOLEAN`, `NUMBER` ou `TEXT`) e um ícone do catálogo interno. O formulário de recursos segue essa definição e os cards mostram somente características preenchidas; booleanos falsos são omitidos.
+
+### Endpoints
+
+- `GET /reservations/resource-types`
+- `GET /reservations/resources`
+- `GET /reservations/availability`
+- `GET|POST /reservations`
+- `GET /reservations/mine`
+- `PATCH /reservations/:id/cancel`
+- CRUD lógico administrativo sob `/admin/reservations`
+
+O calendário público não expõe usuário nem finalidade de reservas de terceiros. O service valida conflitos e uma camada de triggers na migration `20260824120000_reservations` impede sobreposição concorrente de reservas e bloqueios no SQLite. Intervalos consecutivos são permitidos.

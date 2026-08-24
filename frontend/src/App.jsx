@@ -14,6 +14,7 @@ const NewProductionPlanning = lazy(() => import("./pages/NewProductionPlanning")
 const ProductionPlanningSettings = lazy(() => import("./pages/ProductionPlanningSettings"));
 const StockCounts = lazy(() => import("./pages/StockCounts"));
 const StockCountEntry = lazy(() => import("./pages/StockCountEntry"));
+const Reservations = lazy(() => import("./pages/Reservations"));
 const PoolRanking = lazy(() => import("./pages/PoolRanking"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -68,6 +69,7 @@ function AppRoutes() {
           element={<ProtectedRoute roles={["store", "admin", "production_manager"]}><StockCountEntry /></ProtectedRoute>}
         />
         <Route path="/ranking-bolao" element={<ProtectedRoute><PoolRanking /></ProtectedRoute>} />
+        <Route path="/reservas" element={<ProtectedRoute><Reservations /></ProtectedRoute>} />
         <Route
           path="/admin/dashboard"
           element={<ProtectedRoute roles={["creator", "admin"]}><AdminDashboard /></ProtectedRoute>}
