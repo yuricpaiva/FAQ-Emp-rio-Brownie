@@ -20,6 +20,10 @@ model User {
   powerBiAccess     PowerBiAccess?
   productionStore   ProductionStore? @relation("UserProductionStore", fields: [productionStoreId], references: [id], onDelete: SetNull)
   createdStockCounts StockCount[]     @relation("StockCountCreatedBy")
+  reservationsCreated Reservation[]   @relation("ReservationCreatedBy")
+  reservationsCancelled Reservation[] @relation("ReservationCancelledBy")
+  reservationBlocksCreated ReservationBlock[] @relation("ReservationBlockCreatedBy")
+  reservationBlocksCancelled ReservationBlock[] @relation("ReservationBlockCancelledBy")
 
   @@index([productionStoreId])
 }
@@ -269,4 +273,82 @@ model ProductionStoreRoute {
 
   @@unique([storeId, weekday])
   @@index([active, weekday])
+}
+
+model ReservationResourceType {
+  id              Int                   @id @default(autoincrement())
+  name            String                @unique
+  description     String                @default("")
+  active          Boolean               @default(true)
+  reservationMode String                @default("TIME_SLOT")
+  attributeDefinitions String           @default("[]")
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  resources       ReservationResource[]
+
+  @@index([active, name])
+}
+
+model ReservationResource {
+  id               Int                     @id @default(autoincrement())
+  typeId           Int
+  name             String
+  description      String                  @default("")
+  location         String                  @default("")
+  active           Boolean                 @default(true)
+  requiresApproval Boolean                 @default(false)
+  attributes       String                  @default("{}")
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  type             ReservationResourceType @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  reservations     Reservation[]
+  blocks           ReservationBlock[]
+
+  @@unique([typeId, name])
+  @@index([typeId, active, name])
+}
+
+model Reservation {
+  id                 Int                 @id @default(autoincrement())
+  resourceId         Int
+  userId             Int
+  startAt            DateTime
+  endAt              DateTime
+  purpose            String              @default("")
+  status             String              @default("CONFIRMED")
+  cancelledAt        DateTime?
+  cancelledById      Int?
+  cancellationReason String              @default("")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  resource           ReservationResource @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  user               User                @relation("ReservationCreatedBy", fields: [userId], references: [id], onDelete: Restrict)
+  cancelledBy        User?               @relation("ReservationCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+
+  @@index([resourceId, status, startAt, endAt])
+  @@index([userId, status, startAt])
+  @@index([startAt, endAt])
+  @@index([cancelledById])
+}
+
+model ReservationBlock {
+  id                 Int                 @id @default(autoincrement())
+  resourceId         Int
+  startAt            DateTime
+  endAt              DateTime
+  reason             String
+  status             String              @default("ACTIVE")
+  createdById        Int
+  cancelledAt        DateTime?
+  cancelledById      Int?
+  cancellationReason String              @default("")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  resource           ReservationResource @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  createdBy          User                @relation("ReservationBlockCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  cancelledBy        User?               @relation("ReservationBlockCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+
+  @@index([resourceId, status, startAt, endAt])
+  @@index([createdById, createdAt])
+  @@index([cancelledById])
 }
