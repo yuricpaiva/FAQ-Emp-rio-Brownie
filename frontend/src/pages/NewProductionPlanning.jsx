@@ -806,7 +806,17 @@ function NewProductionPlanning() {
   const [stockImportLoading, setStockImportLoading] = useState(false);
   const [stockImportWarning, setStockImportWarning] = useState("");
   const [importPreview, setImportPreview] = useState(null);
+  const [everestUnavailableDate, setEverestUnavailableDate] = useState("");
   const [registeringProductCodes, setRegisteringProductCodes] = useState([]);
+
+  useEffect(() => {
+    if (!everestUnavailableDate) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setEverestUnavailableDate("");
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [everestUnavailableDate]);
   const productionDays = useMemo(
     () => getDateRange(servedStartDate, servedEndDate),
     [servedEndDate, servedStartDate]
@@ -1029,6 +1039,7 @@ function NewProductionPlanning() {
     setImportMessage("");
     setStockImportWarning("");
     setStockWarnings([]);
+    setEverestUnavailableDate("");
     setProductsMessage("");
     if (hasSuggested) {
       setProductsByStoreAndDay({});
@@ -1084,6 +1095,7 @@ function NewProductionPlanning() {
     setSuggestionLoading(true);
     setProductsMessage("");
     setStockWarnings([]);
+    setEverestUnavailableDate("");
 
     try {
       const response = await api.post("/admin/production-planning/suggestions", {
@@ -1099,6 +1111,10 @@ function NewProductionPlanning() {
           })),
         })),
       });
+
+      if (!isEditing && stockSource === "everest" && response.data?.stockDateUnavailable) {
+        setEverestUnavailableDate(response.data?.stockDate || today);
+      }
 
       const convertedImportsByKey = new Map();
       const convertedStocksByKey = new Map();
@@ -1927,6 +1943,32 @@ function NewProductionPlanning() {
           </>
         )}
       </form>
+
+      {everestUnavailableDate && (
+        <div className="modal-backdrop" onClick={() => setEverestUnavailableDate("")}>
+          <div
+            className="modal-card production-everest-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="production-everest-unavailable-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-card__header">
+              <h3 id="production-everest-unavailable-title">Estoque Everest indisponível</h3>
+              <button type="button" onClick={() => setEverestUnavailableDate("")} aria-label="Fechar">X</button>
+            </div>
+            <div className="production-everest-modal__body">
+              <p>
+                Não existe informação de estoque no Everest para o dia <strong>{formatDate(everestUnavailableDate)}</strong>.
+              </p>
+              <p>A sugestão de produção foi calculada sem descontar o estoque.</p>
+            </div>
+            <div className="production-everest-modal__actions">
+              <button type="button" className="button" onClick={() => setEverestUnavailableDate("")}>Entendi</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {importPreview && (
         <div className="modal-backdrop production-import-backdrop" onClick={closeImportPreview}>

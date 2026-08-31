@@ -143,7 +143,7 @@ function getEverestPool() {
   return pool;
 }
 
-async function getEverestStockSnapshot({ stores, productCodes, stockDate = getEverestStockDate() }) {
+async function getEverestStockSnapshot({ stores, productCodes, stockDate = getEverestStockDate(), database }) {
   const normalizedStores = normalizeValues(stores);
   const normalizedCodes = normalizeValues(productCodes);
   if (!normalizedStores.length || !normalizedCodes.length) {
@@ -184,7 +184,8 @@ async function getEverestStockSnapshot({ stores, productCodes, stockDate = getEv
     productCodesSample: normalizedCodes.slice(0, 20),
   });
   try {
-    const [rows] = await getEverestPool().execute(
+    const connection = database || getEverestPool();
+    const [rows] = await connection.execute(
       `
         SELECT dt_base, fantasia, cd_item, qt_saldo
         FROM \`525_saldo_estoque\`
@@ -196,12 +197,36 @@ async function getEverestStockSnapshot({ stores, productCodes, stockDate = getEv
       [stockDate, stockDate, ...normalizedStores, ...normalizedCodes]
     );
 
-    return buildStockSnapshotFromRows({
-      rows,
-      stockDate,
-      stores: normalizedStores,
-      productCodes: normalizedCodes,
-    });
+    if (!rows.length) {
+      const [dateCountRows] = await connection.execute(
+        'SELECT COUNT(*) AS row_count FROM `525_saldo_estoque` WHERE dt_base >= ? AND dt_base < DATE_ADD(?, INTERVAL 1 DAY)',
+        [stockDate, stockDate]
+      );
+      if (Number(dateCountRows[0]?.row_count || 0) === 0) {
+        return {
+          stockDate,
+          status: 'date_unavailable',
+          dateUnavailable: true,
+          warnings: [`O Everest nao possui informacoes de estoque para a data ${stockDate}.`],
+          items: buildEmptyItems(
+            normalizedStores,
+            normalizedCodes,
+            'unavailable',
+            'O Everest nao possui informacoes de estoque para esta data.'
+          ),
+        };
+      }
+    }
+
+    return {
+      ...buildStockSnapshotFromRows({
+        rows,
+        stockDate,
+        stores: normalizedStores,
+        productCodes: normalizedCodes,
+      }),
+      dateUnavailable: false,
+    };
   } catch (error) {
     console.error('Falha ao consultar estoque no Everest:', error);
     return {

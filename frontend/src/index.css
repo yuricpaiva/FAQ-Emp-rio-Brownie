@@ -2858,6 +2858,27 @@ textarea:focus {
   color: #6b554c;
 }
 
+.production-everest-modal {
+  width: min(520px, 100%);
+}
+
+.production-everest-modal__body {
+  display: grid;
+  gap: 0.65rem;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.production-everest-modal__body p {
+  margin: 0;
+}
+
+.production-everest-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+
 .production-import-summary {
   display: flex;
   flex: 0 0 auto;

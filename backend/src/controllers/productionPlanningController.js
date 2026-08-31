@@ -641,6 +641,7 @@ async function suggestProduction(req, res) {
       stockDates: stockSnapshot.stockDates || {},
       stockSource,
       stockLookupStatus: stockSnapshot.status,
+      stockDateUnavailable: stockSnapshot.dateUnavailable === true,
       warnings: stockSnapshot.warnings,
       stores: suggestions,
     });
@@ -756,6 +757,7 @@ async function getProductionStocks(req, res) {
     stockDates: stockSnapshot.stockDates || {},
     stockSource,
     stockLookupStatus: stockSnapshot.status,
+    stockDateUnavailable: stockSnapshot.dateUnavailable === true,
     warnings: stockSnapshot.warnings,
     stores: responseStores,
   });

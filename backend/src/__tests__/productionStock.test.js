@@ -115,6 +115,65 @@ test('disabled Everest integration returns unavailable balances without opening 
   }
 });
 
+test('Everest distinguishes a date without data from missing selected products', async () => {
+  const environment = {
+    EVEREST_DB_ENABLED: process.env.EVEREST_DB_ENABLED,
+    EVEREST_DB_HOST: process.env.EVEREST_DB_HOST,
+    EVEREST_DB_NAME: process.env.EVEREST_DB_NAME,
+    EVEREST_DB_USER: process.env.EVEREST_DB_USER,
+    EVEREST_DB_PASSWORD: process.env.EVEREST_DB_PASSWORD,
+  };
+  Object.assign(process.env, {
+    EVEREST_DB_ENABLED: 'true',
+    EVEREST_DB_HOST: 'test.local',
+    EVEREST_DB_NAME: 'everest',
+    EVEREST_DB_USER: 'test',
+    EVEREST_DB_PASSWORD: 'test',
+  });
+
+  try {
+    let absentDateCalls = 0;
+    const absentDate = await getEverestStockSnapshot({
+      stockDate: '2026-08-31',
+      stores: ['Loja A'],
+      productCodes: ['100'],
+      database: {
+        async execute() {
+          absentDateCalls += 1;
+          return absentDateCalls === 1 ? [[]] : [[{ row_count: 0 }]];
+        },
+      },
+    });
+    assert.equal(absentDateCalls, 2);
+    assert.equal(absentDate.status, 'date_unavailable');
+    assert.equal(absentDate.dateUnavailable, true);
+    assert.equal(absentDate.items['Loja A']['100'].status, 'unavailable');
+    assert.match(absentDate.warnings.join(' '), /2026-08-31/);
+
+    let existingDateCalls = 0;
+    const missingProduct = await getEverestStockSnapshot({
+      stockDate: '2026-08-30',
+      stores: ['Loja A'],
+      productCodes: ['100'],
+      database: {
+        async execute() {
+          existingDateCalls += 1;
+          return existingDateCalls === 1 ? [[]] : [[{ row_count: 12 }]];
+        },
+      },
+    });
+    assert.equal(existingDateCalls, 2);
+    assert.equal(missingProduct.status, 'available');
+    assert.equal(missingProduct.dateUnavailable, false);
+    assert.equal(missingProduct.items['Loja A']['100'].status, 'not_found');
+  } finally {
+    Object.entries(environment).forEach(([key, value]) => {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    });
+  }
+});
+
 test('imported stock validates the source and fills missing stores and products with zero', () => {
   assert.equal(normalizeStockSource(undefined), 'everest');
   assert.equal(normalizeStockSource('faq'), 'faq');
