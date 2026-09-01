@@ -9,6 +9,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const stockCountRoutes = require('./routes/stockCountRoutes');
 const reservationRoutes = require('./routes/reservationRoutes');
 const reservationAdminRoutes = require('./routes/reservationAdminRoutes');
+const formRoutes = require('./routes/formRoutes');
 
 dotenv.config();
 
@@ -55,6 +56,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/stock-counts', stockCountRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/admin/reservations', reservationAdminRoutes);
+app.use('/api/forms', formRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });

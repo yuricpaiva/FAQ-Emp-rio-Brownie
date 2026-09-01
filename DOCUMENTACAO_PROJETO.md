@@ -504,7 +504,7 @@ Base local: `http://localhost:4000/api`.
 - banco SQLite fica em `backend/src/prisma/dev.db` conforme a configuração atual;
 - `.env`, bancos, uploads, logs, dependências e builds não são versionados pelo Git.
 
-Em produção, banco, `.env` e uploads precisam ser preservados entre deploys.
+Em produção, banco, `.env`, uploads e o diretório externo definido por `FORMS_UPLOAD_DIR` precisam ser preservados entre deploys.
 
 ## 10. Variáveis de ambiente
 
@@ -515,6 +515,7 @@ Valores reais e senhas não devem ser incluídos em documentação, logs ou comm
 | Variável | Uso |
 | --- | --- |
 | `DATABASE_URL` | Caminho/conexão do Prisma |
+| `FORMS_UPLOAD_DIR` | Diretório absoluto, externo ao projeto, usado pelas evidências protegidas do Forms |
 | `PORT` | Porta HTTP do Express |
 | `CLIENT_ORIGIN` | Origens CORS, separadas por vírgula |
 | `JWT_SECRET` | Assinatura dos tokens |
@@ -644,9 +645,10 @@ cd /var/www/FAQ-Emp-rio-Brownie-master
 # 1. Confirmar que não existem alterações rastreadas inesperadas
 git status --short
 
-# 2. Criar backup único do SQLite
+# 2. Criar backup único do SQLite e preservar as evidências do Forms
 mkdir -p backups
 cp backend/src/prisma/dev.db backups/dev.db.pre-deploy-AAAAMMDD-HHMMSS
+# FORMS_UPLOAD_DIR deve participar do backup operacional; nunca remova ou sobrescreva essa raiz durante o deploy
 
 # 3. Atualizar somente por fast-forward
 git pull --ff-only origin main
@@ -681,7 +683,7 @@ curl --fail http://127.0.0.1:4000/api/health
 pm2 status faq-backend
 ```
 
-Nunca executar limpeza, reset ou checkout amplo no servidor: `.env`, SQLite, uploads e backups são dados persistentes fora do Git.
+Nunca executar limpeza, reset ou checkout amplo no servidor: `.env`, SQLite, uploads, `FORMS_UPLOAD_DIR` e backups são dados persistentes fora do Git.
 
 ## 15. Segurança
 
@@ -751,3 +753,34 @@ Cada definição de parâmetro possui chave estável, rótulo, formato (`BOOLEAN
 - CRUD lógico administrativo sob `/admin/reservations`
 
 O calendário público não expõe usuário nem finalidade de reservas de terceiros. O service valida conflitos e uma camada de triggers na migration `20260824120000_reservations` impede sobreposição concorrente de reservas e bloqueios no SQLite. Intervalos consecutivos são permitidos.
+
+## 19. Forms
+
+O módulo `/forms` é um motor de formulários autenticado. Administradores gerenciam modelos; os demais acessos são definidos por papel e usuário específico. O backend é a autoridade para permissões, respostas, transições, pontuação e aprovação.
+
+O acesso ao módulo é uma camada anterior às permissões de cada modelo. A lista é administrada em `Painel > Configurações > Formulários`, persiste em `FormAccess` e é validada em todas as rotas `/api/forms`. Administradores possuem acesso implícito. A migration inicial preserva o comportamento anterior concedendo acesso aos usuários ativos já existentes.
+
+- Modelos e perguntas atuais podem ser editados ou inativados, mas não são excluídos destrutivamente.
+- Ao iniciar um preenchimento, a estrutura, os aprovadores e o observador padrão são serializados em snapshot e as respostas recebem campos snapshot próprios.
+- O modelo aceita um observador padrão ativo. Esse usuário é copiado e bloqueado no preenchimento; sem padrão, o autor pode selecionar, trocar ou remover um observador antes ou depois da finalização.
+- O observador acessa detalhe e evidências somente após a saída de `DRAFT`. A observação é estritamente de leitura e não concede edição, finalização nem aprovação.
+- Estados diferentes de `DRAFT` são imutáveis.
+- O administrador possui acesso implícito; um modelo sem permissões de preenchimento fica disponível somente para administradores.
+- O SQLite guarda apenas metadados de fotos. Uma evidência otimizada em WebP fica em `FORMS_UPLOAD_DIR`, com chave relativa e acesso autenticado.
+
+### Endpoints
+
+- `GET /forms/capabilities`, `GET /forms/available-models` e `GET /forms/observer-candidates`
+- `GET /forms/access`
+- `GET|PUT /admin/forms-settings` (`admin`)
+- `GET|POST /forms/models` e `GET|PUT /forms/models/:id` (`admin`)
+- `GET|POST /forms/submissions` (`scope=mine|observing`) e `GET /forms/submissions/:id`
+- `PATCH /forms/submissions/:id/observer`
+- `PATCH /forms/submissions/:id/answers/:answerId`
+- `POST /forms/submissions/:id/answers/:answerId/photo`
+- `POST /forms/submissions/:id/finalize`
+- `GET /forms/approvals`
+- `POST /forms/submissions/:id/approve|reject`
+- `GET /forms/photos/:photoId`
+
+O backup e a migração do módulo exigem um conjunto consistente do SQLite e de `FORMS_UPLOAD_DIR`. O deploy não deve limpar, mover ou substituir essa raiz. Se a configuração estiver ausente ou sem acesso, somente uploads e leitura de evidências do Forms retornam `FORMS_STORAGE_UNAVAILABLE`; as demais áreas continuam operacionais.

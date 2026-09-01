@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
+import FormsAccessRoute from "./components/FormsAccessRoute";
 import PwaManager from "./components/PwaManager";
 import Sidebar from "./components/Sidebar";
 import { SystemNotificationProvider } from "./components/SystemNotification";
@@ -15,6 +16,10 @@ const ProductionPlanningSettings = lazy(() => import("./pages/ProductionPlanning
 const StockCounts = lazy(() => import("./pages/StockCounts"));
 const StockCountEntry = lazy(() => import("./pages/StockCountEntry"));
 const Reservations = lazy(() => import("./pages/Reservations"));
+const FormsModels = lazy(() => import("./pages/FormsModels"));
+const FormModelEditor = lazy(() => import("./pages/FormModelEditor"));
+const FormSubmissions = lazy(() => import("./pages/FormSubmissions"));
+const FormSubmission = lazy(() => import("./pages/FormSubmission"));
 const PoolRanking = lazy(() => import("./pages/PoolRanking"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -70,6 +75,11 @@ function AppRoutes() {
         />
         <Route path="/ranking-bolao" element={<ProtectedRoute><PoolRanking /></ProtectedRoute>} />
         <Route path="/reservas" element={<ProtectedRoute><Reservations /></ProtectedRoute>} />
+        <Route path="/forms/preenchimentos" element={<ProtectedRoute><FormsAccessRoute><FormSubmissions /></FormsAccessRoute></ProtectedRoute>} />
+        <Route path="/forms/preenchimentos/:id" element={<ProtectedRoute><FormsAccessRoute><FormSubmission /></FormsAccessRoute></ProtectedRoute>} />
+        <Route path="/forms/modelos" element={<ProtectedRoute roles={["admin"]}><FormsAccessRoute><FormsModels /></FormsAccessRoute></ProtectedRoute>} />
+        <Route path="/forms/modelos/novo" element={<ProtectedRoute roles={["admin"]}><FormsAccessRoute><FormModelEditor /></FormsAccessRoute></ProtectedRoute>} />
+        <Route path="/forms/modelos/:id/editar" element={<ProtectedRoute roles={["admin"]}><FormsAccessRoute><FormModelEditor /></FormsAccessRoute></ProtectedRoute>} />
         <Route
           path="/admin/dashboard"
           element={<ProtectedRoute roles={["creator", "admin"]}><AdminDashboard /></ProtectedRoute>}

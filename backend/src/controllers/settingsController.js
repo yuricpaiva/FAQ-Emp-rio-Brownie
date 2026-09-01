@@ -105,8 +105,54 @@ async function updatePowerBiSettings(req, res) {
   return res.json({ enabled, url, userIds });
 }
 
+async function hasFormsAccess(user) {
+  if (user?.role === 'admin') return true;
+  if (!user?.id) return false;
+  return Boolean(await prisma.formAccess.findUnique({ where: { userId: user.id }, select: { userId: true } }));
+}
+
+async function getFormsAccessConfiguration(req, res) {
+  return res.json({ hasAccess: await hasFormsAccess(req.user) });
+}
+
+async function getFormsSettingsAdmin(_req, res) {
+  const accesses = await prisma.formAccess.findMany({
+    where: { user: { active: true, role: { not: 'admin' } } },
+    orderBy: { userId: 'asc' },
+    select: { userId: true }
+  });
+  return res.json({ userIds: accesses.map((access) => access.userId) });
+}
+
+async function updateFormsSettings(req, res) {
+  const rawUserIds = req.body?.userIds;
+  if (!Array.isArray(rawUserIds)) {
+    return res.status(400).json({ error: 'A lista de usuários autorizados é obrigatória.' });
+  }
+  const userIds = [...new Set(rawUserIds.map(Number))];
+  if (userIds.some((id) => !Number.isInteger(id) || id <= 0)) {
+    return res.status(400).json({ error: 'A lista de usuários possui IDs inválidos.' });
+  }
+  const validUsers = await prisma.user.findMany({
+    where: { id: { in: userIds }, active: true, role: { not: 'admin' } },
+    select: { id: true }
+  });
+  if (validUsers.length !== userIds.length) {
+    return res.status(400).json({ error: 'Selecione apenas usuários ativos e existentes. Administradores já possuem acesso.' });
+  }
+  await prisma.$transaction([
+    prisma.formAccess.deleteMany(),
+    ...userIds.map((userId) => prisma.formAccess.create({ data: { userId } }))
+  ]);
+  return res.json({ userIds });
+}
+
 module.exports = {
   getPowerBiConfiguration,
   getPowerBiSettingsAdmin,
-  updatePowerBiSettings
+  updatePowerBiSettings,
+  hasFormsAccess,
+  getFormsAccessConfiguration,
+  getFormsSettingsAdmin,
+  updateFormsSettings
 };

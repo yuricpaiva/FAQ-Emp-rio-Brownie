@@ -75,6 +75,7 @@ npm run build
 - Se o backend ficar atrás de proxy reverso, use `TRUST_PROXY=true`
 - Se frontend e backend estiverem em domínios diferentes, ajuste `CLIENT_ORIGIN`, `VITE_API_URL` e `COOKIE_SAMESITE`
 - Uploads são salvos em `backend/uploads/`; garanta persistência dessa pasta no ambiente de deploy
+- Evidências do módulo Forms usam exclusivamente o diretório externo definido em `FORMS_UPLOAD_DIR`; ele também deve ser persistido e incluído nos backups
 - Healthcheck disponível em `GET /api/health`
 
 ## Reservas de recursos compartilhados
@@ -96,3 +97,23 @@ A sobreposição usa intervalos semiabertos (`startAt < existing.endAt` e `endAt
 
 - O projeto ainda usa SQLite; para ambientes maiores ou múltiplas instâncias, considere migrar para Postgres
 - O editor de artigos usa carregamento sob demanda, mas o chunk do Quill continua relativamente grande
+
+## Forms
+
+O agrupador `Forms` oferece modelos configuráveis e preenchimentos com rascunho, pontuação, evidências e aprovação. `Modelos` é administrativo; `Preenchimentos` respeita permissões por papel ou usuário, sempre validadas pela API.
+
+- API autenticada: `/api/forms`
+- O acesso geral ao módulo é configurado por usuário em `Painel > Configurações > Formulários`; administradores possuem acesso implícito
+- Resultados: `SIMPLE` ou `SCORE`, com média simples ou ponderada calculada no backend
+- Perguntas: `TEXT`, `NUMBER`, `BOOLEAN`, `SCORE` e `PHOTO`
+- Estados: `DRAFT`, `PENDING_APPROVAL`, `COMPLETED`, `APPROVED` e `REJECTED`
+- A estrutura, os aprovadores e o observador padrão são capturados quando o preenchimento começa; alterações futuras no modelo não modificam rascunhos nem histórico
+- O modelo pode definir um observador padrão bloqueado. Sem padrão, o autor pode escolher, trocar ou remover um usuário ativo antes ou depois da finalização
+- A aba `Observando` exibe ao observador apenas preenchimentos já finalizados; esse vínculo concede leitura do detalhe e das fotos, sem edição ou aprovação
+- Uma pergunta pode possuir uma evidência. O SQLite guarda somente `storageKey` relativo, MIME, tamanho e timestamps
+- As fotos são autenticadas em `GET /api/forms/photos/:photoId`, nunca expostas como diretório público
+- Observadores ativos podem ser consultados em `GET /api/forms/observer-candidates`; a atribuição do rascunho usa `PATCH /api/forms/submissions/:id/observer`
+
+`FORMS_UPLOAD_DIR` deve ser um caminho absoluto, gravável e externo ao repositório, por exemplo `/var/lib/faq/forms`. A ausência ou invalidade dessa variável bloqueia somente operações de foto do Forms. Não existe fallback para `backend/uploads`.
+
+Para restaurar ou migrar o Forms é necessário preservar em conjunto o SQLite e o conteúdo de `FORMS_UPLOAD_DIR`. Alterar apenas a raiz configurada não exige migration, desde que os mesmos caminhos relativos sejam mantidos.

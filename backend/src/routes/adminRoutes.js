@@ -24,7 +24,9 @@ const {
 } = require('../controllers/poolController');
 const {
   getPowerBiSettingsAdmin,
-  updatePowerBiSettings
+  updatePowerBiSettings,
+  getFormsSettingsAdmin,
+  updateFormsSettings
 } = require('../controllers/settingsController');
 const {
   listProductionProducts,
@@ -124,6 +126,8 @@ router.delete('/pool-participants/:id', adminOnly, deletePoolParticipant);
 router.put('/pool-settings', adminOnly, updatePoolSettings);
 router.get('/power-bi-settings', adminOnly, getPowerBiSettingsAdmin);
 router.put('/power-bi-settings', adminOnly, updatePowerBiSettings);
+router.get('/forms-settings', adminOnly, getFormsSettingsAdmin);
+router.put('/forms-settings', adminOnly, updateFormsSettings);
 router.get('/database-connections', adminOnly, getDatabaseConnections);
 router.get('/database-connections/everest/diagnostic', adminOnly, downloadEverestDiagnostic);
 router.post('/database-connections/:system/test', adminOnly, testConnection);

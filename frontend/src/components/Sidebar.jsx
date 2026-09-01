@@ -18,9 +18,11 @@ function Sidebar() {
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(() => window.location.pathname.startsWith("/categoria"));
+  const [formsOpen, setFormsOpen] = useState(() => window.location.pathname.startsWith("/forms"));
   const [categories, setCategories] = useState([]);
   const [poolEnabled, setPoolEnabled] = useState(false);
   const [powerBiAccess, setPowerBiAccess] = useState(false);
+  const [formsAccess, setFormsAccess] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
@@ -36,6 +38,10 @@ function Sidebar() {
     if (location.pathname.startsWith("/categoria")) {
       setKnowledgeOpen(true);
     }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/forms")) setFormsOpen(true);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -63,6 +69,15 @@ function Sidebar() {
     loadPowerBiAccess();
     window.addEventListener("power-bi-settings-updated", loadPowerBiAccess);
     return () => window.removeEventListener("power-bi-settings-updated", loadPowerBiAccess);
+  }, []);
+
+  useEffect(() => {
+    const loadFormsAccess = () => {
+      api.get("/forms/access").then((res) => setFormsAccess(Boolean(res.data.hasAccess))).catch(() => setFormsAccess(false));
+    };
+    loadFormsAccess();
+    window.addEventListener("forms-settings-updated", loadFormsAccess);
+    return () => window.removeEventListener("forms-settings-updated", loadFormsAccess);
   }, []);
 
   useEffect(() => {
@@ -121,6 +136,11 @@ function Sidebar() {
       setCollapsed(false);
     }
     setKnowledgeOpen((value) => !value);
+  };
+
+  const handleFormsToggle = () => {
+    if (!isMobile && collapsed) setCollapsed(false);
+    setFormsOpen((value) => !value);
   };
 
   const handleProfileSave = async (event) => {
@@ -273,6 +293,24 @@ function Sidebar() {
               <img src="/icon-reservas.svg" alt="" className="sidebar__nav-icon" />
               <span className="sidebar__label">Reservas</span>
             </NavLink>
+            {formsAccess && <><button
+              type="button"
+              className={`sidebar__link sidebar__link--button ${location.pathname.startsWith("/forms") ? "active" : ""}`}
+              onClick={handleFormsToggle}
+              aria-expanded={formsOpen}
+              aria-controls="forms-menu"
+              aria-label="Formulários"
+            >
+              <img src="/icon-forms.svg" alt="" className="sidebar__nav-icon" />
+              <span className="sidebar__label">Formulários</span>
+              <span className={`sidebar__chevron ${formsOpen ? "sidebar__chevron--open" : ""}`} aria-hidden="true">v</span>
+            </button>
+            {formsOpen && (
+              <div id="forms-menu" className="sidebar__submenu" aria-hidden={!isMobile && collapsed} inert={!isMobile && collapsed ? "" : undefined}>
+                {hasRole(["admin"]) && <NavLink to="/forms/modelos" className="sidebar__submenu-link" onClick={closeNavigation}><span>Modelos</span></NavLink>}
+                <NavLink to="/forms/preenchimentos" className="sidebar__submenu-link" onClick={closeNavigation}><span>Preenchimentos</span></NavLink>
+              </div>
+            )}</>}
             {hasRole(["creator", "admin"]) && (
               <NavLink
                 to="/admin/dashboard"
