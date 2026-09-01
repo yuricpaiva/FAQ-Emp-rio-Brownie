@@ -5,6 +5,7 @@ import FormsAccessRoute from "./components/FormsAccessRoute";
 import PwaManager from "./components/PwaManager";
 import Sidebar from "./components/Sidebar";
 import { SystemNotificationProvider } from "./components/SystemNotification";
+import { LoadingState } from "./components/ui";
 
 const Home = lazy(() => import("./pages/Home"));
 const Category = lazy(() => import("./pages/Category"));
@@ -29,14 +30,7 @@ const AdminPool = lazy(() => import("./pages/AdminPool"));
 const AdminSettings = lazy(() => import("./pages/AdminSettings"));
 
 function RouteLoader() {
-  return (
-    <div className="app-loader">
-      <div className="app-loader__card">
-        <span className="app-loader__dot" />
-        <p>Carregando tela...</p>
-      </div>
-    </div>
-  );
+  return <div className="app-loader"><LoadingState label="Carregando tela..." /></div>;
 }
 
 function AppRoutes() {
