@@ -6,7 +6,9 @@ function FormCameraCapture({ submissionId, answer, disabled, onSaved }) {
   const videoRef = useRef(null);
   const fileRef = useRef(null);
   const streamRef = useRef(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [preparing, setPreparing] = useState(false);
   const [candidate, setCandidate] = useState(null);
   const [preview, setPreview] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -18,25 +20,38 @@ function FormCameraCapture({ submissionId, answer, disabled, onSaved }) {
     streamRef.current = null; setCameraOpen(false);
   };
 
-  useEffect(() => () => { stopCamera(); if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const discardCandidate = () => {
+    setCandidate(null);
+    setPreview((currentPreview) => { if (currentPreview) URL.revokeObjectURL(currentPreview); return ""; });
+  };
+
+  const closeModal = (force = false) => {
+    if (uploading && !force) return;
+    stopCamera(); discardCandidate(); setPreparing(false); setError(""); setModalOpen(false);
+  };
+
+  useEffect(() => () => { streamRef.current?.getTracks().forEach((track) => track.stop()); }, []);
+  useEffect(() => {
+    if (!modalOpen) return undefined;
+    const escape = (event) => { if (event.key === "Escape") closeModal(); };
+    document.addEventListener("keydown", escape);
+    return () => document.removeEventListener("keydown", escape);
+  }, [modalOpen, uploading]);
 
   const setFile = (file) => {
     if (!file) return;
-    if (preview) URL.revokeObjectURL(preview);
-    setCandidate(file); setPreview(URL.createObjectURL(file)); setError(""); stopCamera();
+    discardCandidate(); setModalOpen(true); setCandidate(file); setPreview(URL.createObjectURL(file)); setPreparing(false); setError(""); stopCamera();
   };
 
   const openCamera = async () => {
-    setError(""); setCandidate(null);
-    if (preview) URL.revokeObjectURL(preview);
-    setPreview("");
+    setModalOpen(true); setPreparing(true); setError(""); discardCandidate(); stopCamera();
     if (fileRef.current) fileRef.current.value = "";
-    if (!navigator.mediaDevices?.getUserMedia) { fileRef.current?.click(); return; }
+    if (!navigator.mediaDevices?.getUserMedia) { setPreparing(false); fileRef.current?.click(); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-      streamRef.current = stream; setCameraOpen(true);
+      streamRef.current = stream; setCameraOpen(true); setPreparing(false);
       window.setTimeout(() => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); } }, 0);
-    } catch { fileRef.current?.click(); }
+    } catch { setPreparing(false); fileRef.current?.click(); }
   };
 
   const capture = () => {
@@ -55,19 +70,26 @@ function FormCameraCapture({ submissionId, answer, disabled, onSaved }) {
     const data = new FormData(); data.append("photo", candidate);
     try {
       const response = await api.post(`/forms/submissions/${submissionId}/answers/${answer.id}/photo`, data, { headers: { "Content-Type": "multipart/form-data" }, onUploadProgress: (event) => setProgress(event.total ? Math.round((event.loaded / event.total) * 100) : 0) });
-      onSaved(response.data); setCandidate(null); if (preview) URL.revokeObjectURL(preview); setPreview("");
+      onSaved(response.data); closeModal(true);
     } catch (uploadError) { setError(uploadError.response?.data?.error || "Não foi possível salvar a foto."); }
     finally { setUploading(false); }
   };
 
   if (disabled) return answer.photo ? <img className="forms-photo-preview" src={photoUrl(answer.photo.id)} alt={`Evidência de ${answer.text}`} /> : <span className="forms-muted">Sem evidência fotográfica.</span>;
   return <div className="forms-camera">
-    {answer.photo && !preview && <><img className="forms-photo-preview" src={photoUrl(answer.photo.id)} alt={`Evidência de ${answer.text}`} /><span className="forms-upload-success">Foto salva.</span></>}
-    {cameraOpen && <div className="forms-camera-live"><video ref={videoRef} playsInline muted /><button type="button" className="button" onClick={capture}>Capturar</button><button type="button" className="button button--ghost" onClick={stopCamera}>Cancelar</button></div>}
-    {preview && <div className="forms-camera-candidate"><img className="forms-photo-preview" src={preview} alt="Prévia da foto capturada" /><div><button type="button" className="button" onClick={upload} disabled={uploading}>{uploading ? `Enviando ${progress}%` : "Usar foto"}</button><button type="button" className="button button--ghost" onClick={openCamera} disabled={uploading}>Refazer foto</button></div></div>}
-    {!cameraOpen && !preview && <button type="button" className="button button--ghost" onClick={openCamera}>{answer.photo ? "Refazer foto" : "Tirar foto"}</button>}
+    {answer.photo && <><img className="forms-photo-preview" src={photoUrl(answer.photo.id)} alt={`Evidência de ${answer.text}`} /><span className="forms-upload-success">Foto salva.</span></>}
+    <button type="button" className="button button--ghost" onClick={openCamera}>{answer.photo ? "Refazer foto" : "Tirar foto"}</button>
     <input ref={fileRef} className="forms-camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => setFile(event.target.files?.[0])} />
-    {error && <div className="forms-camera-error"><span>{error}</span>{candidate && <button type="button" onClick={upload}>Tentar novamente</button>}</div>}
+    {modalOpen && <div className="modal-backdrop forms-camera-backdrop" onClick={() => closeModal()}>
+      <div className="modal-card forms-camera-modal" role="dialog" aria-modal="true" aria-labelledby={`forms-camera-title-${answer.id}`} onClick={(event) => event.stopPropagation()}>
+        <div className="modal-card__header"><div><h3 id={`forms-camera-title-${answer.id}`}>{answer.photo ? "Refazer foto" : "Tirar foto"}</h3><p>Enquadre a evidência e confirme antes de salvar.</p></div><button type="button" onClick={() => closeModal()} disabled={uploading} aria-label="Fechar câmera">×</button></div>
+        {preparing && <div className="forms-camera-preparing">Preparando câmera...</div>}
+        {cameraOpen && <div className="forms-camera-live"><video ref={videoRef} playsInline muted /><div><button type="button" className="button" onClick={capture}>Capturar foto</button><button type="button" className="button button--ghost" onClick={() => closeModal()}>Cancelar</button></div></div>}
+        {preview && <div className="forms-camera-candidate"><img className="forms-photo-preview" src={preview} alt="Prévia da foto capturada" /><div><button type="button" className="button" onClick={upload} disabled={uploading}>{uploading ? `Enviando ${progress}%` : "Usar foto"}</button><button type="button" className="button button--ghost" onClick={openCamera} disabled={uploading}>Refazer foto</button></div></div>}
+        {!preparing && !cameraOpen && !preview && <div className="forms-camera-fallback"><p>A câmera não pôde ser aberta automaticamente.</p><button type="button" className="button" onClick={() => fileRef.current?.click()}>Abrir câmera</button></div>}
+        {error && <div className="forms-camera-error"><span>{error}</span>{candidate && <button type="button" onClick={upload}>Tentar novamente</button>}</div>}
+      </div>
+    </div>}
   </div>;
 }
 

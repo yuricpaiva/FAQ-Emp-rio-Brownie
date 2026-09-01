@@ -6561,3 +6561,110 @@ textarea:focus {
     justify-content: flex-end;
   }
 }
+
+/* Forms camera confirmation modal */
+.modal-backdrop.forms-camera-backdrop {
+  align-items: center;
+  justify-items: center;
+  padding: 1rem;
+  animation: forms-camera-backdrop-in 160ms ease-out both;
+}
+
+.modal-card.forms-camera-modal {
+  width: min(680px, calc(100vw - 2rem));
+  min-height: 0;
+  max-height: min(88dvh, 760px);
+  padding: 1.1rem;
+  border-radius: 16px;
+  background: #fffdfb;
+  animation: forms-camera-modal-in 190ms ease-out both;
+}
+
+.forms-camera-modal .modal-card__header {
+  margin-bottom: .85rem;
+}
+
+.forms-camera-modal .modal-card__header p {
+  margin: .25rem 0 0;
+  color: #80675c;
+  font-size: .8rem;
+}
+
+.forms-camera-modal .modal-card__header button {
+  display: grid;
+  flex: 0 0 42px;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  font-size: 1.45rem;
+}
+
+.forms-camera-modal .modal-card__header button:hover {
+  background: #f2e7de;
+}
+
+.forms-camera-modal .forms-camera-live,
+.forms-camera-modal .forms-camera-candidate {
+  width: 100%;
+  justify-items: stretch;
+}
+
+.forms-camera-modal .forms-camera-live video,
+.forms-camera-modal .forms-photo-preview {
+  width: 100%;
+  max-height: min(60dvh, 520px);
+}
+
+.forms-camera-modal .forms-camera-live > div,
+.forms-camera-modal .forms-camera-candidate > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.forms-camera-modal .button {
+  min-height: 46px;
+}
+
+.forms-camera-preparing,
+.forms-camera-fallback {
+  display: grid;
+  min-height: 180px;
+  place-content: center;
+  justify-items: center;
+  gap: .8rem;
+  padding: 1rem;
+  border-radius: 12px;
+  background: #f7f0ea;
+  color: #765c50;
+  text-align: center;
+}
+
+.forms-camera-fallback p {
+  margin: 0;
+}
+
+@keyframes forms-camera-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes forms-camera-modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 480px) {
+  .modal-backdrop.forms-camera-backdrop { padding: .75rem; }
+  .modal-card.forms-camera-modal { width: calc(100vw - 1.5rem); max-height: calc(100dvh - 1.5rem); padding: .85rem; border-radius: 14px; }
+  .forms-camera-modal .forms-camera-live video,
+  .forms-camera-modal .forms-photo-preview { max-height: 54dvh; }
+  .forms-camera-modal .forms-camera-live > div,
+  .forms-camera-modal .forms-camera-candidate > div { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop.forms-camera-backdrop,
+  .modal-card.forms-camera-modal { animation: none; }
+}
