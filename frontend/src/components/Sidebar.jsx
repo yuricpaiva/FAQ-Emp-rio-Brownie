@@ -5,7 +5,6 @@ import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { getCategoryIcon } from "../constants/categoryIcons";
 import SystemNotification from "./SystemNotification";
-import { Modal } from "./ui";
 
 const STORAGE_KEY = "faq_sidebar_collapsed";
 const MOBILE_QUERY = "(max-width: 720px)";
@@ -117,9 +116,7 @@ function Sidebar() {
       </nav>
     </aside>
     {isMobile && mobileOpen && <button type="button" className="sidebar__mobile-overlay" onClick={() => setMobileOpen(false)} aria-label="Fechar menu" />}
-    <Modal open={showProfile} onClose={() => setShowProfile(false)} title="Editar perfil" width="small" actions={<><button type="button" className="button button--ghost" onClick={() => setShowProfile(false)}>Cancelar</button><button type="submit" form="sidebar-profile-form" className="button">Salvar</button></>}>
-      <form id="sidebar-profile-form" className="form-grid" onSubmit={handleProfileSave}><label><span>Nome</span><input value={formName} onChange={(event) => setFormName(event.target.value)} required /></label><label><span>Email</span><input type="email" value={formEmail} onChange={(event) => setFormEmail(event.target.value)} required /></label><label><span>Senha</span><input type="password" value={formPassword} onChange={(event) => setFormPassword(event.target.value)} placeholder="Deixe em branco para manter" /></label><label><span>Foto</span><input type="file" accept="image/*" onChange={(event) => setFormPhoto(event.target.files?.[0] || null)} /></label>{message && <SystemNotification variant="error">{message}</SystemNotification>}</form>
-    </Modal>
+    {showProfile && <div className="modal-backdrop" onClick={() => setShowProfile(false)}><div className="modal-card" onClick={(event) => event.stopPropagation()}><div className="modal-card__header"><h3>Editar perfil</h3><button type="button" onClick={() => setShowProfile(false)}>x</button></div><form className="form-grid" onSubmit={handleProfileSave}><label><span>Nome</span><input value={formName} onChange={(event) => setFormName(event.target.value)} required /></label><label><span>Email</span><input type="email" value={formEmail} onChange={(event) => setFormEmail(event.target.value)} required /></label><label><span>Senha</span><input type="password" value={formPassword} onChange={(event) => setFormPassword(event.target.value)} placeholder="Deixe em branco para manter" /></label><label><span>Foto</span><input type="file" accept="image/*" onChange={(event) => setFormPhoto(event.target.files?.[0] || null)} /></label>{message && <SystemNotification variant="error">{message}</SystemNotification>}<div className="form-actions"><button type="button" className="button button--ghost" onClick={() => setShowProfile(false)}>Cancelar</button><button type="submit" className="button">Salvar</button></div></form></div></div>}
   </>;
 }
 
