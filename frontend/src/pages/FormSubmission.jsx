@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { MessageSquareText, Store } from "lucide-react";
 import api from "../services/api";
 import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 import FormCameraCapture from "../components/forms/FormCameraCapture";
@@ -23,6 +24,17 @@ function AnswerInput({ answer, value, model, disabled, onChange, onPhoto }) {
   </div>;
 }
 
+function ObservationButton({ answer, onClick }) {
+  if (!answer.observationAllowed) return null;
+  const filled = Boolean(answer.observation);
+  return <button type="button" className={`forms-observation-trigger ${filled ? "has-observation" : ""}`} onClick={onClick} aria-label={filled ? "Editar observação da pergunta" : "Adicionar observação à pergunta"} title={filled ? "Editar observação" : "Adicionar observação"}><MessageSquareText size={18} aria-hidden="true" />{filled && <span aria-hidden="true" />}</button>;
+}
+
+function ObservationNote({ observation }) {
+  if (!observation) return null;
+  return <aside className="forms-observation-note"><strong>Observação</strong><p>{observation}</p></aside>;
+}
+
 function ObserverControl({ submission, candidates, search, saving, onSearch, onChange }) {
   const canManage = submission.permissions?.canManageObserver;
   return <details className={`forms-observer-menu ${submission.observer ? "has-observer" : ""}`}>
@@ -33,6 +45,20 @@ function ObserverControl({ submission, candidates, search, saving, onSearch, onC
     <div className="forms-observer-menu__panel">
       <strong>Observador</strong>
       {canManage ? <><p>{submission.status === "DRAFT" ? "O observador terá acesso somente após a finalização." : "O observador terá acesso de leitura imediatamente."}</p><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar usuário" aria-label="Buscar observador" /><select value={submission.observer?.id || ""} onChange={(event) => onChange(event.target.value)} disabled={saving} aria-label="Selecionar observador"><option value="">Sem observador</option>{submission.observer && !candidates.some((candidate) => candidate.id === submission.observer.id) && <option value={submission.observer.id}>{submission.observer.name}</option>}{candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select>{saving && <small>Salvando...</small>}</> : <><p>{submission.observerLocked ? "Definido pelo modelo e bloqueado neste preenchimento." : "Acesso somente de leitura."}</p><span className="forms-observer-menu__name">{submission.observer?.name || "Sem observador"}</span></>}
+    </div>
+  </details>;
+}
+
+function StoreControl({ submission, stores, saving, onChange }) {
+  const canManage = submission.permissions?.canManageStore;
+  return <details className={`forms-observer-menu forms-store-menu ${submission.store ? "has-observer" : ""}`}>
+    <summary aria-label="Loja do preenchimento" title="Loja do preenchimento">
+      <Store size={18} aria-hidden="true" />
+      {submission.store && <span aria-hidden="true" />}
+    </summary>
+    <div className="forms-observer-menu__panel">
+      <strong>Loja</strong>
+      {canManage ? <><p>Selecione a loja deste preenchimento. Ela será obrigatória para finalizar.</p><select value={submission.store?.id || ""} onChange={(event) => onChange(event.target.value)} disabled={saving} aria-label="Selecionar loja"><option value="">Selecione a loja</option>{submission.store && !stores.some((store) => store.id === submission.store.id) && <option value={submission.store.id}>{submission.store.name}</option>}{stores.map((store) => <option key={store.id} value={store.id}>{store.displayName}</option>)}</select>{saving && <small>Salvando...</small>}</> : <><p>A loja não pode ser alterada após a finalização.</p><span className="forms-observer-menu__name">{submission.store?.name || "Loja não informada"}</span></>}
     </div>
   </details>;
 }
@@ -53,6 +79,11 @@ function FormSubmission() {
   const [observerCandidates, setObserverCandidates] = useState([]);
   const [observerSearch, setObserverSearch] = useState("");
   const [observerSaving, setObserverSaving] = useState(false);
+  const [stores, setStores] = useState([]);
+  const [storeSaving, setStoreSaving] = useState(false);
+  const [observationAnswer, setObservationAnswer] = useState(null);
+  const [observationDraft, setObservationDraft] = useState("");
+  const [observationSaving, setObservationSaving] = useState(false);
   const timers = useRef(new Map());
   const pending = useRef(new Map());
   const dirty = useRef(new Set());
@@ -72,8 +103,14 @@ function FormSubmission() {
     const timer = setTimeout(() => api.get("/forms/observer-candidates", { params: { search: observerSearch || undefined } }).then((response) => setObserverCandidates(response.data)).catch((error) => setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível buscar observadores." })), 250);
     return () => clearTimeout(timer);
   }, [submission?.permissions?.canManageObserver, observerSearch]);
+  useEffect(() => {
+    if (!submission?.permissions?.canManageStore) return undefined;
+    api.get("/forms/stores").then((response) => setStores(response.data)).catch((error) => setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível listar as lojas." }));
+    return undefined;
+  }, [submission?.permissions?.canManageStore]);
   useEffect(() => { const warn = (event) => { if (dirty.current.size) { event.preventDefault(); event.returnValue = ""; } }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, []);
   useEffect(() => { if (!rejectOpen) return undefined; const escape = (event) => { if (event.key === "Escape") setRejectOpen(false); }; document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape); }, [rejectOpen]);
+  useEffect(() => { if (!observationAnswer || observationSaving) return undefined; const escape = (event) => { if (event.key === "Escape") setObservationAnswer(null); }; document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape); }, [observationAnswer, observationSaving]);
 
   const saveAnswer = (answerId) => {
     const timer = timers.current.get(answerId); if (timer) clearTimeout(timer); timers.current.delete(answerId);
@@ -95,12 +132,46 @@ function FormSubmission() {
     } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível alterar o observador." }); }
     finally { setObserverSaving(false); }
   };
+  const changeStore = async (storeId) => {
+    setStoreSaving(true);
+    try {
+      const response = await api.patch(`/forms/submissions/${id}/store`, { storeId: storeId ? Number(storeId) : null });
+      setSubmission((currentSubmission) => ({ ...currentSubmission, store: response.data.store }));
+      setNotice({ variant: "success", text: response.data.store ? "Loja salva." : "Loja removida." });
+    } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível alterar a loja." }); }
+    finally { setStoreSaving(false); }
+  };
+  const openObservation = (selectedAnswer) => { setObservationAnswer(selectedAnswer); setObservationDraft(selectedAnswer.observation || ""); };
+  const closeObservation = () => { if (!observationSaving) setObservationAnswer(null); };
+  const saveObservation = async () => {
+    if (!observationAnswer || observationSaving) return;
+    setObservationSaving(true);
+    try {
+      const response = await api.patch(`/forms/submissions/${id}/answers/${observationAnswer.id}/observation`, { observation: observationDraft });
+      setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === observationAnswer.id ? { ...item, observation: response.data.observation } : item) }));
+      setObservationAnswer(null);
+      setNotice({ variant: "success", text: response.data.observation ? "Observação salva." : "Observação removida." });
+    } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível salvar a observação." }); }
+    finally { setObservationSaving(false); }
+  };
 
   if (!submission) return <section className="page-stack">{notice ? <SystemNotification variant="error">{notice.text}</SystemNotification> : <div className="forms-empty">Carregando preenchimento...</div>}<button className="button button--ghost" onClick={() => navigate("/forms/preenchimentos")}>Voltar</button></section>;
   const editable = submission.permissions?.canEdit;
   const answer = submission.answers[current];
-  return <section className="page-stack forms-page forms-execution"><header className="forms-execution-header"><div><button className="forms-back" onClick={() => navigate("/forms/preenchimentos")}>← Voltar</button><p className="eyebrow">{editable ? "Preenchimento em andamento" : "Detalhes do preenchimento"}</p><h1>{submission.model.name}</h1><p>{submission.model.description}</p></div><div className="forms-execution-state"><div className="forms-execution-tools"><span className={`forms-status forms-status--${submission.status.toLowerCase()}`}>{statusLabels[submission.status]}</span><ObserverControl submission={submission} candidates={observerCandidates} search={observerSearch} saving={observerSaving} onSearch={setObserverSearch} onChange={changeObserver} /></div>{editable && <span>{saving ? "Salvando..." : "Alterações salvas"}</span>}</div></header>{notice && <SystemNotification variant={notice.variant} onDismiss={() => setNotice(null)}>{notice.text}</SystemNotification>}
-    {editable ? <><div className="forms-progress"><div><span>Pergunta {current + 1} de {submission.answers.length}</span><strong>{Math.round(((current + 1) / submission.answers.length) * 100)}%</strong></div><progress value={current + 1} max={submission.answers.length} /></div><article key={answer.id} className={`forms-answer-card forms-question-transition forms-question-transition--${questionDirection}`}><header><span>{answer.position}</span><div><h2>{answer.text}</h2><p>{answer.required ? "Resposta obrigatória" : "Resposta opcional"}{answer.photoRequired ? " · Foto obrigatória" : ""}</p></div></header><AnswerInput answer={answer} value={values[answer.id]} model={submission.model} onChange={(value) => change(answer.id, value)} onPhoto={(photo) => setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answer.id ? { ...item, photo } : item) }))} /></article><div className="forms-execution-actions"><button className="button button--ghost" onClick={() => go(-1)} disabled={!current || saving}>Anterior</button>{current < submission.answers.length - 1 ? <button className="button" onClick={() => go(1)} disabled={saving}>Próxima</button> : <button className="button" onClick={finalize} disabled={saving || finalizing}>{finalizing ? "Finalizando..." : "Finalizar"}</button>}</div></> : <><div className="forms-summary"><span>Iniciado em <strong>{formatDateTime(submission.startedAt)}</strong></span>{submission.finalScore !== null && <span>Nota final <strong>{formatScore(submission.finalScore)}</strong></span>}{submission.approvedBy && <span>Aprovado por <strong>{submission.approvedBy.name}</strong></span>}{submission.rejectedBy && <span>Reprovado por <strong>{submission.rejectedBy.name}</strong>: {submission.rejectionReason}</span>}</div><div className="forms-readonly-answers">{submission.answers.map((item) => <article className="forms-answer-card" key={item.id}><header><span>{item.position}</span><div><h2>{item.text}</h2></div></header><AnswerInput answer={item} value={answerValue(item)} model={submission.model} disabled /></article>)}</div>{submission.permissions?.canApprove && <div className="forms-approval-actions"><button className="button button--ghost" onClick={() => setRejectOpen(true)}>Reprovar</button><button className="button" onClick={() => decide("approve")}>Aprovar</button></div>}</>}
+  return <section className="page-stack forms-page forms-execution"><header className="forms-execution-header"><div><button className="forms-back" onClick={() => navigate("/forms/preenchimentos")}>← Voltar</button><p className="eyebrow">{editable ? "Preenchimento em andamento" : "Detalhes do preenchimento"}</p><h1>{submission.model.name}</h1><p>{submission.model.description}</p></div><div className="forms-execution-state"><div className="forms-execution-tools"><span className={`forms-status forms-status--${submission.status.toLowerCase()}`}>{statusLabels[submission.status]}</span><div className="forms-execution-icon-stack"><ObserverControl submission={submission} candidates={observerCandidates} search={observerSearch} saving={observerSaving} onSearch={setObserverSearch} onChange={changeObserver} />{submission.model.requiresStore && <StoreControl submission={submission} stores={stores} saving={storeSaving} onChange={changeStore} />}</div></div>{editable && <span>{saving || storeSaving ? "Salvando..." : "Alterações salvas"}</span>}</div></header>{notice && <SystemNotification variant={notice.variant} onDismiss={() => setNotice(null)}>{notice.text}</SystemNotification>}
+    {editable ? <>
+      <div className="forms-progress"><div><span>Pergunta {current + 1} de {submission.answers.length}</span><strong>{Math.round(((current + 1) / submission.answers.length) * 100)}%</strong></div><progress value={current + 1} max={submission.answers.length} /></div>
+      <article key={answer.id} className={`forms-answer-card forms-question-transition forms-question-transition--${questionDirection}`}>
+        <header><span>{answer.position}</span><div><div className="forms-question-title"><h2>{answer.text}</h2><ObservationButton answer={answer} onClick={() => openObservation(answer)} /></div><p>{answer.required ? "Resposta obrigatória" : "Resposta opcional"}{answer.photoRequired ? " · Foto obrigatória" : ""}</p></div></header>
+        <AnswerInput answer={answer} value={values[answer.id]} model={submission.model} onChange={(value) => change(answer.id, value)} onPhoto={(photo) => setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answer.id ? { ...item, photo } : item) }))} />
+      </article>
+      <div className="forms-execution-actions"><button className="button button--ghost" onClick={() => go(-1)} disabled={!current || saving}>Anterior</button>{current < submission.answers.length - 1 ? <button className="button" onClick={() => go(1)} disabled={saving}>Próxima</button> : <button className="button" onClick={finalize} disabled={saving || finalizing}>{finalizing ? "Finalizando..." : "Finalizar"}</button>}</div>
+    </> : <>
+      <div className="forms-summary"><span>Iniciado em <strong>{formatDateTime(submission.startedAt)}</strong></span>{submission.model.requiresStore && <span>Loja <strong>{submission.store?.name || "Não informada"}</strong></span>}{submission.finalScore !== null && <span>Nota final <strong>{formatScore(submission.finalScore)}</strong></span>}{submission.approvedBy && <span>Aprovado por <strong>{submission.approvedBy.name}</strong></span>}{submission.rejectedBy && <span>Reprovado por <strong>{submission.rejectedBy.name}</strong>: {submission.rejectionReason}</span>}</div>
+      <div className="forms-readonly-answers">{submission.answers.map((item) => <article className="forms-answer-card" key={item.id}><header><span>{item.position}</span><div><h2>{item.text}</h2></div></header><AnswerInput answer={item} value={answerValue(item)} model={submission.model} disabled /><ObservationNote observation={item.observation} /></article>)}</div>
+      {submission.permissions?.canApprove && <div className="forms-approval-actions"><button className="button button--ghost" onClick={() => setRejectOpen(true)}>Reprovar</button><button className="button" onClick={() => decide("approve")}>Aprovar</button></div>}
+    </>}
+    {observationAnswer && <div className="modal-backdrop forms-observation-backdrop" onClick={closeObservation}><div className="modal-card forms-observation-modal" role="dialog" aria-modal="true" aria-labelledby="forms-observation-title" onClick={(event) => event.stopPropagation()}><div className="modal-card__header"><div><h3 id="forms-observation-title">Observação da pergunta</h3><p>{observationAnswer.text}</p></div><button type="button" onClick={closeObservation} disabled={observationSaving} aria-label="Fechar observação">×</button></div><label className="forms-observation-field"><span>Observação opcional</span><textarea rows={6} maxLength={1000} value={observationDraft} onChange={(event) => setObservationDraft(event.target.value)} placeholder="Digite uma observação sobre esta resposta" autoFocus /><small>{observationDraft.length}/1000</small></label><div className="form-actions"><button type="button" className="button button--ghost" onClick={closeObservation} disabled={observationSaving}>Cancelar</button><button type="button" className="button" onClick={saveObservation} disabled={observationSaving}>{observationSaving ? "Salvando..." : "Salvar"}</button></div></div></div>}
     {rejectOpen && <div className="modal-backdrop" onClick={() => setRejectOpen(false)}><div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="forms-reject-title" onClick={(event) => event.stopPropagation()}><div className="modal-card__header"><h3 id="forms-reject-title">Reprovar preenchimento</h3><button type="button" onClick={() => setRejectOpen(false)}>×</button></div><label className="forms-reject-field"><span>Justificativa</span><textarea rows={5} maxLength={1000} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} autoFocus /></label><div className="form-actions"><button type="button" className="button button--ghost" onClick={() => setRejectOpen(false)}>Cancelar</button><button type="button" className="button" onClick={() => decide("reject", rejectionReason)}>Reprovar</button></div></div></div>}
   </section>;
 }

@@ -8,30 +8,30 @@ datasource db {
 }
 
 model User {
-  id                Int              @id @default(autoincrement())
-  name              String
-  email             String           @unique
-  passwordHash      String
-  role              String           @default("reader")
-  photoUrl          String           @default("")
-  active            Boolean          @default(true)
-  authVersion       Int              @default(0)
-  productionStoreId Int?
-  powerBiAccess     PowerBiAccess?
-  formAccess        FormAccess?
-  productionStore   ProductionStore? @relation("UserProductionStore", fields: [productionStoreId], references: [id], onDelete: SetNull)
-  createdStockCounts StockCount[]     @relation("StockCountCreatedBy")
-  reservationsCreated Reservation[]   @relation("ReservationCreatedBy")
-  reservationsCancelled Reservation[] @relation("ReservationCancelledBy")
-  reservationBlocksCreated ReservationBlock[] @relation("ReservationBlockCreatedBy")
-  reservationBlocksCancelled ReservationBlock[] @relation("ReservationBlockCancelledBy")
-  formModelsCreated FormModel[] @relation("FormModelCreatedBy")
-  formModelPermissions FormModelUserPermission[]
-  formSubmissions FormSubmission[] @relation("FormSubmissionCreatedBy")
-  formSubmissionsApproved FormSubmission[] @relation("FormSubmissionApprovedBy")
-  formSubmissionsRejected FormSubmission[] @relation("FormSubmissionRejectedBy")
-  formModelsObserved FormModel[] @relation("FormModelDefaultObserver")
-  formSubmissionsObserved FormSubmission[] @relation("FormSubmissionObserver")
+  id                         Int                       @id @default(autoincrement())
+  name                       String
+  email                      String                    @unique
+  passwordHash               String
+  role                       String                    @default("reader")
+  photoUrl                   String                    @default("")
+  active                     Boolean                   @default(true)
+  authVersion                Int                       @default(0)
+  productionStoreId          Int?
+  powerBiAccess              PowerBiAccess?
+  formAccess                 FormAccess?
+  productionStore            ProductionStore?          @relation("UserProductionStore", fields: [productionStoreId], references: [id], onDelete: SetNull)
+  createdStockCounts         StockCount[]              @relation("StockCountCreatedBy")
+  reservationsCreated        Reservation[]             @relation("ReservationCreatedBy")
+  reservationsCancelled      Reservation[]             @relation("ReservationCancelledBy")
+  reservationBlocksCreated   ReservationBlock[]        @relation("ReservationBlockCreatedBy")
+  reservationBlocksCancelled ReservationBlock[]        @relation("ReservationBlockCancelledBy")
+  formModelsCreated          FormModel[]               @relation("FormModelCreatedBy")
+  formModelPermissions       FormModelUserPermission[]
+  formSubmissions            FormSubmission[]          @relation("FormSubmissionCreatedBy")
+  formSubmissionsApproved    FormSubmission[]          @relation("FormSubmissionApprovedBy")
+  formSubmissionsRejected    FormSubmission[]          @relation("FormSubmissionRejectedBy")
+  formModelsObserved         FormModel[]               @relation("FormModelDefaultObserver")
+  formSubmissionsObserved    FormSubmission[]          @relation("FormSubmissionObserver")
 
   @@index([productionStoreId])
 }
@@ -127,47 +127,48 @@ model PowerBiAccess {
 }
 
 model ProductionProduct {
-  id               Int      @id @default(autoincrement())
-  code             String   @unique
-  name             String
-  active           Boolean  @default(true)
-  showInStockCount Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  sourceConversions ProductionConversion[] @relation("ProductionConversionSource")
-  planningItems ProductionPlanningItem[]
-  stockCountItems StockCountItem[]
+  id                Int                      @id @default(autoincrement())
+  code              String                   @unique
+  name              String
+  active            Boolean                  @default(true)
+  showInStockCount  Boolean                  @default(true)
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  sourceConversions ProductionConversion[]   @relation("ProductionConversionSource")
+  planningItems     ProductionPlanningItem[]
+  stockCountItems   StockCountItem[]
 
   @@index([active, code])
 }
 
 model ProductionConversion {
-  id              Int               @id @default(autoincrement())
-  sourceProductId Int               @unique
-  conversionCode  String
-  conversionName  String
+  id               Int               @id @default(autoincrement())
+  sourceProductId  Int               @unique
+  conversionCode   String
+  conversionName   String
   conversionFactor Decimal
-  active          Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  sourceProduct   ProductionProduct @relation("ProductionConversionSource", fields: [sourceProductId], references: [id])
+  active           Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  sourceProduct    ProductionProduct @relation("ProductionConversionSource", fields: [sourceProductId], references: [id])
 
   @@index([active, sourceProductId])
   @@index([conversionCode])
 }
 
 model ProductionStore {
-  id          Int                    @id @default(autoincrement())
-  sourceCode  String                 @unique
-  sourceName  String
-  displayName String
-  active      Boolean                @default(true)
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
-  routes      ProductionStoreRoute[]
-  planningStores ProductionPlanningStore[]
-  users       User[]                  @relation("UserProductionStore")
-  stockCounts StockCount[]
+  id              Int                       @id @default(autoincrement())
+  sourceCode      String                    @unique
+  sourceName      String
+  displayName     String
+  active          Boolean                   @default(true)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  routes          ProductionStoreRoute[]
+  planningStores  ProductionPlanningStore[]
+  users           User[]                    @relation("UserProductionStore")
+  stockCounts     StockCount[]
+  formSubmissions FormSubmission[]
 
   @@index([active, displayName])
 }
@@ -284,15 +285,15 @@ model ProductionStoreRoute {
 }
 
 model ReservationResourceType {
-  id              Int                   @id @default(autoincrement())
-  name            String                @unique
-  description     String                @default("")
-  active          Boolean               @default(true)
-  reservationMode String                @default("TIME_SLOT")
-  attributeDefinitions String           @default("[]")
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  resources       ReservationResource[]
+  id                   Int                   @id @default(autoincrement())
+  name                 String                @unique
+  description          String                @default("")
+  active               Boolean               @default(true)
+  reservationMode      String                @default("TIME_SLOT")
+  attributeDefinitions String                @default("[]")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  resources            ReservationResource[]
 
   @@index([active, name])
 }
@@ -377,6 +378,7 @@ model FormModel {
   scoreMax             Decimal                   @default(10)
   scoreCalculationType String                    @default("SIMPLE_AVERAGE")
   requiresApproval     Boolean                   @default(false)
+  requiresStore        Boolean                   @default(false)
   createdById          Int
   defaultObserverId    Int?
   createdAt            DateTime                  @default(now())
@@ -394,17 +396,18 @@ model FormModel {
 }
 
 model FormQuestion {
-  id            Int       @id @default(autoincrement())
-  modelId       Int
-  text          String
-  type          String
-  position      Int
-  required      Boolean   @default(false)
-  photoRequired Boolean   @default(false)
-  weight        Decimal   @default(1)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  model         FormModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  id               Int       @id @default(autoincrement())
+  modelId          Int
+  text             String
+  type             String
+  position         Int
+  required         Boolean   @default(false)
+  photoRequired    Boolean   @default(false)
+  allowObservation Boolean   @default(false)
+  weight           Decimal   @default(1)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  model            FormModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
 
   @@unique([modelId, position])
   @@index([modelId, type])
@@ -436,31 +439,35 @@ model FormModelUserPermission {
 }
 
 model FormSubmission {
-  id              Int          @id @default(autoincrement())
-  modelId         Int
-  userId          Int
-  observerId      Int?
-  status          String       @default("DRAFT")
-  finalScore      Decimal?
-  modelSnapshot   String
-  startedAt       DateTime     @default(now())
-  finalizedAt     DateTime?
-  approvedAt      DateTime?
-  approvedById    Int?
-  rejectedAt      DateTime?
-  rejectedById    Int?
-  rejectionReason String       @default("")
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  model           FormModel    @relation(fields: [modelId], references: [id], onDelete: Restrict)
-  user            User         @relation("FormSubmissionCreatedBy", fields: [userId], references: [id], onDelete: Restrict)
-  observer        User?        @relation("FormSubmissionObserver", fields: [observerId], references: [id], onDelete: Restrict)
-  approvedBy      User?        @relation("FormSubmissionApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
-  rejectedBy      User?        @relation("FormSubmissionRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
-  answers         FormAnswer[]
+  id                Int              @id @default(autoincrement())
+  modelId           Int
+  userId            Int
+  observerId        Int?
+  productionStoreId Int?
+  storeNameSnapshot String?
+  status            String           @default("DRAFT")
+  finalScore        Decimal?
+  modelSnapshot     String
+  startedAt         DateTime         @default(now())
+  finalizedAt       DateTime?
+  approvedAt        DateTime?
+  approvedById      Int?
+  rejectedAt        DateTime?
+  rejectedById      Int?
+  rejectionReason   String           @default("")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  model             FormModel        @relation(fields: [modelId], references: [id], onDelete: Restrict)
+  user              User             @relation("FormSubmissionCreatedBy", fields: [userId], references: [id], onDelete: Restrict)
+  observer          User?            @relation("FormSubmissionObserver", fields: [observerId], references: [id], onDelete: Restrict)
+  productionStore   ProductionStore? @relation(fields: [productionStoreId], references: [id], onDelete: Restrict)
+  approvedBy        User?            @relation("FormSubmissionApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  rejectedBy        User?            @relation("FormSubmissionRejectedBy", fields: [rejectedById], references: [id], onDelete: Restrict)
+  answers           FormAnswer[]
 
   @@index([userId, status, createdAt])
   @@index([observerId, status, createdAt])
+  @@index([productionStoreId, status, createdAt])
   @@index([modelId, status, createdAt])
   @@index([status, finalizedAt])
   @@index([approvedById])
@@ -468,23 +475,25 @@ model FormSubmission {
 }
 
 model FormAnswer {
-  id                   Int              @id @default(autoincrement())
-  submissionId         Int
-  sourceQuestionId     Int
-  questionTextSnapshot String
-  questionTypeSnapshot String
-  positionSnapshot     Int
-  requiredSnapshot     Boolean          @default(false)
-  photoRequiredSnapshot Boolean         @default(false)
-  weightSnapshot       Decimal          @default(1)
-  textValue            String?
-  numberValue          Decimal?
-  booleanValue         Boolean?
-  scoreValue           Decimal?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
-  submission           FormSubmission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  photo                 FormAnswerPhoto?
+  id                         Int              @id @default(autoincrement())
+  submissionId               Int
+  sourceQuestionId           Int
+  questionTextSnapshot       String
+  questionTypeSnapshot       String
+  positionSnapshot           Int
+  requiredSnapshot           Boolean          @default(false)
+  photoRequiredSnapshot      Boolean          @default(false)
+  observationAllowedSnapshot Boolean          @default(false)
+  weightSnapshot             Decimal          @default(1)
+  textValue                  String?
+  numberValue                Decimal?
+  booleanValue               Boolean?
+  scoreValue                 Decimal?
+  observationText            String?
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+  submission                 FormSubmission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  photo                      FormAnswerPhoto?
 
   @@unique([submissionId, sourceQuestionId])
   @@index([submissionId, positionSnapshot])

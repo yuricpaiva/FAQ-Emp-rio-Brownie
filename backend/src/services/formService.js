@@ -70,10 +70,12 @@ function validateModelInput(body = {}) {
   const scoreCalculationType = text(body.scoreCalculationType || 'SIMPLE_AVERAGE').toUpperCase();
   const active = body.active === undefined ? true : body.active;
   const requiresApproval = body.requiresApproval === true;
+  const requiresStore = body.requiresStore === undefined ? false : body.requiresStore;
   const defaultObserverId = optionalId(body.defaultObserverId, 'Observador padrão');
   if (!name || name.length > 160) fail(400, 'Informe um nome de até 160 caracteres.');
   if (description.length > 1000) fail(400, 'A descrição deve ter até 1000 caracteres.');
   if (typeof active !== 'boolean') fail(400, 'Status do modelo inválido.');
+  if (typeof requiresStore !== 'boolean') fail(400, 'A opção Informar loja é inválida.');
   if (!RESULT_TYPES.includes(resultType)) fail(400, 'Tipo de resultado inválido.');
   if (!CALCULATION_TYPES.includes(scoreCalculationType)) fail(400, 'Método de cálculo inválido.');
   const scoreMin = number(body.scoreMin ?? 0, 'Nota mínima');
@@ -88,12 +90,15 @@ function validateModelInput(body = {}) {
     if (!questionText || questionText.length > 500) fail(400, `Pergunta ${index + 1} inválida.`);
     if (!QUESTION_TYPES.includes(type)) fail(400, `Tipo da pergunta ${index + 1} inválido.`);
     if (weight <= 0) fail(400, `O peso da pergunta ${index + 1} deve ser positivo.`);
-    return { text: questionText, type, position: index + 1, required: question.required === true, photoRequired: question.photoRequired === true, weight };
+    if (question.allowObservation !== undefined && typeof question.allowObservation !== 'boolean') {
+      fail(400, `A opção de observação da pergunta ${index + 1} é inválida.`);
+    }
+    return { text: questionText, type, position: index + 1, required: question.required === true, photoRequired: question.photoRequired === true, allowObservation: question.allowObservation === true, weight };
   });
   if (resultType === 'SCORE' && !questions.some((question) => question.type === 'SCORE')) {
     fail(400, 'Um modelo de pontuação precisa ter pelo menos uma pergunta do tipo Nota.');
   }
-  return { name, description, resultType, scoreMin, scoreMax, scoreCalculationType, active, requiresApproval, defaultObserverId, questions, permissions: normalizePermissions(body.permissions) };
+  return { name, description, resultType, scoreMin, scoreMax, scoreCalculationType, active, requiresApproval, requiresStore, defaultObserverId, questions, permissions: normalizePermissions(body.permissions) };
 }
 
 const modelInclude = {
@@ -161,13 +166,13 @@ async function saveModel(body, user, rawId) {
       target = await tx.formModel.update({ where: { id: modelId }, data: {
         name: value.name, description: value.description, active: value.active, resultType: value.resultType,
         scoreMin: value.scoreMin, scoreMax: value.scoreMax, scoreCalculationType: value.scoreCalculationType,
-        requiresApproval: value.requiresApproval, defaultObserverId: value.defaultObserverId,
+        requiresApproval: value.requiresApproval, requiresStore: value.requiresStore, defaultObserverId: value.defaultObserverId,
       } });
     } else {
       target = await tx.formModel.create({ data: {
         name: value.name, description: value.description, active: value.active, resultType: value.resultType,
         scoreMin: value.scoreMin, scoreMax: value.scoreMax, scoreCalculationType: value.scoreCalculationType,
-        requiresApproval: value.requiresApproval, defaultObserverId: value.defaultObserverId, createdById: user.id,
+        requiresApproval: value.requiresApproval, requiresStore: value.requiresStore, defaultObserverId: value.defaultObserverId, createdById: user.id,
       } });
     }
     await tx.formQuestion.createMany({ data: value.questions.map((question) => ({ ...question, modelId: target.id })) });
@@ -222,18 +227,19 @@ async function capabilities(user) {
 function snapshotFromModel(model) {
   return {
     version: 1,
-    model: { id: model.id, name: model.name, description: model.description, resultType: model.resultType, scoreMin: Number(model.scoreMin), scoreMax: Number(model.scoreMax), scoreCalculationType: model.scoreCalculationType, requiresApproval: model.requiresApproval, defaultObserverId: model.defaultObserverId, defaultObserver: model.defaultObserver ? { id: model.defaultObserver.id, name: model.defaultObserver.name } : null },
+    model: { id: model.id, name: model.name, description: model.description, resultType: model.resultType, scoreMin: Number(model.scoreMin), scoreMax: Number(model.scoreMax), scoreCalculationType: model.scoreCalculationType, requiresApproval: model.requiresApproval, requiresStore: model.requiresStore, defaultObserverId: model.defaultObserverId, defaultObserver: model.defaultObserver ? { id: model.defaultObserver.id, name: model.defaultObserver.name } : null },
     permissions: {
       fill: { roles: model.rolePermissions.filter((item) => item.permissionType === 'FILL').map((item) => item.role), userIds: model.userPermissions.filter((item) => item.permissionType === 'FILL').map((item) => item.userId) },
       approve: { roles: model.rolePermissions.filter((item) => item.permissionType === 'APPROVE').map((item) => item.role), userIds: model.userPermissions.filter((item) => item.permissionType === 'APPROVE').map((item) => item.userId) },
     },
-    questions: model.questions.map((question) => ({ id: question.id, text: question.text, type: question.type, position: question.position, required: question.required, photoRequired: question.photoRequired, weight: Number(question.weight) })),
+    questions: model.questions.map((question) => ({ id: question.id, text: question.text, type: question.type, position: question.position, required: question.required, photoRequired: question.photoRequired, allowObservation: question.allowObservation, weight: Number(question.weight) })),
   };
 }
 
 const submissionInclude = {
   user: { select: { id: true, name: true, email: true } },
   observer: { select: { id: true, name: true, active: true } },
+  productionStore: { select: { id: true, displayName: true, active: true } },
   answers: { include: { photo: true }, orderBy: { positionSnapshot: 'asc' } },
   approvedBy: { select: { id: true, name: true } },
   rejectedBy: { select: { id: true, name: true } },
@@ -247,17 +253,23 @@ function serializeSubmission(submission, { details = true } = {}) {
     approvedAt: submission.approvedAt, approvedBy: submission.approvedBy, rejectedAt: submission.rejectedAt,
     rejectedBy: submission.rejectedBy, rejectionReason: submission.rejectionReason, createdAt: submission.createdAt,
     updatedAt: submission.updatedAt, user: submission.user, observer: submission.observer,
+    store: submission.productionStoreId && submission.storeNameSnapshot
+      ? { id: submission.productionStoreId, name: submission.storeNameSnapshot }
+      : null,
     observerLocked: Boolean(snapshot.model.defaultObserverId), model: snapshot.model,
   };
   if (!details) return base;
   return { ...base, answers: submission.answers.map((answer) => ({
     id: answer.id, sourceQuestionId: answer.sourceQuestionId, text: answer.questionTextSnapshot,
     type: answer.questionTypeSnapshot, position: answer.positionSnapshot, required: answer.requiredSnapshot,
-    photoRequired: answer.photoRequiredSnapshot, weight: decimalNumber(answer.weightSnapshot), textValue: answer.textValue,
+    photoRequired: answer.photoRequiredSnapshot, observationAllowed: answer.observationAllowedSnapshot,
+    observation: answer.observationText, weight: decimalNumber(answer.weightSnapshot), textValue: answer.textValue,
     numberValue: decimalNumber(answer.numberValue), booleanValue: answer.booleanValue, scoreValue: decimalNumber(answer.scoreValue),
     photo: answer.photo ? { id: answer.photo.id, mimeType: answer.photo.mimeType, size: answer.photo.size, createdAt: answer.photo.createdAt } : null,
   })) };
 }
+
+const eligibleStoreWhere = { active: true, users: { some: { active: true } } };
 
 async function startSubmission(body, user) {
   const modelId = id(body.modelId, 'Modelo');
@@ -275,13 +287,17 @@ async function startSubmission(body, user) {
   if (model.defaultObserverId === user.id) {
     fail(409, 'O observador padrão não pode ser o autor do preenchimento.', 'FORM_OBSERVER_IS_AUTHOR');
   }
+  if (model.requiresStore && !(await prisma.productionStore.findFirst({ where: eligibleStoreWhere, select: { id: true } }))) {
+    fail(409, 'Nenhuma loja elegível está disponível. Solicite a configuração de uma loja ativa com usuário ativo vinculado.', 'FORM_STORE_UNAVAILABLE');
+  }
   const snapshot = snapshotFromModel(model);
   const created = await prisma.$transaction(async (tx) => {
     const submission = await tx.formSubmission.create({ data: { modelId, userId: user.id, observerId: model.defaultObserverId, status: 'DRAFT', modelSnapshot: JSON.stringify(snapshot) } });
     await tx.formAnswer.createMany({ data: snapshot.questions.map((question) => ({
       submissionId: submission.id, sourceQuestionId: question.id, questionTextSnapshot: question.text,
       questionTypeSnapshot: question.type, positionSnapshot: question.position, requiredSnapshot: question.required,
-      photoRequiredSnapshot: question.photoRequired, weightSnapshot: question.weight,
+      photoRequiredSnapshot: question.photoRequired, observationAllowedSnapshot: question.allowObservation,
+      weightSnapshot: question.weight,
     })) });
     return tx.formSubmission.findUnique({ where: { id: submission.id }, include: submissionInclude });
   });
@@ -325,6 +341,14 @@ async function observerCandidates(query, user) {
   });
 }
 
+async function stores() {
+  return prisma.productionStore.findMany({
+    where: eligibleStoreWhere,
+    select: { id: true, displayName: true },
+    orderBy: { displayName: 'asc' },
+  });
+}
+
 async function updateObserver(rawId, body, user) {
   const submission = await findSubmission(rawId);
   if (submission.userId !== user.id) fail(403, 'Somente o autor pode definir o observador.');
@@ -342,6 +366,26 @@ async function updateObserver(rawId, body, user) {
   return { observer: updated.observer, observerLocked: false };
 }
 
+async function updateStore(rawId, body, user) {
+  const submission = await findSubmission(rawId);
+  if (submission.userId !== user.id) fail(403, 'Somente o autor pode definir a loja.');
+  if (submission.status !== 'DRAFT') fail(409, 'A loja não pode ser alterada após a finalização.', 'FORM_STORE_LOCKED');
+  const snapshot = parseSnapshot(submission.modelSnapshot);
+  if (!snapshot.model.requiresStore) fail(409, 'Este preenchimento não exige a identificação de loja.', 'FORM_STORE_NOT_REQUIRED');
+  const storeId = optionalId(body.storeId, 'Loja');
+  const store = storeId ? await prisma.productionStore.findFirst({
+    where: { ...eligibleStoreWhere, id: storeId },
+    select: { id: true, displayName: true },
+  }) : null;
+  if (storeId && !store) fail(400, 'Selecione uma loja ativa com usuário ativo vinculado.', 'FORM_STORE_INVALID');
+  const transition = await prisma.formSubmission.updateMany({
+    where: { id: submission.id, userId: user.id, status: 'DRAFT' },
+    data: { productionStoreId: store?.id || null, storeNameSnapshot: store?.displayName || null },
+  });
+  if (transition.count !== 1) fail(409, 'A loja não pôde ser alterada.', 'FORM_STORE_UPDATE_CONFLICT');
+  return { store: store ? { id: store.id, name: store.displayName } : null };
+}
+
 async function getSubmission(rawId, user) {
   const submission = await findSubmission(rawId);
   if (!canViewSubmission(submission, user)) fail(403, 'Acesso negado.');
@@ -350,6 +394,7 @@ async function getSubmission(rawId, user) {
     permissions: {
       canEdit: submission.status === 'DRAFT' && submission.userId === user.id,
       canManageObserver: submission.userId === user.id && !parseSnapshot(submission.modelSnapshot).model.defaultObserverId,
+      canManageStore: submission.status === 'DRAFT' && submission.userId === user.id && Boolean(parseSnapshot(submission.modelSnapshot).model.requiresStore),
       canApprove: submission.status === 'PENDING_APPROVAL' && hasSnapshotPermission(parseSnapshot(submission.modelSnapshot), user, 'approve'),
     },
   };
@@ -391,6 +436,27 @@ async function updateAnswer(rawSubmissionId, rawAnswerId, body, user) {
   });
 }
 
+async function updateObservation(rawSubmissionId, rawAnswerId, body, user) {
+  const submissionId = id(rawSubmissionId, 'Preenchimento');
+  const answerId = id(rawAnswerId, 'Resposta');
+  if (body?.observation !== null && body?.observation !== undefined && typeof body.observation !== 'string') {
+    fail(400, 'A observação deve ser um texto.');
+  }
+  const observation = text(body?.observation);
+  if (observation.length > 1000) fail(400, 'A observação deve ter até 1000 caracteres.');
+  return prisma.$transaction(async (tx) => {
+    const submission = await tx.formSubmission.findUnique({ where: { id: submissionId }, include: submissionInclude });
+    if (!submission) fail(404, 'Preenchimento não encontrado.');
+    if (submission.userId !== user.id) fail(403, 'Somente o autor pode alterar a observação.');
+    if (submission.status !== 'DRAFT') fail(409, 'Este preenchimento não pode mais ser alterado.', 'FORM_SUBMISSION_READ_ONLY');
+    const answer = submission.answers.find((item) => item.id === answerId);
+    if (!answer) fail(404, 'Resposta não encontrada neste preenchimento.');
+    if (!answer.observationAllowedSnapshot) fail(409, 'Esta pergunta não aceita observação.', 'FORM_OBSERVATION_NOT_ALLOWED');
+    const updated = await tx.formAnswer.update({ where: { id: answerId }, data: { observationText: observation || null } });
+    return { observation: updated.observationText };
+  });
+}
+
 function isAnswered(answer) {
   if (answer.questionTypeSnapshot === 'TEXT') return Boolean(text(answer.textValue));
   if (answer.questionTypeSnapshot === 'NUMBER') return answer.numberValue !== null;
@@ -404,11 +470,16 @@ async function finalizeSubmission(rawId, user) {
   const submission = await findSubmission(rawId);
   if (submission.userId !== user.id) fail(403, 'Somente o autor pode finalizar este preenchimento.');
   if (submission.status !== 'DRAFT') fail(409, 'Este preenchimento já foi finalizado.', 'FORM_ALREADY_FINALIZED');
+  const snapshot = parseSnapshot(submission.modelSnapshot);
+  if (snapshot.model.requiresStore) {
+    if (!submission.productionStoreId || !submission.storeNameSnapshot) fail(400, 'Selecione a loja antes de finalizar o preenchimento.', 'FORM_STORE_REQUIRED');
+    const storeAvailable = await prisma.productionStore.findFirst({ where: { ...eligibleStoreWhere, id: submission.productionStoreId }, select: { id: true } });
+    if (!storeAvailable) fail(409, 'A loja selecionada não está mais disponível. Escolha outra loja antes de finalizar.', 'FORM_STORE_UNAVAILABLE');
+  }
   for (const answer of submission.answers) {
     if (answer.requiredSnapshot && !isAnswered(answer)) fail(400, `Responda: ${answer.questionTextSnapshot}`);
     if (answer.photoRequiredSnapshot && !answer.photo) fail(400, `Adicione a foto obrigatória: ${answer.questionTextSnapshot}`);
   }
-  const snapshot = parseSnapshot(submission.modelSnapshot);
   let finalScore = null;
   if (snapshot.model.resultType === 'SCORE') {
     const scores = submission.answers.filter((answer) => answer.questionTypeSnapshot === 'SCORE' && answer.scoreValue !== null);
@@ -457,8 +528,8 @@ async function getPhotoRecord(rawPhotoId, user) {
 
 module.exports = {
   FormError, RESULT_TYPES, QUESTION_TYPES, CALCULATION_TYPES, PERMISSION_TYPES, STATUSES,
-  capabilities, availableModels, observerCandidates, listModels, getModel, saveModel, startSubmission, listSubmissions,
-  getSubmission, updateObserver, updateAnswer, finalizeSubmission, listApprovals,
+  capabilities, availableModels, observerCandidates, stores, listModels, getModel, saveModel, startSubmission, listSubmissions,
+  getSubmission, updateObserver, updateStore, updateAnswer, updateObservation, finalizeSubmission, listApprovals,
   approveSubmission: (rawId, body, user) => decideSubmission(rawId, body, user, 'APPROVED'),
   rejectSubmission: (rawId, body, user) => decideSubmission(rawId, body, user, 'REJECTED'),
   findSubmission, getPhotoRecord, canViewSubmission, serializeSubmission,

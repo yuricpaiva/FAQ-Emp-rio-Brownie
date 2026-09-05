@@ -116,7 +116,7 @@
 .faq-table-actions button:hover { border-color: #795a4e; background: #795a4e; color: #fff5ea; }
 .faq-table-empty { padding: 2rem !important; color: #8a7064; text-align: center; }
 .forms-models-table { min-width: 900px; }
-.forms-submissions-table { min-width: 820px; }
+.forms-submissions-table { min-width: 900px; }
 .forms-page { min-width: 0; color: #342019; }
 .forms-mobile-filters { display: none; }
 .forms-hero, .forms-execution-header { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; padding: 1.5rem; border: 1px solid rgba(107,70,52,.13); border-radius: 14px; background: rgba(255,252,248,.92); box-shadow: 0 14px 35px rgba(78,45,29,.07); }
@@ -184,6 +184,7 @@
 .forms-execution-header h1 { font-size: clamp(1.6rem,4vw,2.2rem); }
 .forms-execution-state { display: grid; justify-items: end; gap: .5rem; color: #80675c; font-size: .76rem; font-weight: 800; }
 .forms-execution-tools { display: flex; align-items: center; gap: .55rem; }
+.forms-execution-icon-stack { display: grid; gap: .45rem; }
 .forms-observer-menu { position: relative; }
 .forms-observer-menu--model { position: absolute; top: 1.25rem; right: 1.25rem; }
 .forms-observer-menu > summary { position: relative; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid rgba(107,70,52,.18); border-radius: 50%; background: #fffdfb; color: #765448; cursor: pointer; list-style: none; }
@@ -207,9 +208,25 @@
 @keyframes forms-question-enter-next { from { opacity: .58; transform: translateX(9px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes forms-question-enter-previous { from { opacity: .58; transform: translateX(-9px); } to { opacity: 1; transform: translateX(0); } }
 .forms-answer-card > header { display: flex; gap: .85rem; align-items: flex-start; margin-bottom: 1.2rem; }
+.forms-answer-card > header > div { min-width: 0; flex: 1; }
 .forms-answer-card h2, .forms-answer-card p { margin: 0; }
 .forms-answer-card h2 { font-size: clamp(1.15rem,3vw,1.5rem); }
 .forms-answer-card p { margin-top: .35rem; color: #8a7064; font-size: .78rem; }
+.forms-question-title { display: flex; align-items: flex-start; gap: .55rem; }
+.forms-question-title h2 { min-width: 0; }
+.forms-observation-trigger { position: relative; display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; margin: -.2rem 0 0; padding: 0; border: 1px solid rgba(107,70,52,.2); border-radius: 50%; background: #fff; color: #795a4e; cursor: pointer; transition: background-color .15s ease, border-color .15s ease, transform .15s ease; }
+.forms-observation-trigger:hover { border-color: #795a4e; background: #f8f0eb; transform: translateY(-1px); }
+.forms-observation-trigger:focus-visible { outline: 3px solid rgba(202,134,67,.3); outline-offset: 2px; }
+.forms-observation-trigger.has-observation { border-color: #b47a2f; background: #fff5d6; color: #8a571b; }
+.forms-observation-trigger > span { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border: 1px solid #fff; border-radius: 50%; background: #c77a25; }
+.forms-observation-note { margin-top: 1rem; padding: .85rem 1rem; border: 1px solid #ead58c; border-radius: 8px; background: #fff8d8; color: #624818; }
+.forms-observation-note strong { display: block; margin-bottom: .3rem; color: #76551a; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+.forms-observation-note p { margin: 0; color: #624818; font-size: .88rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.forms-observation-modal .modal-card__header p { max-width: 390px; margin: .25rem 0 0; color: #8a7064; font-size: .8rem; }
+.forms-observation-field { display: grid; gap: .45rem; }
+.forms-observation-field > span { font-size: .8rem; font-weight: 700; }
+.forms-observation-field textarea { width: 100%; resize: vertical; }
+.forms-observation-field small { justify-self: end; color: #8a7064; font-size: .72rem; }
 .forms-answer-control { display: grid; gap: 1rem; }
 .forms-answer-control textarea, .forms-answer-control input { font-size: 1rem; }
 .forms-choice-group { display: grid; grid-template-columns: repeat(2,1fr); gap: .7rem; }
@@ -6562,7 +6579,22 @@ textarea:focus {
   }
 }
 
-/* Forms camera confirmation modal */
+/* Forms observation and camera confirmation modals */
+.modal-backdrop.forms-observation-backdrop {
+  align-items: center;
+  justify-items: center;
+  padding: 1rem;
+}
+
+.modal-card.forms-observation-modal {
+  width: min(520px, calc(100vw - 2rem));
+  min-height: 0;
+  max-height: min(88dvh, 620px);
+  padding: 1.1rem;
+  border-radius: 14px;
+  background: #fffdfb;
+}
+
 .modal-backdrop.forms-camera-backdrop {
   align-items: center;
   justify-items: center;
@@ -6656,6 +6688,8 @@ textarea:focus {
 }
 
 @media (max-width: 480px) {
+  .modal-backdrop.forms-observation-backdrop { padding: .75rem; }
+  .modal-card.forms-observation-modal { width: calc(100vw - 1.5rem); max-height: calc(100dvh - 1.5rem); padding: .9rem; border-radius: 12px; }
   .modal-backdrop.forms-camera-backdrop { padding: .75rem; }
   .modal-card.forms-camera-modal { width: calc(100vw - 1.5rem); max-height: calc(100dvh - 1.5rem); padding: .85rem; border-radius: 14px; }
   .forms-camera-modal .forms-camera-live video,

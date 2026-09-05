@@ -29,8 +29,9 @@ export function modelPayload(model) {
     scoreMax: model.scoreMax,
     scoreCalculationType: model.scoreCalculationType,
     requiresApproval: model.requiresApproval,
+    requiresStore: Boolean(model.requiresStore),
     defaultObserverId: model.defaultObserverId || null,
-    questions: model.questions.map(({ text, type, required, photoRequired, weight }) => ({ text, type, required, photoRequired, weight })),
+    questions: model.questions.map(({ text, type, required, photoRequired, allowObservation, weight }) => ({ text, type, required, photoRequired, allowObservation: Boolean(allowObservation), weight })),
     permissions: {
       fillRoles: model.permissions.fill.roles,
       fillUserIds: model.permissions.fill.users.map((user) => user.id),

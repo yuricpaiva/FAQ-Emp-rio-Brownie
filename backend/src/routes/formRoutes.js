@@ -24,6 +24,7 @@ router.use(async (req, res, next) => {
 router.get('/capabilities', controller.capabilities);
 router.get('/available-models', controller.availableModels);
 router.get('/observer-candidates', controller.observerCandidates);
+router.get('/stores', controller.stores);
 router.get('/approvals', controller.listApprovals);
 router.get('/photos/:photoId', controller.getPhoto);
 router.get('/models', adminOnly, controller.listModels);
@@ -34,7 +35,9 @@ router.get('/submissions', controller.listSubmissions);
 router.post('/submissions', controller.startSubmission);
 router.get('/submissions/:id', controller.getSubmission);
 router.patch('/submissions/:id/observer', controller.updateObserver);
+router.patch('/submissions/:id/store', controller.updateStore);
 router.patch('/submissions/:id/answers/:answerId', controller.updateAnswer);
+router.patch('/submissions/:id/answers/:answerId/observation', controller.updateObservation);
 router.post('/submissions/:id/answers/:answerId/photo', receivePhoto, controller.uploadPhoto);
 router.post('/submissions/:id/finalize', controller.finalizeSubmission);
 router.post('/submissions/:id/approve', controller.approveSubmission);
