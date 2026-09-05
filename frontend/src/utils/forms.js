@@ -31,7 +31,7 @@ export function modelPayload(model) {
     requiresApproval: model.requiresApproval,
     requiresStore: Boolean(model.requiresStore),
     defaultObserverId: model.defaultObserverId || null,
-    questions: model.questions.map(({ text, type, required, photoRequired, allowObservation, weight }) => ({ text, type, required, photoRequired, allowObservation: Boolean(allowObservation), weight })),
+    questions: model.questions.map(({ text, type, required, allowPhoto, photoRequired, allowObservation, weight }) => ({ text, type, required, allowPhoto: Boolean(allowPhoto || photoRequired || type === "PHOTO"), photoRequired, allowObservation: Boolean(allowObservation), weight })),
     permissions: {
       fillRoles: model.permissions.fill.roles,
       fillUserIds: model.permissions.fill.users.map((user) => user.id),

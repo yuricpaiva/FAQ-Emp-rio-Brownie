@@ -93,7 +93,15 @@ function validateModelInput(body = {}) {
     if (question.allowObservation !== undefined && typeof question.allowObservation !== 'boolean') {
       fail(400, `A opção de observação da pergunta ${index + 1} é inválida.`);
     }
-    return { text: questionText, type, position: index + 1, required: question.required === true, photoRequired: question.photoRequired === true, allowObservation: question.allowObservation === true, weight };
+    if (question.allowPhoto !== undefined && typeof question.allowPhoto !== 'boolean') {
+      fail(400, `A opção de registro fotográfico da pergunta ${index + 1} é inválida.`);
+    }
+    if (question.photoRequired !== undefined && typeof question.photoRequired !== 'boolean') {
+      fail(400, `A obrigatoriedade do registro fotográfico da pergunta ${index + 1} é inválida.`);
+    }
+    const photoRequired = question.photoRequired === true;
+    const allowPhoto = question.allowPhoto === true || photoRequired || type === 'PHOTO';
+    return { text: questionText, type, position: index + 1, required: question.required === true, allowPhoto, photoRequired, allowObservation: question.allowObservation === true, weight };
   });
   if (resultType === 'SCORE' && !questions.some((question) => question.type === 'SCORE')) {
     fail(400, 'Um modelo de pontuação precisa ter pelo menos uma pergunta do tipo Nota.');
@@ -118,7 +126,7 @@ function serializeModel(model) {
     ...model,
     scoreMin: decimalNumber(model.scoreMin),
     scoreMax: decimalNumber(model.scoreMax),
-    questions: model.questions.map((question) => ({ ...question, weight: decimalNumber(question.weight) })),
+    questions: model.questions.map((question) => ({ ...question, allowPhoto: question.allowPhoto || question.photoRequired || question.type === 'PHOTO', weight: decimalNumber(question.weight) })),
     permissions: { fill: permission('FILL'), approve: permission('APPROVE') },
     rolePermissions: undefined,
     userPermissions: undefined,
@@ -232,7 +240,7 @@ function snapshotFromModel(model) {
       fill: { roles: model.rolePermissions.filter((item) => item.permissionType === 'FILL').map((item) => item.role), userIds: model.userPermissions.filter((item) => item.permissionType === 'FILL').map((item) => item.userId) },
       approve: { roles: model.rolePermissions.filter((item) => item.permissionType === 'APPROVE').map((item) => item.role), userIds: model.userPermissions.filter((item) => item.permissionType === 'APPROVE').map((item) => item.userId) },
     },
-    questions: model.questions.map((question) => ({ id: question.id, text: question.text, type: question.type, position: question.position, required: question.required, photoRequired: question.photoRequired, allowObservation: question.allowObservation, weight: Number(question.weight) })),
+    questions: model.questions.map((question) => ({ id: question.id, text: question.text, type: question.type, position: question.position, required: question.required, allowPhoto: question.allowPhoto || question.photoRequired || question.type === 'PHOTO', photoRequired: question.photoRequired, allowObservation: question.allowObservation, weight: Number(question.weight) })),
   };
 }
 
@@ -262,6 +270,7 @@ function serializeSubmission(submission, { details = true } = {}) {
   return { ...base, answers: submission.answers.map((answer) => ({
     id: answer.id, sourceQuestionId: answer.sourceQuestionId, text: answer.questionTextSnapshot,
     type: answer.questionTypeSnapshot, position: answer.positionSnapshot, required: answer.requiredSnapshot,
+    photoAllowed: answer.photoAllowedSnapshot || answer.photoRequiredSnapshot || answer.questionTypeSnapshot === 'PHOTO',
     photoRequired: answer.photoRequiredSnapshot, observationAllowed: answer.observationAllowedSnapshot,
     observation: answer.observationText, weight: decimalNumber(answer.weightSnapshot), textValue: answer.textValue,
     numberValue: decimalNumber(answer.numberValue), booleanValue: answer.booleanValue, scoreValue: decimalNumber(answer.scoreValue),
@@ -296,7 +305,7 @@ async function startSubmission(body, user) {
     await tx.formAnswer.createMany({ data: snapshot.questions.map((question) => ({
       submissionId: submission.id, sourceQuestionId: question.id, questionTextSnapshot: question.text,
       questionTypeSnapshot: question.type, positionSnapshot: question.position, requiredSnapshot: question.required,
-      photoRequiredSnapshot: question.photoRequired, observationAllowedSnapshot: question.allowObservation,
+      photoAllowedSnapshot: question.allowPhoto, photoRequiredSnapshot: question.photoRequired, observationAllowedSnapshot: question.allowObservation,
       weightSnapshot: question.weight,
     })) });
     return tx.formSubmission.findUnique({ where: { id: submission.id }, include: submissionInclude });

@@ -213,11 +213,14 @@
 .forms-answer-card h2 { font-size: clamp(1.15rem,3vw,1.5rem); }
 .forms-answer-card p { margin-top: .35rem; color: #8a7064; font-size: .78rem; }
 .forms-question-title { display: flex; align-items: flex-start; gap: .55rem; }
-.forms-question-title h2 { min-width: 0; }
+.forms-question-title h2 { min-width: 0; flex: 1; }
+.forms-question-tools { display: flex; align-items: center; gap: .4rem; flex: 0 0 auto; }
+.forms-camera.forms-camera--trigger { display: block; }
 .forms-observation-trigger { position: relative; display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; margin: -.2rem 0 0; padding: 0; border: 1px solid rgba(107,70,52,.2); border-radius: 50%; background: #fff; color: #795a4e; cursor: pointer; transition: background-color .15s ease, border-color .15s ease, transform .15s ease; }
 .forms-observation-trigger:hover { border-color: #795a4e; background: #f8f0eb; transform: translateY(-1px); }
 .forms-observation-trigger:focus-visible { outline: 3px solid rgba(202,134,67,.3); outline-offset: 2px; }
 .forms-observation-trigger.has-observation { border-color: #b47a2f; background: #fff5d6; color: #8a571b; }
+.forms-observation-trigger.has-photo { border-color: #4d815a; background: #edf7ef; color: #376742; }
 .forms-observation-trigger > span { position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border: 1px solid #fff; border-radius: 50%; background: #c77a25; }
 .forms-observation-note { margin-top: 1rem; padding: .85rem 1rem; border: 1px solid #ead58c; border-radius: 8px; background: #fff8d8; color: #624818; }
 .forms-observation-note strong { display: block; margin-bottom: .3rem; color: #76551a; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }

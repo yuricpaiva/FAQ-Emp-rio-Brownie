@@ -91,6 +91,8 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   assert.equal(invalidWeight.status, 400);
   const invalidObservationOption = await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: { name: 'Observação inválida', questions: [{ text: 'Texto', type: 'TEXT', weight: 1, allowObservation: 'sim' }] } });
   assert.equal(invalidObservationOption.status, 400);
+  const invalidPhotoOption = await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: { name: 'Foto inválida', questions: [{ text: 'Texto', type: 'TEXT', weight: 1, allowPhoto: 'sim' }] } });
+  assert.equal(invalidPhotoOption.status, 400);
   const invalidStoreOption = await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: { name: 'Loja inválida', requiresStore: 'sim', questions: [{ text: 'Texto', type: 'TEXT', weight: 1 }] } });
   assert.equal(invalidStoreOption.status, 400);
 
@@ -100,7 +102,7 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
     questions: [
       { text: 'Organização original', type: 'SCORE', required: true, photoRequired: true, allowObservation: true, weight: 1 },
       { text: 'Atendimento', type: 'SCORE', required: true, photoRequired: false, weight: 2 },
-      { text: 'Observação', type: 'TEXT', required: false, photoRequired: false, weight: 1 },
+      { text: 'Observação', type: 'TEXT', required: false, allowPhoto: true, photoRequired: false, weight: 1 },
     ],
     permissions: { fillRoles: ['reader'], fillUserIds: [], approveRoles: ['production_manager'], approveUserIds: [] },
   };
@@ -115,7 +117,12 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   assert.equal(submission.status, 'DRAFT');
   assert.equal(submission.answers[0].text, 'Organização original');
   assert.equal(submission.answers[0].observationAllowed, true);
+  assert.equal(submission.answers[0].photoAllowed, true);
+  assert.equal(submission.answers[0].photoRequired, true);
   assert.equal(submission.answers[1].observationAllowed, false);
+  assert.equal(submission.answers[1].photoAllowed, false);
+  assert.equal(submission.answers[2].photoAllowed, true);
+  assert.equal(submission.answers[2].photoRequired, false);
   assert.equal((await request(base, `/forms/submissions/${submission.id}/answers/${submission.answers[0].id}/observation`, { method: 'PATCH', cookie: fillerCookie, body: { observation: 123 } })).status, 400);
   assert.equal((await request(base, `/forms/submissions/${submission.id}/answers/${submission.answers[0].id}/observation`, { method: 'PATCH', cookie: fillerCookie, body: { observation: 'x'.repeat(1001) } })).status, 400);
   assert.equal((await request(base, `/forms/submissions/${submission.id}/answers/${submission.answers[1].id}/observation`, { method: 'PATCH', cookie: fillerCookie, body: { observation: 'Não permitida' } })).status, 409);
@@ -129,6 +136,10 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   await json(await request(base, `/forms/submissions/${submission.id}/answers/${submission.answers[1].id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 10 } }), 200);
 
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+  const disallowedPhotoForm = new FormData(); disallowedPhotoForm.append('photo', new Blob([png], { type: 'image/png' }), 'not-allowed.png');
+  assert.equal((await request(base, `/forms/submissions/${submission.id}/answers/${submission.answers[1].id}/photo`, { method: 'POST', cookie: fillerCookie, form: disallowedPhotoForm })).status, 409);
+  const optionalPhotoForm = new FormData(); optionalPhotoForm.append('photo', new Blob([png], { type: 'image/png' }), 'optional.png');
+  assert.equal((await request(base, `/forms/submissions/${submission.id}/answers/${submission.answers[2].id}/photo`, { method: 'POST', cookie: fillerCookie, form: optionalPhotoForm })).status, 201);
   const photoForm = new FormData();
   photoForm.append('photo', new Blob([png], { type: 'image/png' }), 'evidence.png');
   const photo = await json(await request(base, `/forms/submissions/${submission.id}/answers/${submission.answers[0].id}/photo`, { method: 'POST', cookie: fillerCookie, form: photoForm }), 201);
@@ -166,6 +177,8 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   const draftAfterEdit = await json(await request(base, `/forms/submissions/${submission.id}`, { cookie: fillerCookie }), 200);
   assert.equal(draftAfterEdit.answers[0].text, 'Organização original');
   assert.equal(draftAfterEdit.answers[0].weight, 1);
+  assert.equal(draftAfterEdit.answers[0].photoAllowed, true);
+  assert.equal(draftAfterEdit.answers[0].photoRequired, true);
   assert.equal(draftAfterEdit.answers[0].observationAllowed, true);
   assert.equal(draftAfterEdit.answers[0].observation, 'Observação final');
 

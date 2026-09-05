@@ -57,6 +57,8 @@ async function savePhoto(rawSubmissionId, rawAnswerId, file, user) {
   const answerId = Number(rawAnswerId);
   const answer = submission.answers.find((item) => item.id === answerId);
   if (!answer) throw new formService.FormError(404, 'Resposta não encontrada neste preenchimento.');
+  const photoAllowed = answer.photoAllowedSnapshot || answer.photoRequiredSnapshot || answer.questionTypeSnapshot === 'PHOTO';
+  if (!photoAllowed) throw new formService.FormError(409, 'Esta pergunta não aceita registro fotográfico.', 'FORM_PHOTO_NOT_ALLOWED');
 
   const root = await getRoot();
   let optimized;

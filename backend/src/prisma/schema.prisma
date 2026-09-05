@@ -402,6 +402,7 @@ model FormQuestion {
   type             String
   position         Int
   required         Boolean   @default(false)
+  allowPhoto       Boolean   @default(false)
   photoRequired    Boolean   @default(false)
   allowObservation Boolean   @default(false)
   weight           Decimal   @default(1)
@@ -482,6 +483,7 @@ model FormAnswer {
   questionTypeSnapshot       String
   positionSnapshot           Int
   requiredSnapshot           Boolean          @default(false)
+  photoAllowedSnapshot       Boolean          @default(false)
   photoRequiredSnapshot      Boolean          @default(false)
   observationAllowedSnapshot Boolean          @default(false)
   weightSnapshot             Decimal          @default(1)

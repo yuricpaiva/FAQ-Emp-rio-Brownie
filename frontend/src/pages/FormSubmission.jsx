@@ -15,12 +15,15 @@ function answerValue(answer) {
 }
 
 function AnswerInput({ answer, value, model, disabled, onChange, onPhoto }) {
+  const showInlinePhoto = disabled
+    ? answer.photoAllowed || answer.photoRequired || answer.type === "PHOTO" || answer.photo
+    : answer.photoRequired || answer.type === "PHOTO";
   return <div className="forms-answer-control">
     {answer.type === "TEXT" && <textarea rows={5} value={value ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value)} placeholder="Digite sua resposta" />}
     {answer.type === "NUMBER" && <input type="number" step="any" inputMode="decimal" value={value ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value)} />}
     {answer.type === "BOOLEAN" && <div className="forms-choice-group"><button type="button" disabled={disabled} className={value === true ? "selected" : ""} onClick={() => onChange(true)}>Sim</button><button type="button" disabled={disabled} className={value === false ? "selected" : ""} onClick={() => onChange(false)}>Não</button></div>}
     {answer.type === "SCORE" && <label className="forms-score-answer"><input type="number" inputMode="decimal" step="any" min={model.scoreMin} max={model.scoreMax} value={value ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value)} /><span>Use uma nota entre {model.scoreMin} e {model.scoreMax}</span></label>}
-    {(answer.type === "PHOTO" || answer.photoRequired || answer.photo) && <div className="forms-evidence"><strong>Evidência {answer.photoRequired && "obrigatória"}</strong>{disabled ? answer.photo ? <img className="forms-photo-preview" src={photoUrl(answer.photo.id)} alt={`Evidência de ${answer.text}`} /> : <span className="forms-muted">Sem foto</span> : <FormCameraCapture submissionId={model.submissionId} answer={answer} onSaved={onPhoto} />}</div>}
+    {showInlinePhoto && <div className="forms-evidence"><strong>Registro fotográfico {answer.photoRequired ? "obrigatório" : "opcional"}</strong>{disabled ? answer.photo ? <img className="forms-photo-preview" src={photoUrl(answer.photo.id)} alt={`Evidência de ${answer.text}`} /> : <span className="forms-muted">Sem foto</span> : <FormCameraCapture submissionId={model.submissionId} answer={answer} onSaved={onPhoto} />}</div>}
   </div>;
 }
 
@@ -162,7 +165,7 @@ function FormSubmission() {
     {editable ? <>
       <div className="forms-progress"><div><span>Pergunta {current + 1} de {submission.answers.length}</span><strong>{Math.round(((current + 1) / submission.answers.length) * 100)}%</strong></div><progress value={current + 1} max={submission.answers.length} /></div>
       <article key={answer.id} className={`forms-answer-card forms-question-transition forms-question-transition--${questionDirection}`}>
-        <header><span>{answer.position}</span><div><div className="forms-question-title"><h2>{answer.text}</h2><ObservationButton answer={answer} onClick={() => openObservation(answer)} /></div><p>{answer.required ? "Resposta obrigatória" : "Resposta opcional"}{answer.photoRequired ? " · Foto obrigatória" : ""}</p></div></header>
+        <header><span>{answer.position}</span><div><div className="forms-question-title"><h2>{answer.text}</h2><div className="forms-question-tools"><ObservationButton answer={answer} onClick={() => openObservation(answer)} />{answer.photoAllowed && !answer.photoRequired && answer.type !== "PHOTO" && <FormCameraCapture submissionId={submission.model.submissionId} answer={answer} triggerOnly onSaved={(photo) => setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answer.id ? { ...item, photo } : item) }))} />}</div></div><p>{answer.required ? "Resposta obrigatória" : "Resposta opcional"}{answer.photoRequired ? " · Registro fotográfico obrigatório" : ""}</p></div></header>
         <AnswerInput answer={answer} value={values[answer.id]} model={submission.model} onChange={(value) => change(answer.id, value)} onPhoto={(photo) => setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answer.id ? { ...item, photo } : item) }))} />
       </article>
       <div className="forms-execution-actions"><button className="button button--ghost" onClick={() => go(-1)} disabled={!current || saving}>Anterior</button>{current < submission.answers.length - 1 ? <button className="button" onClick={() => go(1)} disabled={saving}>Próxima</button> : <button className="button" onClick={finalize} disabled={saving || finalizing}>{finalizing ? "Finalizando..." : "Finalizar"}</button>}</div>

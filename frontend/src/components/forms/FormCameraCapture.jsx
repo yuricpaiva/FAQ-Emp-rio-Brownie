@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { Camera } from "lucide-react";
 import api from "../../services/api";
 import { photoUrl } from "../../utils/forms";
 
-function FormCameraCapture({ submissionId, answer, disabled, onSaved }) {
+function FormCameraCapture({ submissionId, answer, disabled, onSaved, triggerOnly = false }) {
   const videoRef = useRef(null);
   const fileRef = useRef(null);
   const streamRef = useRef(null);
@@ -76,9 +77,11 @@ function FormCameraCapture({ submissionId, answer, disabled, onSaved }) {
   };
 
   if (disabled) return answer.photo ? <img className="forms-photo-preview" src={photoUrl(answer.photo.id)} alt={`Evidência de ${answer.text}`} /> : <span className="forms-muted">Sem evidência fotográfica.</span>;
-  return <div className="forms-camera">
-    {answer.photo && <><img className="forms-photo-preview" src={photoUrl(answer.photo.id)} alt={`Evidência de ${answer.text}`} /><span className="forms-upload-success">Foto salva.</span></>}
-    <button type="button" className="button button--ghost" onClick={openCamera}>{answer.photo ? "Refazer foto" : "Tirar foto"}</button>
+  return <div className={`forms-camera ${triggerOnly ? "forms-camera--trigger" : ""}`}>
+    {triggerOnly ? <button type="button" className={`forms-observation-trigger forms-photo-trigger ${answer.photo ? "has-photo" : ""}`} onClick={openCamera} aria-label={answer.photo ? "Refazer registro fotográfico" : "Adicionar registro fotográfico"} title={answer.photo ? "Refazer registro fotográfico" : "Adicionar registro fotográfico"}><Camera size={18} aria-hidden="true" />{answer.photo && <span aria-hidden="true" />}</button> : <>
+      {answer.photo && <><img className="forms-photo-preview" src={photoUrl(answer.photo.id)} alt={`Evidência de ${answer.text}`} /><span className="forms-upload-success">Foto salva.</span></>}
+      <button type="button" className="button button--ghost" onClick={openCamera}>{answer.photo ? "Refazer foto" : "Tirar foto"}</button>
+    </>}
     <input ref={fileRef} className="forms-camera-input" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => setFile(event.target.files?.[0])} />
     {modalOpen && <div className="modal-backdrop forms-camera-backdrop" onClick={() => closeModal()}>
       <div className="modal-card forms-camera-modal" role="dialog" aria-modal="true" aria-labelledby={`forms-camera-title-${answer.id}`} onClick={(event) => event.stopPropagation()}>
