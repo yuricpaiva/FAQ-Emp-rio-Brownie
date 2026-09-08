@@ -37,6 +37,7 @@ module.exports = {
   updateObserver: action((req) => service.updateObserver(req.params.id, req.body, req.user), 'Não foi possível atualizar o observador.'),
   updateStore: action((req) => service.updateStore(req.params.id, req.body, req.user), 'Não foi possível atualizar a loja.'),
   updateAnswer: action((req) => service.updateAnswer(req.params.id, req.params.answerId, req.body, req.user), 'Não foi possível salvar a resposta.'),
+  updateSubAnswer: action((req) => service.updateSubAnswer(req.params.id, req.params.answerId, req.params.subAnswerId, req.body, req.user), 'Não foi possível salvar a subresposta.'),
   finalizeSubmission: action((req) => service.finalizeSubmission(req.params.id, req.user), 'Não foi possível finalizar o preenchimento.'),
   updateObservation: action((req) => service.updateObservation(req.params.id, req.params.answerId, req.body, req.user), 'Não foi possível salvar a observação.'),
   listApprovals: action((req) => service.listApprovals(req.query, req.user), 'Não foi possível listar as aprovações.'),

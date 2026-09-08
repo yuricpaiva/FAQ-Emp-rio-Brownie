@@ -37,6 +37,7 @@ router.get('/submissions/:id', controller.getSubmission);
 router.patch('/submissions/:id/observer', controller.updateObserver);
 router.patch('/submissions/:id/store', controller.updateStore);
 router.patch('/submissions/:id/answers/:answerId', controller.updateAnswer);
+router.patch('/submissions/:id/answers/:answerId/subanswers/:subAnswerId', controller.updateSubAnswer);
 router.patch('/submissions/:id/answers/:answerId/observation', controller.updateObservation);
 router.post('/submissions/:id/answers/:answerId/photo', receivePhoto, controller.uploadPhoto);
 router.post('/submissions/:id/finalize', controller.finalizeSubmission);

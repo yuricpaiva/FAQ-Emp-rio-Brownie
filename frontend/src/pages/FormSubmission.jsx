@@ -14,6 +14,31 @@ function answerValue(answer) {
   return null;
 }
 
+function subAnswerValue(subanswer) {
+  if (subanswer.notApplicable) return "N/A";
+  return subanswer.type === "BOOLEAN" ? subanswer.booleanValue : subanswer.scoreValue ?? "";
+}
+
+function SubAnswerInput({ subanswer, value, model, disabled, onChange }) {
+  if (subanswer.type === "BOOLEAN") {
+    return <div className="forms-choice-group forms-choice-group--compact forms-choice-group--three"><button type="button" disabled={disabled} className={value === true ? "selected" : ""} onClick={() => onChange(true)}>Sim</button><button type="button" disabled={disabled} className={value === false ? "selected" : ""} onClick={() => onChange(false)}>Não</button><button type="button" disabled={disabled} className={value === "N/A" ? "selected is-not-applicable" : ""} onClick={() => onChange("N/A")}>N/A</button></div>;
+  }
+  return <label className="forms-score-answer"><input type="number" inputMode="decimal" step="any" min={model.scoreMin} max={model.scoreMax} value={value ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value)} /><span>Nota entre {model.scoreMin} e {model.scoreMax}</span></label>;
+}
+
+function SubAnswers({ answer, values, model, disabled = false, onChange }) {
+  if (!answer.subanswers?.length) return null;
+  const hasPending = answer.subanswers.some((subanswer) => values[subanswer.id] === null || values[subanswer.id] === "" || values[subanswer.id] === undefined);
+  const allNotApplicable = answer.subanswers.every((subanswer) => values[subanswer.id] === "N/A");
+  return <div className="forms-subanswers">
+    {answer.subanswers.map((subanswer, index) => <section className="forms-subanswer" key={subanswer.id}>
+      <div className="forms-subanswer__title"><span>{answer.position}.{index + 1}</span><strong>{subanswer.text}</strong><small>Obrigatória</small></div>
+      <SubAnswerInput subanswer={subanswer} value={values[subanswer.id]} model={model} disabled={disabled} onChange={(value) => onChange(subanswer.id, value)} />
+    </section>)}
+    <div className={`forms-calculated-score ${hasPending ? "is-pending" : ""}`}><span>Nota calculada da pergunta</span><strong>{hasPending ? "Aguardando todas as respostas" : allNotApplicable ? "Não aplicável" : formatScore(answer.scoreValue)}</strong></div>
+  </div>;
+}
+
 function AnswerInput({ answer, value, model, disabled, onChange, onPhoto }) {
   const showInlinePhoto = disabled
     ? answer.photoAllowed || answer.photoRequired || answer.type === "PHOTO" || answer.photo
@@ -72,6 +97,7 @@ function FormSubmission() {
   const { confirm } = useSystemNotification();
   const [submission, setSubmission] = useState(null);
   const [values, setValues] = useState({});
+  const [subValues, setSubValues] = useState({});
   const [current, setCurrent] = useState(0);
   const [questionDirection, setQuestionDirection] = useState("next");
   const [saving, setSaving] = useState(0);
@@ -91,16 +117,21 @@ function FormSubmission() {
   const pending = useRef(new Map());
   const dirty = useRef(new Set());
   const valuesRef = useRef({});
+  const subTimers = useRef(new Map());
+  const subPending = useRef(new Map());
+  const subDirty = useRef(new Set());
+  const subValuesRef = useRef({});
 
   const load = async () => {
     try {
       const response = await api.get(`/forms/submissions/${id}`);
       const next = Object.fromEntries(response.data.answers.map((answer) => [answer.id, answerValue(answer)]));
-      setSubmission({ ...response.data, model: { ...response.data.model, submissionId: response.data.id } }); setValues(next); valuesRef.current = next;
+      const nextSubValues = Object.fromEntries(response.data.answers.flatMap((answer) => (answer.subanswers || []).map((subanswer) => [subanswer.id, subAnswerValue(subanswer)])));
+      setSubmission({ ...response.data, model: { ...response.data.model, submissionId: response.data.id } }); setValues(next); valuesRef.current = next; setSubValues(nextSubValues); subValuesRef.current = nextSubValues;
     } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível carregar o preenchimento." }); }
   };
 
-  useEffect(() => { load(); return () => timers.current.forEach(clearTimeout); }, [id]);
+  useEffect(() => { load(); return () => { timers.current.forEach(clearTimeout); subTimers.current.forEach(clearTimeout); }; }, [id]);
   useEffect(() => {
     if (!submission?.permissions?.canManageObserver) return undefined;
     const timer = setTimeout(() => api.get("/forms/observer-candidates", { params: { search: observerSearch || undefined } }).then((response) => setObserverCandidates(response.data)).catch((error) => setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível buscar observadores." })), 250);
@@ -111,7 +142,7 @@ function FormSubmission() {
     api.get("/forms/stores").then((response) => setStores(response.data)).catch((error) => setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível listar as lojas." }));
     return undefined;
   }, [submission?.permissions?.canManageStore]);
-  useEffect(() => { const warn = (event) => { if (dirty.current.size) { event.preventDefault(); event.returnValue = ""; } }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, []);
+  useEffect(() => { const warn = (event) => { if (dirty.current.size || subDirty.current.size) { event.preventDefault(); event.returnValue = ""; } }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, []);
   useEffect(() => { if (!rejectOpen) return undefined; const escape = (event) => { if (event.key === "Escape") setRejectOpen(false); }; document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape); }, [rejectOpen]);
   useEffect(() => { if (!observationAnswer || observationSaving) return undefined; const escape = (event) => { if (event.key === "Escape") setObservationAnswer(null); }; document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape); }, [observationAnswer, observationSaving]);
 
@@ -122,9 +153,30 @@ function FormSubmission() {
     pending.current.set(answerId, request); return request;
   };
   const change = (answerId, value) => { const next = { ...valuesRef.current, [answerId]: value }; valuesRef.current = next; setValues(next); dirty.current.add(answerId); const old = timers.current.get(answerId); if (old) clearTimeout(old); timers.current.set(answerId, setTimeout(() => saveAnswer(answerId).catch(() => {}), 550)); };
-  const flush = async () => { await Promise.all([...dirty.current].map(saveAnswer)); await Promise.all([...pending.current.values()]); };
+  const saveSubAnswer = (answerId, subAnswerId) => {
+    const timer = subTimers.current.get(subAnswerId); if (timer) clearTimeout(timer); subTimers.current.delete(subAnswerId);
+    const value = subValuesRef.current[subAnswerId]; const previous = subPending.current.get(subAnswerId) || Promise.resolve();
+    const request = previous.catch(() => {}).then(() => { setSaving((count) => count + 1); return api.patch(`/forms/submissions/${id}/answers/${answerId}/subanswers/${subAnswerId}`, { value }); }).then((response) => {
+      setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answerId ? response.data : item) }));
+      if (subValuesRef.current[subAnswerId] === value) subDirty.current.delete(subAnswerId); setNotice(null);
+    }).catch((error) => { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível salvar a subresposta." }); throw error; }).finally(() => { setSaving((count) => Math.max(0, count - 1)); if (subPending.current.get(subAnswerId) === request) subPending.current.delete(subAnswerId); });
+    subPending.current.set(subAnswerId, request); return request;
+  };
+  const changeSubAnswer = (answerId, subAnswerId, value) => {
+    const next = { ...subValuesRef.current, [subAnswerId]: value }; subValuesRef.current = next; setSubValues(next); subDirty.current.add(subAnswerId);
+    const old = subTimers.current.get(subAnswerId); if (old) clearTimeout(old);
+    subTimers.current.set(subAnswerId, setTimeout(() => saveSubAnswer(answerId, subAnswerId).catch(() => {}), typeof value === "boolean" ? 0 : 550));
+  };
+  const flush = async () => {
+    await Promise.all([...dirty.current].map(saveAnswer));
+    await Promise.all([...subDirty.current].map((subAnswerId) => {
+      const parent = submission.answers.find((item) => item.subanswers?.some((subanswer) => subanswer.id === subAnswerId));
+      return saveSubAnswer(parent.id, subAnswerId);
+    }));
+    await Promise.all([...pending.current.values(), ...subPending.current.values()]);
+  };
   const go = async (direction) => { try { await flush(); setQuestionDirection(direction < 0 ? "previous" : "next"); setCurrent((index) => Math.max(0, Math.min(submission.answers.length - 1, index + direction))); } catch { /* mensagem já exibida */ } };
-  const finalize = async () => { if (!await confirm("Depois de finalizado, este preenchimento não poderá ser alterado.", { title: "Finalizar preenchimento?", confirmLabel: "Finalizar" })) return; setFinalizing(true); try { await flush(); await api.post(`/forms/submissions/${id}/finalize`); dirty.current.clear(); navigate("/forms/preenchimentos", { replace: true }); } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível finalizar." }); } finally { setFinalizing(false); } };
+  const finalize = async () => { if (!await confirm("Depois de finalizado, este preenchimento não poderá ser alterado.", { title: "Finalizar preenchimento?", confirmLabel: "Finalizar" })) return; setFinalizing(true); try { await flush(); await api.post(`/forms/submissions/${id}/finalize`); dirty.current.clear(); subDirty.current.clear(); navigate("/forms/preenchimentos", { replace: true }); } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível finalizar." }); } finally { setFinalizing(false); } };
   const decide = async (decision, reason = "") => { if (decision === "reject" && !reason.trim()) { setNotice({ variant: "error", text: "A justificativa é obrigatória." }); return; } if (!await confirm(decision === "approve" ? "O preenchimento será aprovado." : "O preenchimento será reprovado.", { title: decision === "approve" ? "Aprovar preenchimento?" : "Reprovar preenchimento?", confirmLabel: decision === "approve" ? "Aprovar" : "Reprovar" })) return; try { const response = await api.post(`/forms/submissions/${id}/${decision}`, { reason }); setSubmission({ ...response.data, permissions: { canEdit: false, canApprove: false }, model: { ...response.data.model, submissionId: response.data.id } }); setRejectOpen(false); setRejectionReason(""); setNotice({ variant: "success", text: decision === "approve" ? "Preenchimento aprovado." : "Preenchimento reprovado." }); } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível concluir a análise." }); } };
   const changeObserver = async (observerId) => {
     setObserverSaving(true);
@@ -165,13 +217,14 @@ function FormSubmission() {
     {editable ? <>
       <div className="forms-progress"><div><span>Pergunta {current + 1} de {submission.answers.length}</span><strong>{Math.round(((current + 1) / submission.answers.length) * 100)}%</strong></div><progress value={current + 1} max={submission.answers.length} /></div>
       <article key={answer.id} className={`forms-answer-card forms-question-transition forms-question-transition--${questionDirection}`}>
-        <header><span>{answer.position}</span><div><div className="forms-question-title"><h2>{answer.text}</h2><div className="forms-question-tools"><ObservationButton answer={answer} onClick={() => openObservation(answer)} />{answer.photoAllowed && !answer.photoRequired && answer.type !== "PHOTO" && <FormCameraCapture submissionId={submission.model.submissionId} answer={answer} triggerOnly onSaved={(photo) => setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answer.id ? { ...item, photo } : item) }))} />}</div></div><p>{answer.required ? "Resposta obrigatória" : "Resposta opcional"}{answer.photoRequired ? " · Registro fotográfico obrigatório" : ""}</p></div></header>
-        <AnswerInput answer={answer} value={values[answer.id]} model={submission.model} onChange={(value) => change(answer.id, value)} onPhoto={(photo) => setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answer.id ? { ...item, photo } : item) }))} />
+        <header><span>{answer.position}</span><div><div className="forms-question-title"><h2>{answer.text}</h2><div className="forms-question-tools"><ObservationButton answer={answer} onClick={() => openObservation(answer)} />{answer.photoAllowed && !answer.photoRequired && answer.type !== "PHOTO" && <FormCameraCapture submissionId={submission.model.submissionId} answer={answer} triggerOnly onSaved={(photo) => setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answer.id ? { ...item, photo } : item) }))} />}</div></div><p>{answer.subanswers?.length ? "Subperguntas obrigatórias · Nota calculada automaticamente" : answer.required ? "Resposta obrigatória" : "Resposta opcional"}{answer.photoRequired ? " · Registro fotográfico obrigatório" : ""}</p></div></header>
+        {answer.subanswers?.length ? <SubAnswers answer={answer} values={subValues} model={submission.model} onChange={(subAnswerId, value) => changeSubAnswer(answer.id, subAnswerId, value)} /> : <AnswerInput answer={answer} value={values[answer.id]} model={submission.model} onChange={(value) => change(answer.id, value)} onPhoto={(photo) => setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answer.id ? { ...item, photo } : item) }))} />}
+        {answer.subanswers?.length && answer.photoRequired && <div className="forms-evidence"><strong>Registro fotográfico obrigatório</strong><FormCameraCapture submissionId={submission.model.submissionId} answer={answer} onSaved={(photo) => setSubmission((currentSubmission) => ({ ...currentSubmission, answers: currentSubmission.answers.map((item) => item.id === answer.id ? { ...item, photo } : item) }))} /></div>}
       </article>
       <div className="forms-execution-actions"><button className="button button--ghost" onClick={() => go(-1)} disabled={!current || saving}>Anterior</button>{current < submission.answers.length - 1 ? <button className="button" onClick={() => go(1)} disabled={saving}>Próxima</button> : <button className="button" onClick={finalize} disabled={saving || finalizing}>{finalizing ? "Finalizando..." : "Finalizar"}</button>}</div>
     </> : <>
       <div className="forms-summary"><span>Iniciado em <strong>{formatDateTime(submission.startedAt)}</strong></span>{submission.model.requiresStore && <span>Loja <strong>{submission.store?.name || "Não informada"}</strong></span>}{submission.finalScore !== null && <span>Nota final <strong>{formatScore(submission.finalScore)}</strong></span>}{submission.approvedBy && <span>Aprovado por <strong>{submission.approvedBy.name}</strong></span>}{submission.rejectedBy && <span>Reprovado por <strong>{submission.rejectedBy.name}</strong>: {submission.rejectionReason}</span>}</div>
-      <div className="forms-readonly-answers">{submission.answers.map((item) => <article className="forms-answer-card" key={item.id}><header><span>{item.position}</span><div><h2>{item.text}</h2></div></header><AnswerInput answer={item} value={answerValue(item)} model={submission.model} disabled /><ObservationNote observation={item.observation} /></article>)}</div>
+      <div className="forms-readonly-answers">{submission.answers.map((item) => <article className="forms-answer-card" key={item.id}><header><span>{item.position}</span><div><h2>{item.text}</h2></div></header>{item.subanswers?.length ? <><SubAnswers answer={item} values={Object.fromEntries(item.subanswers.map((subanswer) => [subanswer.id, subAnswerValue(subanswer)]))} model={submission.model} disabled onChange={() => {}} />{item.photo && <div className="forms-evidence"><strong>Registro fotográfico</strong><img className="forms-photo-preview" src={photoUrl(item.photo.id)} alt={`Evidência de ${item.text}`} /></div>}</> : <AnswerInput answer={item} value={answerValue(item)} model={submission.model} disabled />}<ObservationNote observation={item.observation} /></article>)}</div>
       {submission.permissions?.canApprove && <div className="forms-approval-actions"><button className="button button--ghost" onClick={() => setRejectOpen(true)}>Reprovar</button><button className="button" onClick={() => decide("approve")}>Aprovar</button></div>}
     </>}
     {observationAnswer && <div className="modal-backdrop forms-observation-backdrop" onClick={closeObservation}><div className="modal-card forms-observation-modal" role="dialog" aria-modal="true" aria-labelledby="forms-observation-title" onClick={(event) => event.stopPropagation()}><div className="modal-card__header"><div><h3 id="forms-observation-title">Observação da pergunta</h3><p>{observationAnswer.text}</p></div><button type="button" onClick={closeObservation} disabled={observationSaving} aria-label="Fechar observação">×</button></div><label className="forms-observation-field"><span>Observação opcional</span><textarea rows={6} maxLength={1000} value={observationDraft} onChange={(event) => setObservationDraft(event.target.value)} placeholder="Digite uma observação sobre esta resposta" autoFocus /><small>{observationDraft.length}/1000</small></label><div className="form-actions"><button type="button" className="button button--ghost" onClick={closeObservation} disabled={observationSaving}>Cancelar</button><button type="button" className="button" onClick={saveObservation} disabled={observationSaving}>{observationSaving ? "Salvando..." : "Salvar"}</button></div></div></div>}

@@ -4,6 +4,7 @@ const prisma = new PrismaClient();
 const ROLES = ['reader', 'creator', 'store', 'production_manager', 'admin'];
 const RESULT_TYPES = ['SIMPLE', 'SCORE'];
 const QUESTION_TYPES = ['TEXT', 'NUMBER', 'BOOLEAN', 'SCORE', 'PHOTO'];
+const SUBQUESTION_TYPES = ['BOOLEAN', 'SCORE'];
 const CALCULATION_TYPES = ['SIMPLE_AVERAGE', 'WEIGHTED_AVERAGE'];
 const PERMISSION_TYPES = ['FILL', 'APPROVE'];
 const STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'COMPLETED', 'APPROVED', 'REJECTED'];
@@ -101,7 +102,21 @@ function validateModelInput(body = {}) {
     }
     const photoRequired = question.photoRequired === true;
     const allowPhoto = question.allowPhoto === true || photoRequired || type === 'PHOTO';
-    return { text: questionText, type, position: index + 1, required: question.required === true, allowPhoto, photoRequired, allowObservation: question.allowObservation === true, weight };
+    if (question.subquestions !== undefined && !Array.isArray(question.subquestions)) fail(400, `As subperguntas da pergunta ${index + 1} devem ser uma lista.`);
+    const rawSubquestions = Array.isArray(question.subquestions) ? question.subquestions : [];
+    if (rawSubquestions.length && type !== 'SCORE') fail(400, `Somente perguntas do tipo Nota podem possuir subperguntas.`);
+    const subquestionPositions = new Set();
+    const subquestions = rawSubquestions.map((subquestion, subIndex) => {
+      const subquestionText = text(subquestion.text);
+      const subquestionType = text(subquestion.type).toUpperCase();
+      const position = subquestion.position === undefined ? subIndex + 1 : Number(subquestion.position);
+      if (!subquestionText || subquestionText.length > 500) fail(400, `Subpergunta ${subIndex + 1} da pergunta ${index + 1} é inválida.`);
+      if (!SUBQUESTION_TYPES.includes(subquestionType)) fail(400, `Tipo da subpergunta ${subIndex + 1} da pergunta ${index + 1} é inválido.`);
+      if (!Number.isInteger(position) || position <= 0 || subquestionPositions.has(position)) fail(400, `Posição da subpergunta ${subIndex + 1} da pergunta ${index + 1} é inválida ou duplicada.`);
+      subquestionPositions.add(position);
+      return { text: subquestionText, type: subquestionType, position };
+    });
+    return { text: questionText, type, position: index + 1, required: subquestions.length ? true : question.required === true, allowPhoto, photoRequired, allowObservation: question.allowObservation === true, weight, subquestions };
   });
   if (resultType === 'SCORE' && !questions.some((question) => question.type === 'SCORE')) {
     fail(400, 'Um modelo de pontuação precisa ter pelo menos uma pergunta do tipo Nota.');
@@ -110,7 +125,7 @@ function validateModelInput(body = {}) {
 }
 
 const modelInclude = {
-  questions: { orderBy: { position: 'asc' } },
+  questions: { orderBy: { position: 'asc' }, include: { subQuestions: { orderBy: { position: 'asc' } } } },
   rolePermissions: true,
   userPermissions: { include: { user: { select: { id: true, name: true, email: true, active: true } } } },
   createdBy: { select: { id: true, name: true } },
@@ -126,7 +141,13 @@ function serializeModel(model) {
     ...model,
     scoreMin: decimalNumber(model.scoreMin),
     scoreMax: decimalNumber(model.scoreMax),
-    questions: model.questions.map((question) => ({ ...question, allowPhoto: question.allowPhoto || question.photoRequired || question.type === 'PHOTO', weight: decimalNumber(question.weight) })),
+    questions: model.questions.map((question) => ({
+      ...question,
+      allowPhoto: question.allowPhoto || question.photoRequired || question.type === 'PHOTO',
+      weight: decimalNumber(question.weight),
+      subquestions: question.subQuestions || [],
+      subQuestions: undefined,
+    })),
     permissions: { fill: permission('FILL'), approve: permission('APPROVE') },
     rolePermissions: undefined,
     userPermissions: undefined,
@@ -183,7 +204,14 @@ async function saveModel(body, user, rawId) {
         requiresApproval: value.requiresApproval, requiresStore: value.requiresStore, defaultObserverId: value.defaultObserverId, createdById: user.id,
       } });
     }
-    await tx.formQuestion.createMany({ data: value.questions.map((question) => ({ ...question, modelId: target.id })) });
+    for (const question of value.questions) {
+      const { subquestions, ...questionData } = question;
+      await tx.formQuestion.create({ data: {
+        ...questionData,
+        modelId: target.id,
+        ...(subquestions.length ? { subQuestions: { create: subquestions } } : {}),
+      } });
+    }
     const permissions = permissionCreates(target.id, value.permissions);
     if (permissions.roles.length) await tx.formModelRolePermission.createMany({ data: permissions.roles });
     if (permissions.users.length) await tx.formModelUserPermission.createMany({ data: permissions.users });
@@ -240,7 +268,12 @@ function snapshotFromModel(model) {
       fill: { roles: model.rolePermissions.filter((item) => item.permissionType === 'FILL').map((item) => item.role), userIds: model.userPermissions.filter((item) => item.permissionType === 'FILL').map((item) => item.userId) },
       approve: { roles: model.rolePermissions.filter((item) => item.permissionType === 'APPROVE').map((item) => item.role), userIds: model.userPermissions.filter((item) => item.permissionType === 'APPROVE').map((item) => item.userId) },
     },
-    questions: model.questions.map((question) => ({ id: question.id, text: question.text, type: question.type, position: question.position, required: question.required, allowPhoto: question.allowPhoto || question.photoRequired || question.type === 'PHOTO', photoRequired: question.photoRequired, allowObservation: question.allowObservation, weight: Number(question.weight) })),
+    questions: model.questions.map((question) => ({
+      id: question.id, text: question.text, type: question.type, position: question.position,
+      required: question.required, allowPhoto: question.allowPhoto || question.photoRequired || question.type === 'PHOTO',
+      photoRequired: question.photoRequired, allowObservation: question.allowObservation, weight: Number(question.weight),
+      subquestions: (question.subQuestions || []).map((subquestion) => ({ id: subquestion.id, text: subquestion.text, type: subquestion.type, position: subquestion.position })),
+    })),
   };
 }
 
@@ -248,10 +281,27 @@ const submissionInclude = {
   user: { select: { id: true, name: true, email: true } },
   observer: { select: { id: true, name: true, active: true } },
   productionStore: { select: { id: true, displayName: true, active: true } },
-  answers: { include: { photo: true }, orderBy: { positionSnapshot: 'asc' } },
+  answers: { include: { photo: true, subAnswers: { orderBy: { positionSnapshot: 'asc' } } }, orderBy: { positionSnapshot: 'asc' } },
   approvedBy: { select: { id: true, name: true } },
   rejectedBy: { select: { id: true, name: true } },
 };
+
+function serializeAnswer(answer) {
+  return {
+    id: answer.id, sourceQuestionId: answer.sourceQuestionId, text: answer.questionTextSnapshot,
+    type: answer.questionTypeSnapshot, position: answer.positionSnapshot, required: answer.requiredSnapshot,
+    photoAllowed: answer.photoAllowedSnapshot || answer.photoRequiredSnapshot || answer.questionTypeSnapshot === 'PHOTO',
+    photoRequired: answer.photoRequiredSnapshot, observationAllowed: answer.observationAllowedSnapshot,
+    observation: answer.observationText, weight: decimalNumber(answer.weightSnapshot), textValue: answer.textValue,
+    numberValue: decimalNumber(answer.numberValue), booleanValue: answer.booleanValue, scoreValue: decimalNumber(answer.scoreValue),
+    subanswers: (answer.subAnswers || []).map((subanswer) => ({
+      id: subanswer.id, sourceSubQuestionId: subanswer.sourceSubQuestionId, text: subanswer.questionTextSnapshot,
+      type: subanswer.questionTypeSnapshot, position: subanswer.positionSnapshot,
+      booleanValue: subanswer.booleanValue, scoreValue: decimalNumber(subanswer.scoreValue), notApplicable: subanswer.notApplicable,
+    })),
+    photo: answer.photo ? { id: answer.photo.id, mimeType: answer.photo.mimeType, size: answer.photo.size, createdAt: answer.photo.createdAt } : null,
+  };
+}
 
 function serializeSubmission(submission, { details = true } = {}) {
   const snapshot = parseSnapshot(submission.modelSnapshot);
@@ -267,15 +317,7 @@ function serializeSubmission(submission, { details = true } = {}) {
     observerLocked: Boolean(snapshot.model.defaultObserverId), model: snapshot.model,
   };
   if (!details) return base;
-  return { ...base, answers: submission.answers.map((answer) => ({
-    id: answer.id, sourceQuestionId: answer.sourceQuestionId, text: answer.questionTextSnapshot,
-    type: answer.questionTypeSnapshot, position: answer.positionSnapshot, required: answer.requiredSnapshot,
-    photoAllowed: answer.photoAllowedSnapshot || answer.photoRequiredSnapshot || answer.questionTypeSnapshot === 'PHOTO',
-    photoRequired: answer.photoRequiredSnapshot, observationAllowed: answer.observationAllowedSnapshot,
-    observation: answer.observationText, weight: decimalNumber(answer.weightSnapshot), textValue: answer.textValue,
-    numberValue: decimalNumber(answer.numberValue), booleanValue: answer.booleanValue, scoreValue: decimalNumber(answer.scoreValue),
-    photo: answer.photo ? { id: answer.photo.id, mimeType: answer.photo.mimeType, size: answer.photo.size, createdAt: answer.photo.createdAt } : null,
-  })) };
+  return { ...base, answers: submission.answers.map(serializeAnswer) };
 }
 
 const eligibleStoreWhere = { active: true, users: { some: { active: true } } };
@@ -308,6 +350,13 @@ async function startSubmission(body, user) {
       photoAllowedSnapshot: question.allowPhoto, photoRequiredSnapshot: question.photoRequired, observationAllowedSnapshot: question.allowObservation,
       weightSnapshot: question.weight,
     })) });
+    const createdAnswers = await tx.formAnswer.findMany({ where: { submissionId: submission.id }, select: { id: true, sourceQuestionId: true } });
+    const answerIdsByQuestion = new Map(createdAnswers.map((answer) => [answer.sourceQuestionId, answer.id]));
+    const subanswers = snapshot.questions.flatMap((question) => (question.subquestions || []).map((subquestion) => ({
+      answerId: answerIdsByQuestion.get(question.id), sourceSubQuestionId: subquestion.id,
+      questionTextSnapshot: subquestion.text, questionTypeSnapshot: subquestion.type, positionSnapshot: subquestion.position,
+    })));
+    if (subanswers.length) await tx.formSubAnswer.createMany({ data: subanswers });
     return tx.formSubmission.findUnique({ where: { id: submission.id }, include: submissionInclude });
   });
   return serializeSubmission(created);
@@ -440,8 +489,55 @@ async function updateAnswer(rawSubmissionId, rawAnswerId, body, user) {
     if (submission.status !== 'DRAFT') fail(409, 'Este preenchimento não pode mais ser alterado.', 'FORM_SUBMISSION_READ_ONLY');
     const answer = submission.answers.find((item) => item.id === answerId);
     if (!answer) fail(404, 'Resposta não encontrada neste preenchimento.');
-    const updated = await tx.formAnswer.update({ where: { id: answerId }, data: answerData({ ...answer, submission }, body.value), include: { photo: true } });
+    if (answer.subAnswers.length) fail(409, 'A nota desta pergunta é calculada pelas subperguntas.', 'FORM_SCORE_CALCULATED');
+    const updated = await tx.formAnswer.update({ where: { id: answerId }, data: answerData({ ...answer, submission }, body.value), include: { photo: true, subAnswers: { orderBy: { positionSnapshot: 'asc' } } } });
     return serializeSubmission({ ...submission, answers: submission.answers.map((item) => item.id === answerId ? updated : item) }).answers.find((item) => item.id === answerId);
+  });
+}
+
+async function updateSubAnswer(rawSubmissionId, rawAnswerId, rawSubAnswerId, body, user) {
+  const submissionId = id(rawSubmissionId, 'Preenchimento');
+  const answerId = id(rawAnswerId, 'Resposta');
+  const subAnswerId = id(rawSubAnswerId, 'Subresposta');
+  return prisma.$transaction(async (tx) => {
+    const submission = await tx.formSubmission.findUnique({ where: { id: submissionId }, include: submissionInclude });
+    if (!submission) fail(404, 'Preenchimento não encontrado.');
+    if (submission.userId !== user.id) fail(403, 'Somente o autor pode alterar este rascunho.');
+    if (submission.status !== 'DRAFT') fail(409, 'Este preenchimento não pode mais ser alterado.', 'FORM_SUBMISSION_READ_ONLY');
+    const answer = submission.answers.find((item) => item.id === answerId);
+    if (!answer) fail(404, 'Resposta não encontrada neste preenchimento.');
+    const subanswer = answer.subAnswers.find((item) => item.id === subAnswerId);
+    if (!subanswer) fail(404, 'Subresposta não encontrada nesta pergunta.');
+    const notApplicable = subanswer.questionTypeSnapshot === 'BOOLEAN' && body.value === 'N/A';
+    const empty = body.value === null || body.value === undefined || body.value === '';
+    const data = { booleanValue: null, scoreValue: null, notApplicable };
+    if (!empty && !notApplicable && subanswer.questionTypeSnapshot === 'BOOLEAN') {
+      if (typeof body.value !== 'boolean') fail(400, 'A subresposta deve ser Sim, Não ou N/A.');
+      data.booleanValue = body.value;
+    } else if (!empty && !notApplicable && subanswer.questionTypeSnapshot === 'SCORE') {
+      const value = number(body.value, 'Nota');
+      const snapshot = parseSnapshot(submission.modelSnapshot);
+      if (value < snapshot.model.scoreMin || value > snapshot.model.scoreMax) fail(400, `A nota deve estar entre ${snapshot.model.scoreMin} e ${snapshot.model.scoreMax}.`);
+      data.scoreValue = value;
+    } else if (!empty && !notApplicable) {
+      fail(400, 'Tipo de subpergunta inválido.');
+    }
+    await tx.formSubAnswer.update({ where: { id: subAnswerId }, data });
+    const subanswers = await tx.formSubAnswer.findMany({ where: { answerId }, orderBy: { positionSnapshot: 'asc' } });
+    const snapshot = parseSnapshot(submission.modelSnapshot);
+    const complete = subanswers.every((item) => item.notApplicable || (item.questionTypeSnapshot === 'BOOLEAN' ? item.booleanValue !== null : item.scoreValue !== null));
+    const applicableSubanswers = subanswers.filter((item) => !item.notApplicable);
+    const calculatedScore = complete && applicableSubanswers.length ? new Prisma.Decimal(applicableSubanswers.reduce((sum, item) => {
+      const value = item.questionTypeSnapshot === 'BOOLEAN'
+        ? (item.booleanValue ? snapshot.model.scoreMax : snapshot.model.scoreMin)
+        : Number(item.scoreValue);
+      return sum + value;
+    }, 0) / applicableSubanswers.length).toDecimalPlaces(4) : null;
+    const updated = await tx.formAnswer.update({
+      where: { id: answerId }, data: { scoreValue: calculatedScore },
+      include: { photo: true, subAnswers: { orderBy: { positionSnapshot: 'asc' } } },
+    });
+    return serializeAnswer(updated);
   });
 }
 
@@ -486,17 +582,23 @@ async function finalizeSubmission(rawId, user) {
     if (!storeAvailable) fail(409, 'A loja selecionada não está mais disponível. Escolha outra loja antes de finalizar.', 'FORM_STORE_UNAVAILABLE');
   }
   for (const answer of submission.answers) {
-    if (answer.requiredSnapshot && !isAnswered(answer)) fail(400, `Responda: ${answer.questionTextSnapshot}`);
+    const missingSubanswer = answer.subAnswers.find((subanswer) => !subanswer.notApplicable && (subanswer.questionTypeSnapshot === 'BOOLEAN' ? subanswer.booleanValue === null : subanswer.scoreValue === null));
+    if (missingSubanswer) fail(400, `Responda: ${answer.questionTextSnapshot} — ${missingSubanswer.questionTextSnapshot}`);
+    const allSubanswersNotApplicable = answer.subAnswers.length > 0 && answer.subAnswers.every((subanswer) => subanswer.notApplicable);
+    if (answer.requiredSnapshot && !isAnswered(answer) && !allSubanswersNotApplicable) fail(400, `Responda: ${answer.questionTextSnapshot}`);
     if (answer.photoRequiredSnapshot && !answer.photo) fail(400, `Adicione a foto obrigatória: ${answer.questionTextSnapshot}`);
   }
   let finalScore = null;
   if (snapshot.model.resultType === 'SCORE') {
     const scores = submission.answers.filter((answer) => answer.questionTypeSnapshot === 'SCORE' && answer.scoreValue !== null);
-    if (!scores.length) fail(400, 'Informe pelo menos uma nota válida.');
-    const weighted = snapshot.model.scoreCalculationType === 'WEIGHTED_AVERAGE';
-    const numerator = scores.reduce((sum, answer) => sum + Number(answer.scoreValue) * (weighted ? Number(answer.weightSnapshot) : 1), 0);
-    const denominator = scores.reduce((sum, answer) => sum + (weighted ? Number(answer.weightSnapshot) : 1), 0);
-    finalScore = new Prisma.Decimal(numerator / denominator).toDecimalPlaces(4);
+    const hasNotApplicableScore = submission.answers.some((answer) => answer.questionTypeSnapshot === 'SCORE' && answer.subAnswers.length > 0 && answer.subAnswers.every((subanswer) => subanswer.notApplicable));
+    if (!scores.length && !hasNotApplicableScore) fail(400, 'Informe pelo menos uma nota válida.');
+    if (scores.length) {
+      const weighted = snapshot.model.scoreCalculationType === 'WEIGHTED_AVERAGE';
+      const numerator = scores.reduce((sum, answer) => sum + Number(answer.scoreValue) * (weighted ? Number(answer.weightSnapshot) : 1), 0);
+      const denominator = scores.reduce((sum, answer) => sum + (weighted ? Number(answer.weightSnapshot) : 1), 0);
+      finalScore = new Prisma.Decimal(numerator / denominator).toDecimalPlaces(4);
+    }
   }
   const status = snapshot.model.requiresApproval ? 'PENDING_APPROVAL' : 'COMPLETED';
   const transition = await prisma.formSubmission.updateMany({ where: { id: submission.id, status: 'DRAFT' }, data: { status, finalScore, finalizedAt: new Date() } });
@@ -536,9 +638,9 @@ async function getPhotoRecord(rawPhotoId, user) {
 }
 
 module.exports = {
-  FormError, RESULT_TYPES, QUESTION_TYPES, CALCULATION_TYPES, PERMISSION_TYPES, STATUSES,
+  FormError, RESULT_TYPES, QUESTION_TYPES, SUBQUESTION_TYPES, CALCULATION_TYPES, PERMISSION_TYPES, STATUSES,
   capabilities, availableModels, observerCandidates, stores, listModels, getModel, saveModel, startSubmission, listSubmissions,
-  getSubmission, updateObserver, updateStore, updateAnswer, updateObservation, finalizeSubmission, listApprovals,
+  getSubmission, updateObserver, updateStore, updateAnswer, updateSubAnswer, updateObservation, finalizeSubmission, listApprovals,
   approveSubmission: (rawId, body, user) => decideSubmission(rawId, body, user, 'APPROVED'),
   rejectSubmission: (rawId, body, user) => decideSubmission(rawId, body, user, 'REJECTED'),
   findSubmission, getPhotoRecord, canViewSubmission, serializeSubmission,

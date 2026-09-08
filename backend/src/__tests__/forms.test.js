@@ -30,6 +30,7 @@ async function login(base, email, password) {
 test('Forms validates model configuration and score calculations', () => {
   assert.equal(service.RESULT_TYPES.includes('INVALID'), false);
   assert.deepEqual(service.QUESTION_TYPES, ['TEXT', 'NUMBER', 'BOOLEAN', 'SCORE', 'PHOTO']);
+  assert.deepEqual(service.SUBQUESTION_TYPES, ['BOOLEAN', 'SCORE']);
 });
 
 test('Forms API preserves snapshots, permissions, photos, scores and approval states', async (t) => {
@@ -336,6 +337,91 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   await prisma.user.update({ where: { id: flexibleObserver.id }, data: { active: false } });
   assert.equal((await request(base, '/forms/submissions', { method: 'POST', cookie: fillerCookie, body: { modelId: observerModel.id } })).status, 409);
   await prisma.user.update({ where: { id: flexibleObserver.id }, data: { active: true } });
+
+  const invalidNestedQuestion = { name: `Subpergunta inválida ${suffix}`, resultType: 'SIMPLE', questions: [{ text: 'Texto', type: 'TEXT', weight: 1, subquestions: [{ text: 'Não permitida', type: 'BOOLEAN' }] }] };
+  assert.equal((await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: invalidNestedQuestion })).status, 400);
+  assert.equal((await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: { name: `Tipo de subpergunta inválido ${suffix}`, resultType: 'SCORE', questions: [{ text: 'Nota', type: 'SCORE', weight: 1, subquestions: [{ text: 'Inválida', type: 'TEXT' }] }] } })).status, 400);
+  assert.equal((await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: { name: `Posição de subpergunta inválida ${suffix}`, resultType: 'SCORE', questions: [{ text: 'Nota', type: 'SCORE', weight: 1, subquestions: [{ text: 'Primeira', type: 'BOOLEAN', position: 1 }, { text: 'Segunda', type: 'SCORE', position: 1 }] }] } })).status, 400);
+
+  const subquestionPayload = {
+    name: `Checklist com subperguntas ${suffix}`, description: 'Nota calculada por critérios', active: true,
+    resultType: 'SCORE', scoreMin: 0, scoreMax: 10, scoreCalculationType: 'WEIGHTED_AVERAGE', requiresApproval: true,
+    defaultObserverId: defaultObserver.id,
+    questions: [
+      { text: 'Qualidade da operação', type: 'SCORE', required: false, weight: 2, subquestions: [{ text: 'Padrão atendido?', type: 'BOOLEAN' }, { text: 'Nota da execução', type: 'SCORE' }] },
+      { text: 'Nota geral', type: 'SCORE', required: true, weight: 1 },
+    ],
+    permissions: { fillRoles: ['reader'], fillUserIds: [], approveRoles: ['production_manager'], approveUserIds: [] },
+  };
+  const subquestionModel = await json(await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: subquestionPayload }), 201);
+  assert.equal(subquestionModel.questions[0].required, true);
+  assert.deepEqual(subquestionModel.questions[0].subquestions.map((item) => [item.text, item.type, item.position]), [['Padrão atendido?', 'BOOLEAN', 1], ['Nota da execução', 'SCORE', 2]]);
+
+  const subquestionDraft = await json(await request(base, '/forms/submissions', { method: 'POST', cookie: fillerCookie, body: { modelId: subquestionModel.id } }), 201);
+  const calculatedAnswer = subquestionDraft.answers[0];
+  const manualScoreAnswer = subquestionDraft.answers[1];
+  const booleanSubanswer = calculatedAnswer.subanswers[0];
+  const scoreSubanswer = calculatedAnswer.subanswers[1];
+  assert.equal(calculatedAnswer.scoreValue, null);
+  assert.equal(calculatedAnswer.subanswers.length, 2);
+  assert.equal((await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 9 } })).status, 409);
+  assert.equal((await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${booleanSubanswer.id}`, { method: 'PATCH', cookie: outsiderCookie, body: { value: true } })).status, 403);
+  assert.equal((await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${manualScoreAnswer.id}/subanswers/${booleanSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: true } })).status, 404);
+  assert.equal((await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${booleanSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 'sim' } })).status, 400);
+  assert.equal((await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${scoreSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 11 } })).status, 400);
+
+  const afterNo = await json(await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${booleanSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: false } }), 200);
+  assert.equal(afterNo.scoreValue, null);
+  assert.equal((await request(base, `/forms/submissions/${subquestionDraft.id}/finalize`, { method: 'POST', cookie: fillerCookie })).status, 400);
+  const afterLowScore = await json(await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${scoreSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 6 } }), 200);
+  assert.equal(afterLowScore.scoreValue, 3);
+  const afterNotApplicable = await json(await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${booleanSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 'N/A' } }), 200);
+  assert.equal(afterNotApplicable.subanswers[0].notApplicable, true);
+  assert.equal(afterNotApplicable.scoreValue, 6);
+  assert.equal((await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${scoreSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 'N/A' } })).status, 400);
+  const afterClear = await json(await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${scoreSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: null } }), 200);
+  assert.equal(afterClear.scoreValue, null);
+  await json(await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${booleanSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: true } }), 200);
+  const calculated = await json(await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${scoreSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 6.6666 } }), 200);
+  assert.equal(calculated.scoreValue, 8.3333);
+  await json(await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${manualScoreAnswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 9 } }), 200);
+
+  const reorderedSubquestionPayload = { ...subquestionPayload, questions: [
+    { ...subquestionPayload.questions[0], subquestions: [subquestionPayload.questions[0].subquestions[1], subquestionPayload.questions[0].subquestions[0]] },
+    subquestionPayload.questions[1],
+  ] };
+  const reorderedSubquestionModel = await json(await request(base, `/forms/models/${subquestionModel.id}`, { method: 'PUT', cookie: adminCookie, body: reorderedSubquestionPayload }), 200);
+  assert.deepEqual(reorderedSubquestionModel.questions[0].subquestions.map((item) => item.text), ['Nota da execução', 'Padrão atendido?']);
+  const changedSubquestionPayload = { ...subquestionPayload, questions: [
+    { ...subquestionPayload.questions[0], text: 'Qualidade alterada', subquestions: [{ text: 'Novo critério', type: 'SCORE' }] },
+    subquestionPayload.questions[1],
+  ] };
+  const changedSubquestionModel = await json(await request(base, `/forms/models/${subquestionModel.id}`, { method: 'PUT', cookie: adminCookie, body: changedSubquestionPayload }), 200);
+  assert.deepEqual(changedSubquestionModel.questions[0].subquestions.map((item) => item.text), ['Novo critério']);
+  const preservedSubquestionDraft = await json(await request(base, `/forms/submissions/${subquestionDraft.id}`, { cookie: fillerCookie }), 200);
+  assert.equal(preservedSubquestionDraft.answers[0].text, 'Qualidade da operação');
+  assert.deepEqual(preservedSubquestionDraft.answers[0].subanswers.map((item) => item.text), ['Padrão atendido?', 'Nota da execução']);
+
+  const finalizedSubquestions = await json(await request(base, `/forms/submissions/${subquestionDraft.id}/finalize`, { method: 'POST', cookie: fillerCookie }), 200);
+  assert.equal(finalizedSubquestions.status, 'PENDING_APPROVAL');
+  assert.equal(finalizedSubquestions.answers[0].scoreValue, 8.3333);
+  assert.equal(finalizedSubquestions.finalScore, 8.5555);
+  assert.equal((await request(base, `/forms/submissions/${subquestionDraft.id}/answers/${calculatedAnswer.id}/subanswers/${booleanSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: false } })).status, 409);
+  const observedSubquestions = await json(await request(base, `/forms/submissions/${subquestionDraft.id}`, { cookie: defaultObserverCookie }), 200);
+  const approvedSubquestions = await json(await request(base, `/forms/submissions/${subquestionDraft.id}`, { cookie: approverCookie }), 200);
+  assert.deepEqual(observedSubquestions.answers[0].subanswers.map((item) => item.booleanValue ?? item.scoreValue), [true, 6.6666]);
+  assert.equal(approvedSubquestions.answers[0].scoreValue, 8.3333);
+
+  const allNotApplicableModel = await json(await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: {
+    name: `Checklist totalmente não aplicável ${suffix}`, active: true, resultType: 'SCORE', scoreMin: 0, scoreMax: 10, requiresApproval: false,
+    questions: [{ text: 'Critérios dispensáveis', type: 'SCORE', weight: 1, subquestions: [{ text: 'Critério A', type: 'BOOLEAN' }, { text: 'Critério B', type: 'BOOLEAN' }] }],
+    permissions: { fillRoles: ['reader'], fillUserIds: [], approveRoles: [], approveUserIds: [] },
+  } }), 201);
+  const allNotApplicableDraft = await json(await request(base, '/forms/submissions', { method: 'POST', cookie: fillerCookie, body: { modelId: allNotApplicableModel.id } }), 201);
+  await json(await request(base, `/forms/submissions/${allNotApplicableDraft.id}/answers/${allNotApplicableDraft.answers[0].id}/subanswers/${allNotApplicableDraft.answers[0].subanswers[0].id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 'N/A' } }), 200);
+  const allNotApplicableAnswer = await json(await request(base, `/forms/submissions/${allNotApplicableDraft.id}/answers/${allNotApplicableDraft.answers[0].id}/subanswers/${allNotApplicableDraft.answers[0].subanswers[1].id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 'N/A' } }), 200);
+  assert.equal(allNotApplicableAnswer.scoreValue, null);
+  assert.equal((await json(await request(base, `/forms/submissions/${allNotApplicableDraft.id}/finalize`, { method: 'POST', cookie: fillerCookie }), 200)).finalScore, null);
 
   assert.equal((await request(base, '/admin/forms-settings', { cookie: fillerCookie })).status, 403);
   const formsSettings = await json(await request(base, '/admin/forms-settings', { cookie: adminCookie }), 200);

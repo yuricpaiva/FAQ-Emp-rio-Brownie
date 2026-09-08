@@ -409,9 +409,24 @@ model FormQuestion {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   model            FormModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  subQuestions     FormSubQuestion[]
 
   @@unique([modelId, position])
   @@index([modelId, type])
+}
+
+model FormSubQuestion {
+  id         Int          @id @default(autoincrement())
+  questionId Int
+  text       String
+  type       String
+  position   Int
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  question   FormQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, position])
+  @@index([questionId, type])
 }
 
 model FormModelRolePermission {
@@ -496,9 +511,28 @@ model FormAnswer {
   updatedAt                  DateTime         @updatedAt
   submission                 FormSubmission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   photo                      FormAnswerPhoto?
+  subAnswers                 FormSubAnswer[]
 
   @@unique([submissionId, sourceQuestionId])
   @@index([submissionId, positionSnapshot])
+}
+
+model FormSubAnswer {
+  id                      Int        @id @default(autoincrement())
+  answerId                Int
+  sourceSubQuestionId     Int
+  questionTextSnapshot    String
+  questionTypeSnapshot    String
+  positionSnapshot        Int
+  booleanValue            Boolean?
+  scoreValue              Decimal?
+  notApplicable           Boolean    @default(false)
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+  answer                   FormAnswer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  @@unique([answerId, sourceSubQuestionId])
+  @@index([answerId, positionSnapshot])
 }
 
 model FormAnswerPhoto {
