@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
-import SystemNotification from "../components/SystemNotification";
+import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 import { formatDateTime, formatScore, resultTypeLabels, statusLabels } from "../utils/forms";
 
 function ColumnFilter({ label, active, children }) {
@@ -15,6 +15,7 @@ function localDateKey(value) {
 
 function FormSubmissions() {
   const navigate = useNavigate();
+  const { confirm } = useSystemNotification();
   const [tab, setTab] = useState("mine");
   const [capabilities, setCapabilities] = useState({ canApprove: false });
   const [loadedItems, setItems] = useState([]);
@@ -29,6 +30,7 @@ function FormSubmissions() {
   const [showNew, setShowNew] = useState(false);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const [notice, setNotice] = useState(null);
 
   const load = useCallback(async () => {
@@ -56,6 +58,18 @@ function FormSubmissions() {
     try { const response = await api.post("/forms/submissions", { modelId }); setShowNew(false); navigate(`/forms/preenchimentos/${response.data.id}`); }
     catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível iniciar o preenchimento." }); }
     finally { setStarting(null); }
+  };
+
+  const deleteDraft = async (item) => {
+    const accepted = await confirm(`O rascunho de “${item.model.name}” e todas as respostas e fotos serão excluídos definitivamente.`, { title: "Excluir rascunho?", confirmLabel: "Excluir definitivamente" });
+    if (!accepted) return;
+    setDeleting(item.id);
+    try {
+      await api.delete(`/forms/submissions/${item.id}`);
+      setItems((currentItems) => currentItems.filter((currentItem) => currentItem.id !== item.id));
+      setNotice({ variant: "success", text: "Rascunho excluído." });
+    } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível excluir o rascunho." }); }
+    finally { setDeleting(null); }
   };
 
   const items = loadedItems.filter((item) => {
@@ -107,7 +121,7 @@ function FormSubmissions() {
             <td data-label="Iniciado em">{formatDateTime(item.startedAt)}</td>
             <td data-label="Status"><span className={`forms-status forms-status--${item.status.toLowerCase()}`}>{statusLabels[item.status]}</span></td>
             <td data-label="Nota">{item.model.resultType === "SCORE" ? formatScore(item.finalScore) : "—"}</td>
-            <td data-label="Ação" className="forms-responsive-table__actions"><div className="faq-table-actions"><button type="button" onClick={() => navigate(`/forms/preenchimentos/${item.id}`)}>{item.status === "DRAFT" ? "Continuar" : tab === "approvals" ? "Analisar" : "Detalhes"}</button></div></td>
+            <td data-label="Ação" className="forms-responsive-table__actions"><div className="faq-table-actions"><button type="button" disabled={deleting === item.id} onClick={() => navigate(`/forms/preenchimentos/${item.id}`)}>{item.status === "DRAFT" ? "Continuar" : tab === "approvals" ? "Analisar" : "Detalhes"}</button>{tab === "mine" && item.status === "DRAFT" && <button type="button" className="forms-delete-draft" disabled={deleting === item.id} onClick={() => deleteDraft(item)}>{deleting === item.id ? "Excluindo..." : "Excluir"}</button>}</div></td>
           </tr>)}
           {!loading && !items.length && <tr><td colSpan="7" className="faq-table-empty">{tab === "approvals" ? "Nenhum preenchimento aguardando sua aprovação." : tab === "observing" ? "Nenhum preenchimento finalizado está sendo observado por você." : "Nenhum preenchimento encontrado."}</td></tr>}
         </tbody>

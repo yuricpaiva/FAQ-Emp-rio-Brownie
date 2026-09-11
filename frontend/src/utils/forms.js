@@ -19,6 +19,24 @@ export function photoUrl(photoId) {
   return `${base}/forms/photos/${photoId}`;
 }
 
+export function answerHasActivity(answer) {
+  if (answer.photo) return true;
+  if ((answer.subanswers || []).some((subanswer) => subanswer.notApplicable
+    || (subanswer.booleanValue !== null && subanswer.booleanValue !== undefined)
+    || (subanswer.scoreValue !== null && subanswer.scoreValue !== undefined))) return true;
+  if (answer.type === "TEXT") return Boolean(String(answer.textValue || "").trim());
+  if (answer.type === "NUMBER") return answer.numberValue !== null && answer.numberValue !== undefined;
+  if (answer.type === "BOOLEAN") return answer.booleanValue !== null && answer.booleanValue !== undefined;
+  if (answer.type === "SCORE") return answer.scoreValue !== null && answer.scoreValue !== undefined;
+  return false;
+}
+
+export function lastAnsweredQuestionIndex(answers = []) {
+  let lastIndex = 0;
+  answers.forEach((answer, index) => { if (answerHasActivity(answer)) lastIndex = index; });
+  return lastIndex;
+}
+
 export function modelPayload(model) {
   return {
     name: model.name,

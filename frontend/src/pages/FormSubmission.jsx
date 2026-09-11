@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { MessageSquareText, Store } from "lucide-react";
+import { FileDown, MessageSquareText, Store } from "lucide-react";
 import api from "../services/api";
 import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 import FormCameraCapture from "../components/forms/FormCameraCapture";
-import { formatDateTime, formatScore, photoUrl, statusLabels } from "../utils/forms";
+import { formatDateTime, formatScore, lastAnsweredQuestionIndex, photoUrl, statusLabels } from "../utils/forms";
 
 function answerValue(answer) {
   if (answer.type === "TEXT") return answer.textValue ?? "";
@@ -113,6 +113,9 @@ function FormSubmission() {
   const [observationAnswer, setObservationAnswer] = useState(null);
   const [observationDraft, setObservationDraft] = useState("");
   const [observationSaving, setObservationSaving] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportAnswerIds, setExportAnswerIds] = useState([]);
+  const [exporting, setExporting] = useState(false);
   const timers = useRef(new Map());
   const pending = useRef(new Map());
   const dirty = useRef(new Set());
@@ -128,6 +131,7 @@ function FormSubmission() {
       const next = Object.fromEntries(response.data.answers.map((answer) => [answer.id, answerValue(answer)]));
       const nextSubValues = Object.fromEntries(response.data.answers.flatMap((answer) => (answer.subanswers || []).map((subanswer) => [subanswer.id, subAnswerValue(subanswer)])));
       setSubmission({ ...response.data, model: { ...response.data.model, submissionId: response.data.id } }); setValues(next); valuesRef.current = next; setSubValues(nextSubValues); subValuesRef.current = nextSubValues;
+      setCurrent(response.data.status === "DRAFT" ? lastAnsweredQuestionIndex(response.data.answers) : 0);
     } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível carregar o preenchimento." }); }
   };
 
@@ -145,6 +149,7 @@ function FormSubmission() {
   useEffect(() => { const warn = (event) => { if (dirty.current.size || subDirty.current.size) { event.preventDefault(); event.returnValue = ""; } }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, []);
   useEffect(() => { if (!rejectOpen) return undefined; const escape = (event) => { if (event.key === "Escape") setRejectOpen(false); }; document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape); }, [rejectOpen]);
   useEffect(() => { if (!observationAnswer || observationSaving) return undefined; const escape = (event) => { if (event.key === "Escape") setObservationAnswer(null); }; document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape); }, [observationAnswer, observationSaving]);
+  useEffect(() => { if (!exportOpen || exporting) return undefined; const escape = (event) => { if (event.key === "Escape") setExportOpen(false); }; document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape); }, [exportOpen, exporting]);
 
   const saveAnswer = (answerId) => {
     const timer = timers.current.get(answerId); if (timer) clearTimeout(timer); timers.current.delete(answerId);
@@ -209,11 +214,36 @@ function FormSubmission() {
     } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível salvar a observação." }); }
     finally { setObservationSaving(false); }
   };
+  const openExport = () => { setExportAnswerIds(submission.answers.map((item) => item.id)); setExportOpen(true); };
+  const closeExport = () => { if (!exporting) setExportOpen(false); };
+  const toggleExportAnswer = (answerId) => setExportAnswerIds((current) => current.includes(answerId) ? current.filter((item) => item !== answerId) : [...current, answerId]);
+  const exportPdf = async () => {
+    if (!exportAnswerIds.length || exporting) return;
+    setExporting(true);
+    try {
+      const response = await api.post(`/forms/submissions/${id}/export`, { answerIds: exportAnswerIds }, { responseType: "blob" });
+      const disposition = response.headers["content-disposition"] || "";
+      const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `formulario-${id}.pdf`;
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExportOpen(false);
+      setNotice({ variant: "success", text: "PDF gerado com sucesso." });
+    } catch (error) {
+      let message = "Não foi possível gerar o PDF.";
+      if (error.response?.data instanceof Blob) {
+        try { message = JSON.parse(await error.response.data.text()).error || message; } catch { /* resposta binária inválida */ }
+      } else if (error.response?.data?.error) message = error.response.data.error;
+      setNotice({ variant: "error", text: message });
+    } finally { setExporting(false); }
+  };
 
   if (!submission) return <section className="page-stack">{notice ? <SystemNotification variant="error">{notice.text}</SystemNotification> : <div className="forms-empty">Carregando preenchimento...</div>}<button className="button button--ghost" onClick={() => navigate("/forms/preenchimentos")}>Voltar</button></section>;
   const editable = submission.permissions?.canEdit;
   const answer = submission.answers[current];
-  return <section className="page-stack forms-page forms-execution"><header className="forms-execution-header"><div><button className="forms-back" onClick={() => navigate("/forms/preenchimentos")}>← Voltar</button><p className="eyebrow">{editable ? "Preenchimento em andamento" : "Detalhes do preenchimento"}</p><h1>{submission.model.name}</h1><p>{submission.model.description}</p></div><div className="forms-execution-state"><div className="forms-execution-tools"><span className={`forms-status forms-status--${submission.status.toLowerCase()}`}>{statusLabels[submission.status]}</span><div className="forms-execution-icon-stack"><ObserverControl submission={submission} candidates={observerCandidates} search={observerSearch} saving={observerSaving} onSearch={setObserverSearch} onChange={changeObserver} />{submission.model.requiresStore && <StoreControl submission={submission} stores={stores} saving={storeSaving} onChange={changeStore} />}</div></div>{editable && <span>{saving || storeSaving ? "Salvando..." : "Alterações salvas"}</span>}</div></header>{notice && <SystemNotification variant={notice.variant} onDismiss={() => setNotice(null)}>{notice.text}</SystemNotification>}
+  const canExport = submission.status === "COMPLETED" || submission.status === "APPROVED";
+  return <section className="page-stack forms-page forms-execution"><header className="forms-execution-header"><div><button className="forms-back" onClick={() => navigate("/forms/preenchimentos")}>← Voltar</button><p className="eyebrow">{editable ? "Preenchimento em andamento" : "Detalhes do preenchimento"}</p><h1>{submission.model.name}</h1><p>{submission.model.description}</p></div><div className="forms-execution-state"><div className="forms-execution-tools">{canExport && <button type="button" className="button button--ghost forms-export-button" onClick={openExport}><FileDown size={17} aria-hidden="true" />Exportar PDF</button>}<span className={`forms-status forms-status--${submission.status.toLowerCase()}`}>{statusLabels[submission.status]}</span><div className="forms-execution-icon-stack"><ObserverControl submission={submission} candidates={observerCandidates} search={observerSearch} saving={observerSaving} onSearch={setObserverSearch} onChange={changeObserver} />{submission.model.requiresStore && <StoreControl submission={submission} stores={stores} saving={storeSaving} onChange={changeStore} />}</div></div>{editable && <span>{saving || storeSaving ? "Salvando..." : "Alterações salvas"}</span>}</div></header>{notice && <SystemNotification variant={notice.variant} onDismiss={() => setNotice(null)}>{notice.text}</SystemNotification>}
     {editable ? <>
       <div className="forms-progress"><div><span>Pergunta {current + 1} de {submission.answers.length}</span><strong>{Math.round(((current + 1) / submission.answers.length) * 100)}%</strong></div><progress value={current + 1} max={submission.answers.length} /></div>
       <article key={answer.id} className={`forms-answer-card forms-question-transition forms-question-transition--${questionDirection}`}>
@@ -228,6 +258,7 @@ function FormSubmission() {
       {submission.permissions?.canApprove && <div className="forms-approval-actions"><button className="button button--ghost" onClick={() => setRejectOpen(true)}>Reprovar</button><button className="button" onClick={() => decide("approve")}>Aprovar</button></div>}
     </>}
     {observationAnswer && <div className="modal-backdrop forms-observation-backdrop" onClick={closeObservation}><div className="modal-card forms-observation-modal" role="dialog" aria-modal="true" aria-labelledby="forms-observation-title" onClick={(event) => event.stopPropagation()}><div className="modal-card__header"><div><h3 id="forms-observation-title">Observação da pergunta</h3><p>{observationAnswer.text}</p></div><button type="button" onClick={closeObservation} disabled={observationSaving} aria-label="Fechar observação">×</button></div><label className="forms-observation-field"><span>Observação opcional</span><textarea rows={6} maxLength={1000} value={observationDraft} onChange={(event) => setObservationDraft(event.target.value)} placeholder="Digite uma observação sobre esta resposta" autoFocus /><small>{observationDraft.length}/1000</small></label><div className="form-actions"><button type="button" className="button button--ghost" onClick={closeObservation} disabled={observationSaving}>Cancelar</button><button type="button" className="button" onClick={saveObservation} disabled={observationSaving}>{observationSaving ? "Salvando..." : "Salvar"}</button></div></div></div>}
+    {exportOpen && <div className="modal-backdrop" onClick={closeExport}><div className="modal-card modal-card--wide forms-export-modal" role="dialog" aria-modal="true" aria-labelledby="forms-export-title" onClick={(event) => event.stopPropagation()}><div className="modal-card__header"><div><h3 id="forms-export-title">Exportar preenchimento</h3><p>Escolha quais perguntas aparecerão no PDF.</p></div><button type="button" onClick={closeExport} disabled={exporting} aria-label="Fechar exportação">×</button></div><div className="forms-export-selection-tools"><span>{exportAnswerIds.length} de {submission.answers.length} selecionadas</span><div><button type="button" className="button button--ghost" onClick={() => setExportAnswerIds(submission.answers.map((item) => item.id))} disabled={exporting || exportAnswerIds.length === submission.answers.length}>Selecionar todas</button><button type="button" className="button button--ghost" onClick={() => setExportAnswerIds([])} disabled={exporting || !exportAnswerIds.length}>Limpar seleção</button></div></div><div className="forms-export-question-list">{submission.answers.map((item) => <label key={item.id} className={exportAnswerIds.includes(item.id) ? "is-selected" : ""}><input type="checkbox" checked={exportAnswerIds.includes(item.id)} onChange={() => toggleExportAnswer(item.id)} disabled={exporting} /><span><strong>{item.position}. {item.text}</strong><small>{item.subanswers?.length ? `${item.subanswers.length} subpergunta${item.subanswers.length > 1 ? "s" : ""}` : "Resposta individual"}{item.photo ? " · Com registro fotográfico" : ""}{item.observation ? " · Com observação" : ""}</small></span></label>)}</div>{!exportAnswerIds.length && <p className="forms-export-validation">Selecione pelo menos uma pergunta.</p>}<div className="form-actions"><button type="button" className="button button--ghost" onClick={closeExport} disabled={exporting}>Cancelar</button><button type="button" className="button" onClick={exportPdf} disabled={exporting || !exportAnswerIds.length}>{exporting ? "Gerando PDF..." : "Gerar PDF"}</button></div></div></div>}
     {rejectOpen && <div className="modal-backdrop" onClick={() => setRejectOpen(false)}><div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="forms-reject-title" onClick={(event) => event.stopPropagation()}><div className="modal-card__header"><h3 id="forms-reject-title">Reprovar preenchimento</h3><button type="button" onClick={() => setRejectOpen(false)}>×</button></div><label className="forms-reject-field"><span>Justificativa</span><textarea rows={5} maxLength={1000} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} autoFocus /></label><div className="form-actions"><button type="button" className="button button--ghost" onClick={() => setRejectOpen(false)}>Cancelar</button><button type="button" className="button" onClick={() => decide("reject", rejectionReason)}>Reprovar</button></div></div></div>}
   </section>;
 }

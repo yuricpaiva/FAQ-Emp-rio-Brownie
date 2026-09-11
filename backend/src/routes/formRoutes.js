@@ -34,6 +34,8 @@ router.put('/models/:id', adminOnly, controller.updateModel);
 router.get('/submissions', controller.listSubmissions);
 router.post('/submissions', controller.startSubmission);
 router.get('/submissions/:id', controller.getSubmission);
+router.post('/submissions/:id/export', controller.exportSubmission);
+router.delete('/submissions/:id', controller.deleteSubmission);
 router.patch('/submissions/:id/observer', controller.updateObserver);
 router.patch('/submissions/:id/store', controller.updateStore);
 router.patch('/submissions/:id/answers/:answerId', controller.updateAnswer);

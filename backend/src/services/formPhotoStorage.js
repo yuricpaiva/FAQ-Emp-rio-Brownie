@@ -118,4 +118,76 @@ async function locatePhoto(rawPhotoId, user) {
   return { filePath, mimeType: photo.mimeType, size: photo.size };
 }
 
-module.exports = { savePhoto, locatePhoto, getRoot, resolveKey, detectMime };
+async function stagePhotoFiles(root, photos, submissionId) {
+  const stagingDirectory = path.join(root, '.trash', `submission-${submissionId}-${crypto.randomUUID()}`);
+  if (!isInside(root, stagingDirectory)) throw storageError('Não foi possível preparar a exclusão das fotos.');
+  await fs.promises.mkdir(stagingDirectory, { recursive: true });
+  const staged = [];
+  try {
+    for (const photo of photos) {
+      const originalPath = resolveKey(root, photo.storageKey);
+      const stagedPath = path.join(stagingDirectory, `photo-${photo.id}.webp`);
+      try {
+        await fs.promises.rename(originalPath, stagedPath);
+        staged.push({ originalPath, stagedPath });
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
+    }
+    return { stagingDirectory, staged };
+  } catch {
+    await restoreStagedPhotoFiles({ stagingDirectory, staged }).catch(() => {});
+    throw storageError('Não foi possível preparar as fotos para exclusão. O rascunho foi preservado.');
+  }
+}
+
+async function restoreStagedPhotoFiles({ stagingDirectory, staged }) {
+  const failures = [];
+  for (const file of [...staged].reverse()) {
+    try {
+      await fs.promises.mkdir(path.dirname(file.originalPath), { recursive: true });
+      await fs.promises.rename(file.stagedPath, file.originalPath);
+    } catch (error) { failures.push(error); }
+  }
+  await fs.promises.rmdir(stagingDirectory).catch((error) => { if (error?.code !== 'ENOENT') failures.push(error); });
+  if (failures.length) throw storageError('Não foi possível restaurar uma ou mais fotos do rascunho.');
+}
+
+async function purgeStagedPhotoFiles({ stagingDirectory, staged }) {
+  await Promise.all(staged.map((file) => fs.promises.rm(file.stagedPath, { force: true })));
+  await fs.promises.rmdir(stagingDirectory).catch((error) => { if (error?.code !== 'ENOENT') throw error; });
+}
+
+async function deleteDraft(rawSubmissionId, user) {
+  const submissionId = Number(rawSubmissionId);
+  if (!Number.isInteger(submissionId) || submissionId <= 0) throw new formService.FormError(400, 'Preenchimento inválido.');
+  let stagedState = null;
+  try {
+    await prisma.$transaction(async (tx) => {
+      const submission = await tx.formSubmission.findUnique({
+        where: { id: submissionId },
+        include: { answers: { include: { photo: true } } },
+      });
+      if (!submission) throw new formService.FormError(404, 'Preenchimento não encontrado.');
+      if (submission.userId !== user.id) throw new formService.FormError(403, 'Somente o autor pode excluir este rascunho.');
+      if (submission.status !== 'DRAFT') throw new formService.FormError(409, 'Somente rascunhos podem ser excluídos.', 'FORM_SUBMISSION_READ_ONLY');
+      const photos = submission.answers.flatMap((answer) => answer.photo ? [answer.photo] : []);
+      if (photos.length) stagedState = await stagePhotoFiles(await getRoot(), photos, submissionId);
+      const deleted = await tx.formSubmission.deleteMany({ where: { id: submissionId, userId: user.id, status: 'DRAFT' } });
+      if (deleted.count !== 1) throw new formService.FormError(409, 'O rascunho não está mais disponível para exclusão.', 'FORM_SUBMISSION_CHANGED');
+    }, { maxWait: 5000, timeout: 10000 });
+  } catch (error) {
+    if (stagedState) {
+      try { await restoreStagedPhotoFiles(stagedState); }
+      catch (restoreError) { console.error('Não foi possível restaurar fotos após falha na exclusão do rascunho.', restoreError); throw restoreError; }
+    }
+    throw error;
+  }
+  if (stagedState) {
+    try { await purgeStagedPhotoFiles(stagedState); }
+    catch (error) { console.error('Rascunho excluído, mas a limpeza da área temporária de fotos falhou.', error); }
+  }
+  return { id: submissionId, deleted: true };
+}
+
+module.exports = { savePhoto, locatePhoto, deleteDraft, getRoot, resolveKey, detectMime, stagePhotoFiles, restoreStagedPhotoFiles, purgeStagedPhotoFiles };

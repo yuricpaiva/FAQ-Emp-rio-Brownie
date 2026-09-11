@@ -114,6 +114,30 @@
 .faq-table-actions { display: flex; align-items: center; gap: .35rem; white-space: nowrap; }
 .faq-table-actions button { padding: .38rem .55rem; border: 1px solid rgba(107,70,52,.2); border-radius: 5px; background: transparent; color: #68483b; font-size: .72rem; font-weight: 800; cursor: pointer; }
 .faq-table-actions button:hover { border-color: #795a4e; background: #795a4e; color: #fff5ea; }
+.faq-table-actions .forms-delete-draft { border-color: rgba(181,71,50,.3); color: #a24435; }
+.faq-table-actions .forms-delete-draft:hover { border-color: #b54732; background: #b54732; color: #fff; }
+.faq-table-actions button:disabled { opacity: .55; cursor: wait; }
+.forms-export-button { display: inline-flex; align-items: center; gap: .4rem; white-space: nowrap; }
+.forms-export-modal { max-width: 680px; }
+.forms-export-selection-tools { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .8rem; color: #765f55; font-size: .82rem; }
+.forms-export-selection-tools > div { display: flex; gap: .4rem; }
+.forms-export-selection-tools .button { min-height: 34px; padding: .45rem .7rem; font-size: .75rem; }
+.forms-export-question-list { display: grid; gap: .4rem; max-height: min(52vh, 480px); overflow-y: auto; padding-right: .2rem; }
+.forms-export-question-list label { display: flex; align-items: flex-start; gap: .7rem; padding: .7rem .75rem; border: 1px solid #e2d7d0; border-radius: 7px; background: #fff; cursor: pointer; }
+.forms-export-question-list label.is-selected { border-color: #9a7868; background: #faf6f2; }
+.forms-export-question-list input[type="checkbox"] { flex: 0 0 18px; width: 18px; height: 18px; min-height: 0; margin: .1rem 0 0; padding: 0; accent-color: #4a2618; }
+.forms-export-question-list span { display: grid; flex: 1; gap: .15rem; min-width: 0; text-align: left; }
+.forms-export-question-list strong { color: #3f251b; font-size: .86rem; line-height: 1.35; }
+.forms-export-question-list small { color: #806b61; font-size: .74rem; }
+.forms-export-validation { margin: .65rem 0 0; color: #a24435; font-size: .78rem; }
+@media (max-width: 640px) {
+  .forms-execution-tools { flex-wrap: wrap; }
+  .forms-export-button { order: 2; flex: 1 0 100%; justify-content: center; }
+  .forms-export-selection-tools { align-items: flex-start; flex-direction: column; }
+  .forms-export-selection-tools > div { width: 100%; }
+  .forms-export-selection-tools .button { flex: 1; }
+  .forms-export-question-list { max-height: 48vh; }
+}
 .faq-table-empty { padding: 2rem !important; color: #8a7064; text-align: center; }
 .forms-models-table { min-width: 900px; }
 .forms-submissions-table { min-width: 900px; }

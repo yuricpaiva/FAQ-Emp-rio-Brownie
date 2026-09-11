@@ -1,6 +1,7 @@
 const multer = require('multer');
 const service = require('../services/formService');
 const photoStorage = require('../services/formPhotoStorage');
+const pdfService = require('../services/formPdfService');
 
 function handle(res, error, fallback) {
   if (error instanceof service.FormError) {
@@ -34,6 +35,22 @@ module.exports = {
   listSubmissions: action((req) => service.listSubmissions(req.query, req.user), 'Não foi possível listar os preenchimentos.'),
   startSubmission: action((req) => service.startSubmission(req.body, req.user), 'Não foi possível iniciar o preenchimento.', 201),
   getSubmission: action((req) => service.getSubmission(req.params.id, req.user), 'Não foi possível carregar o preenchimento.'),
+  exportSubmission: async (req, res) => {
+    try {
+      const exported = await pdfService.exportSubmission(req.params.id, req.body, req.user);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Length': String(exported.buffer.length),
+        'Content-Disposition': `attachment; filename="${exported.filename}"`,
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      return res.send(exported.buffer);
+    } catch (error) {
+      return handle(res, error, 'Não foi possível gerar o PDF.');
+    }
+  },
+  deleteSubmission: action((req) => photoStorage.deleteDraft(req.params.id, req.user), 'Não foi possível excluir o rascunho.'),
   updateObserver: action((req) => service.updateObserver(req.params.id, req.body, req.user), 'Não foi possível atualizar o observador.'),
   updateStore: action((req) => service.updateStore(req.params.id, req.body, req.user), 'Não foi possível atualizar a loja.'),
   updateAnswer: action((req) => service.updateAnswer(req.params.id, req.params.answerId, req.body, req.user), 'Não foi possível salvar a resposta.'),

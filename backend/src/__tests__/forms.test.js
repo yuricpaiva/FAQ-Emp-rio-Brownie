@@ -13,6 +13,7 @@ process.env.FORMS_UPLOAD_DIR = uploadRoot;
 const app = require('../app');
 const service = require('../services/formService');
 const photoStorage = require('../services/formPhotoStorage');
+const pdfService = require('../services/formPdfService');
 const prisma = new PrismaClient();
 
 async function request(base, endpoint, { method = 'GET', cookie, body, form } = {}) {
@@ -31,6 +32,17 @@ test('Forms validates model configuration and score calculations', () => {
   assert.equal(service.RESULT_TYPES.includes('INVALID'), false);
   assert.deepEqual(service.QUESTION_TYPES, ['TEXT', 'NUMBER', 'BOOLEAN', 'SCORE', 'PHOTO']);
   assert.deepEqual(service.SUBQUESTION_TYPES, ['BOOLEAN', 'SCORE']);
+  const ordered = pdfService.validateAnswerIds([30, 10], { answers: [{ id: 10 }, { id: 20 }, { id: 30 }] });
+  assert.deepEqual(ordered.map((answer) => answer.id), [10, 30]);
+  assert.throws(() => pdfService.validateAnswerIds([], { answers: [] }), /Selecione pelo menos uma pergunta/);
+  assert.throws(() => pdfService.validateAnswerIds([10, 10], { answers: [{ id: 10 }] }), /duplicadas/);
+  assert.equal(pdfService.answerText({ questionTypeSnapshot: 'TEXT', textValue: 'Resposta' }), 'Resposta');
+  assert.equal(pdfService.answerText({ questionTypeSnapshot: 'NUMBER', numberValue: 12.5 }), '12,5');
+  assert.equal(pdfService.answerText({ questionTypeSnapshot: 'BOOLEAN', booleanValue: false }), 'Não');
+  assert.equal(pdfService.answerText({ questionTypeSnapshot: 'SCORE', scoreValue: 8.25 }), '8,25');
+  assert.equal(pdfService.answerText({ questionTypeSnapshot: 'PHOTO', photo: {} }), 'Registro fotográfico anexado');
+  assert.equal(pdfService.subanswerText({ notApplicable: true }), 'N/A');
+  assert.equal(pdfService.subanswerText({ questionTypeSnapshot: 'BOOLEAN', booleanValue: true }), 'Sim');
 });
 
 test('Forms API preserves snapshots, permissions, photos, scores and approval states', async (t) => {
@@ -187,6 +199,7 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   assert.equal(finalized.status, 'PENDING_APPROVAL');
   assert.equal(finalized.finalScore, 9.3333);
   assert.equal(finalized.answers[0].observation, 'Observação final');
+  assert.equal((await request(base, `/forms/submissions/${submission.id}/export`, { method: 'POST', cookie: fillerCookie, body: { answerIds: submission.answers.map((answer) => answer.id) } })).status, 409);
   assert.equal((await request(base, `/forms/submissions/${submission.id}/answers/${submission.answers[0].id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 9 } })).status, 409);
   assert.equal((await request(base, `/forms/submissions/${submission.id}/answers/${submission.answers[0].id}/observation`, { method: 'PATCH', cookie: fillerCookie, body: { observation: 'Alterada depois' } })).status, 409);
   assert.equal((await json(await request(base, `/forms/submissions/${submission.id}`, { cookie: approverCookie }), 200)).answers[0].observation, 'Observação final');
@@ -196,6 +209,22 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   const approved = await json(await request(base, `/forms/submissions/${submission.id}/approve`, { method: 'POST', cookie: approverCookie, body: {} }), 200);
   assert.equal(approved.status, 'APPROVED');
   assert.equal(approved.answers[0].observation, 'Observação final');
+  const filesBeforeExport = fs.readdirSync(uploadRoot, { recursive: true }).map(String).sort();
+  const approvedExport = await request(base, `/forms/submissions/${submission.id}/export`, { method: 'POST', cookie: fillerCookie, body: { answerIds: [submission.answers[2].id, submission.answers[0].id] } });
+  assert.equal(approvedExport.status, 200, await approvedExport.clone().text());
+  assert.equal(approvedExport.headers.get('content-type'), 'application/pdf');
+  assert.match(approvedExport.headers.get('content-disposition'), /attachment; filename=".+\.pdf"/);
+  assert.equal(Buffer.from(await approvedExport.arrayBuffer()).subarray(0, 4).toString(), '%PDF');
+  assert.deepEqual(fs.readdirSync(uploadRoot, { recursive: true }).map(String).sort(), filesBeforeExport);
+  const missingExportPhoto = await prisma.formAnswerPhoto.findUnique({ where: { answerId: submission.answers[0].id } });
+  await fs.promises.rm(photoStorage.resolveKey(await photoStorage.getRoot(), missingExportPhoto.storageKey), { force: true });
+  const exportWithMissingPhoto = await request(base, `/forms/submissions/${submission.id}/export`, { method: 'POST', cookie: fillerCookie, body: { answerIds: [submission.answers[0].id] } });
+  assert.equal(exportWithMissingPhoto.status, 200, await exportWithMissingPhoto.clone().text());
+  assert.equal(Buffer.from(await exportWithMissingPhoto.arrayBuffer()).subarray(0, 4).toString(), '%PDF');
+  assert.equal((await request(base, `/forms/submissions/${submission.id}/export`, { method: 'POST', cookie: outsiderCookie, body: { answerIds: [submission.answers[0].id] } })).status, 403);
+  assert.equal((await request(base, `/forms/submissions/${submission.id}/export`, { method: 'POST', cookie: fillerCookie, body: { answerIds: [] } })).status, 400);
+  assert.equal((await request(base, `/forms/submissions/${submission.id}/export`, { method: 'POST', cookie: fillerCookie, body: { answerIds: [submission.answers[0].id, submission.answers[0].id] } })).status, 400);
+  assert.equal((await request(base, `/forms/submissions/${submission.id}/export`, { method: 'POST', cookie: fillerCookie, body: { answerIds: [999999999] } })).status, 400);
   assert.equal((await request(base, `/forms/submissions/${submission.id}/approve`, { method: 'POST', cookie: approverCookie, body: {} })).status, 409);
 
   const rejectedDraft = await json(await request(base, '/forms/submissions', { method: 'POST', cookie: fillerCookie, body: { modelId: model.id } }), 201);
@@ -207,6 +236,7 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   assert.equal((await request(base, `/forms/submissions/${rejectedDraft.id}/reject`, { method: 'POST', cookie: outsiderCookie, body: { reason: 'Sem permissão' } })).status, 403);
   const rejected = await json(await request(base, `/forms/submissions/${rejectedDraft.id}/reject`, { method: 'POST', cookie: approverCookie, body: { reason: 'É necessário corrigir o atendimento.' } }), 200);
   assert.equal(rejected.status, 'REJECTED');
+  assert.equal((await request(base, `/forms/submissions/${rejected.id}/export`, { method: 'POST', cookie: fillerCookie, body: { answerIds: [rejected.answers[0].id] } })).status, 409);
 
   await json(await request(base, `/forms/models/${model.id}`, { method: 'PUT', cookie: adminCookie, body: { ...changedPayload, active: false } }), 200);
   assert.equal((await request(base, '/forms/submissions', { method: 'POST', cookie: fillerCookie, body: { modelId: model.id } })).status, 409);
@@ -214,10 +244,14 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   const adminOnlyModel = await json(await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: { name: `Admin only ${suffix}`, active: true, resultType: 'SIMPLE', requiresApproval: false, questions: [{ text: 'Texto obrigatório', type: 'TEXT', required: true, allowObservation: true, weight: 1 }], permissions: {} } }), 201);
   assert.equal((await request(base, '/forms/submissions', { method: 'POST', cookie: fillerCookie, body: { modelId: adminOnlyModel.id } })).status, 403);
   const adminDraft = await json(await request(base, '/forms/submissions', { method: 'POST', cookie: adminCookie, body: { modelId: adminOnlyModel.id } }), 201);
+  assert.equal((await request(base, `/forms/submissions/${adminDraft.id}/export`, { method: 'POST', cookie: adminCookie, body: { answerIds: [adminDraft.answers[0].id] } })).status, 409);
   await json(await request(base, `/forms/submissions/${adminDraft.id}/answers/${adminDraft.answers[0].id}/observation`, { method: 'PATCH', cookie: adminCookie, body: { observation: 'Observação sem resposta' } }), 200);
   assert.equal((await request(base, `/forms/submissions/${adminDraft.id}/finalize`, { method: 'POST', cookie: adminCookie })).status, 400);
   await json(await request(base, `/forms/submissions/${adminDraft.id}/answers/${adminDraft.answers[0].id}`, { method: 'PATCH', cookie: adminCookie, body: { value: 'Concluído' } }), 200);
   assert.equal((await json(await request(base, `/forms/submissions/${adminDraft.id}/finalize`, { method: 'POST', cookie: adminCookie }), 200)).status, 'COMPLETED');
+  const completedExport = await request(base, `/forms/submissions/${adminDraft.id}/export`, { method: 'POST', cookie: adminCookie, body: { answerIds: [adminDraft.answers[0].id] } });
+  assert.equal(completedExport.status, 200, await completedExport.clone().text());
+  assert.equal(Buffer.from(await completedExport.arrayBuffer()).subarray(0, 4).toString(), '%PDF');
 
   const observerPayload = {
     name: `Modelo observado ${suffix}`, description: 'Teste de observadores', active: true, resultType: 'SIMPLE', requiresApproval: true,
@@ -422,6 +456,59 @@ test('Forms API preserves snapshots, permissions, photos, scores and approval st
   const allNotApplicableAnswer = await json(await request(base, `/forms/submissions/${allNotApplicableDraft.id}/answers/${allNotApplicableDraft.answers[0].id}/subanswers/${allNotApplicableDraft.answers[0].subanswers[1].id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: 'N/A' } }), 200);
   assert.equal(allNotApplicableAnswer.scoreValue, null);
   assert.equal((await json(await request(base, `/forms/submissions/${allNotApplicableDraft.id}/finalize`, { method: 'POST', cookie: fillerCookie }), 200)).finalScore, null);
+
+  const deletionModel = await json(await request(base, '/forms/models', { method: 'POST', cookie: adminCookie, body: {
+    name: `Checklist para excluir ${suffix}`, active: true, resultType: 'SCORE', scoreMin: 0, scoreMax: 10,
+    questions: [{ text: 'Pergunta descartável', type: 'SCORE', allowPhoto: true, weight: 1, subquestions: [{ text: 'Subpergunta descartável', type: 'BOOLEAN' }] }],
+    permissions: { fillRoles: ['reader'], fillUserIds: [], approveRoles: [], approveUserIds: [] },
+  } }), 201);
+  const deletionDraft = await json(await request(base, '/forms/submissions', { method: 'POST', cookie: fillerCookie, body: { modelId: deletionModel.id } }), 201);
+  const deletionAnswer = deletionDraft.answers[0];
+  const deletionSubanswer = deletionAnswer.subanswers[0];
+  await json(await request(base, `/forms/submissions/${deletionDraft.id}/answers/${deletionAnswer.id}/subanswers/${deletionSubanswer.id}`, { method: 'PATCH', cookie: fillerCookie, body: { value: true } }), 200);
+  const deletionPhotoForm = new FormData(); deletionPhotoForm.append('photo', new Blob([png], { type: 'image/png' }), 'delete-me.png');
+  const deletionPhoto = await json(await request(base, `/forms/submissions/${deletionDraft.id}/answers/${deletionAnswer.id}/photo`, { method: 'POST', cookie: fillerCookie, form: deletionPhotoForm }), 201);
+  const deletionPhotoRecord = await prisma.formAnswerPhoto.findUnique({ where: { id: deletionPhoto.id } });
+  const deletionPhotoPath = path.join(uploadRoot, ...deletionPhotoRecord.storageKey.split('/'));
+  assert.equal(fs.existsSync(deletionPhotoPath), true);
+  assert.equal((await request(base, '/forms/submissions/invalid', { method: 'DELETE', cookie: fillerCookie })).status, 400);
+  assert.equal((await request(base, `/forms/submissions/${deletionDraft.id}`, { method: 'DELETE', cookie: outsiderCookie })).status, 403);
+  const deletedDraft = await json(await request(base, `/forms/submissions/${deletionDraft.id}`, { method: 'DELETE', cookie: fillerCookie }), 200);
+  assert.deepEqual(deletedDraft, { id: deletionDraft.id, deleted: true });
+  assert.equal(fs.existsSync(deletionPhotoPath), false);
+  assert.equal(await prisma.formSubmission.findUnique({ where: { id: deletionDraft.id } }), null);
+  assert.equal(await prisma.formAnswer.findUnique({ where: { id: deletionAnswer.id } }), null);
+  assert.equal(await prisma.formSubAnswer.findUnique({ where: { id: deletionSubanswer.id } }), null);
+  assert.equal(await prisma.formAnswerPhoto.findUnique({ where: { id: deletionPhoto.id } }), null);
+  assert.equal((await request(base, `/forms/submissions/${deletionDraft.id}`, { method: 'DELETE', cookie: fillerCookie })).status, 404);
+  assert.equal((await request(base, `/forms/submissions/${manualDraft.id}`, { method: 'DELETE', cookie: fillerCookie })).status, 409);
+
+  const missingPhotoDraft = await json(await request(base, '/forms/submissions', { method: 'POST', cookie: fillerCookie, body: { modelId: deletionModel.id } }), 201);
+  const missingPhotoForm = new FormData(); missingPhotoForm.append('photo', new Blob([png], { type: 'image/png' }), 'already-missing.png');
+  const missingPhoto = await json(await request(base, `/forms/submissions/${missingPhotoDraft.id}/answers/${missingPhotoDraft.answers[0].id}/photo`, { method: 'POST', cookie: fillerCookie, form: missingPhotoForm }), 201);
+  const missingPhotoRecord = await prisma.formAnswerPhoto.findUnique({ where: { id: missingPhoto.id } });
+  await fs.promises.rm(path.join(uploadRoot, ...missingPhotoRecord.storageKey.split('/')), { force: true });
+  assert.equal((await request(base, `/forms/submissions/${missingPhotoDraft.id}`, { method: 'DELETE', cookie: fillerCookie })).status, 200);
+
+  const unavailableStorageDraft = await json(await request(base, '/forms/submissions', { method: 'POST', cookie: fillerCookie, body: { modelId: deletionModel.id } }), 201);
+  const unavailableStorageForm = new FormData(); unavailableStorageForm.append('photo', new Blob([png], { type: 'image/png' }), 'preserve-me.png');
+  await json(await request(base, `/forms/submissions/${unavailableStorageDraft.id}/answers/${unavailableStorageDraft.answers[0].id}/photo`, { method: 'POST', cookie: fillerCookie, form: unavailableStorageForm }), 201);
+  const availableUploadRoot = process.env.FORMS_UPLOAD_DIR;
+  delete process.env.FORMS_UPLOAD_DIR;
+  assert.equal((await request(base, `/forms/submissions/${unavailableStorageDraft.id}`, { method: 'DELETE', cookie: fillerCookie })).status, 503);
+  assert.notEqual(await prisma.formSubmission.findUnique({ where: { id: unavailableStorageDraft.id } }), null);
+  process.env.FORMS_UPLOAD_DIR = availableUploadRoot;
+  assert.equal((await request(base, `/forms/submissions/${unavailableStorageDraft.id}`, { method: 'DELETE', cookie: fillerCookie })).status, 200);
+
+  const restorationKey = `restore-test-${suffix}/evidence.webp`;
+  const restorationPath = path.join(uploadRoot, ...restorationKey.split('/'));
+  await fs.promises.mkdir(path.dirname(restorationPath), { recursive: true });
+  await fs.promises.writeFile(restorationPath, png);
+  const stagedForRollback = await photoStorage.stagePhotoFiles(uploadRoot, [{ id: 999999, storageKey: restorationKey }], 999999);
+  assert.equal(fs.existsSync(restorationPath), false);
+  await photoStorage.restoreStagedPhotoFiles(stagedForRollback);
+  assert.equal(fs.existsSync(restorationPath), true);
+  await fs.promises.rm(restorationPath, { force: true });
 
   assert.equal((await request(base, '/admin/forms-settings', { cookie: fillerCookie })).status, 403);
   const formsSettings = await json(await request(base, '/admin/forms-settings', { cookie: adminCookie }), 200);
