@@ -27,7 +27,7 @@ function AiConversationHeader({ conversation, historyOpen, onOpenHistory, onRena
           <button type="button" onClick={saveRename} aria-label="Salvar título" title="Salvar"><Check size={16} /></button>
           <button type="button" onClick={() => setRenaming(false)} aria-label="Cancelar alteração" title="Cancelar"><X size={16} /></button>
         </div>
-      ) : <strong title={conversation?.title}>{conversation?.title || "Assistente IA"}</strong>}
+      ) : <strong title={conversation?.title}>{conversation?.title || "Browninho"}</strong>}
       {conversation && !renaming && (
         <details className="ai-options-menu">
           <summary aria-label="Opções da conversa" title="Opções da conversa"><MoreHorizontal size={19} /></summary>

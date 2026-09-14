@@ -63,7 +63,7 @@ export function createMockConversations() {
       createdAt: relativeDate(1, 15),
       updatedAt: relativeDate(1, 15),
       messages: [
-        message("everest-user-1", everestId, "user", "O assistente já consegue consultar o Everest?", relativeDate(1, 15)),
+        message("everest-user-1", everestId, "user", "O Browninho já consegue consultar o Everest?", relativeDate(1, 15)),
         message("everest-assistant-1", everestId, "assistant", "Ainda não. Esta primeira versão demonstra somente a experiência visual. A integração com fontes internas será adicionada em uma etapa futura.", relativeDate(1, 15, 15))
       ]
     },
@@ -88,4 +88,4 @@ export const AI_SUGGESTIONS = [
 ];
 
 export const SIMULATED_ASSISTANT_RESPONSE =
-  "Esta é uma resposta simulada do Assistente IA. A integração com a OpenAI será adicionada posteriormente.";
+  "Esta é uma resposta simulada do Browninho. A integração com a OpenAI será adicionada posteriormente.";

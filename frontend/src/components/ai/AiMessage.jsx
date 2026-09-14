@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Check, Copy, ThumbsDown, ThumbsUp } from "lucide-react";
 import AiAttachmentPreview from "./AiAttachmentPreview";
 import AiRichText, { copyText } from "./AiRichText";
 
@@ -25,8 +25,8 @@ function AiMessage({ message }) {
       <div className="ai-message__body">
         {isAssistant && (
           <div className="ai-message__identity">
-            <span className="ai-message__avatar" aria-hidden="true"><Sparkles size={15} /></span>
-            <strong>Assistente IA</strong>
+            <span className="ai-message__avatar" aria-hidden="true"><img src="/browninho.png" alt="" /></span>
+            <strong>Browninho</strong>
           </div>
         )}
         <div className="ai-message__content">

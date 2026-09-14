@@ -110,7 +110,7 @@ function AiComposer({ value, onChange, onSend, isProcessing, resetKey }) {
           placeholder="Pergunte alguma coisa..."
           rows="1"
           disabled={isProcessing}
-          aria-label="Mensagem para o Assistente IA"
+          aria-label="Mensagem para o Browninho"
         />
         <div className="ai-composer__toolbar">
           <div className="ai-composer__attachment-menu" ref={menuRef}>
@@ -132,7 +132,7 @@ function AiComposer({ value, onChange, onSend, isProcessing, resetKey }) {
           </button>
         </div>
       </div>
-      <small className="ai-composer-wrap__note">O Assistente IA pode cometer erros. Confira informações importantes.</small>
+      <small className="ai-composer-wrap__note">O Browninho pode cometer erros. Confira informações importantes.</small>
     </div>
   );
 }

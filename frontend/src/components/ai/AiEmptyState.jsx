@@ -5,9 +5,9 @@ const ICONS = [FileSearch, TableProperties, ListChecks, Image];
 function AiEmptyState({ suggestions, onSuggestion }) {
   return (
     <div className="ai-empty-state">
-      <span className="ai-empty-state__mark" aria-hidden="true"><img src="/brand-placeholder.png" alt="" /></span>
+      <span className="ai-empty-state__mark" aria-hidden="true"><img src="/browninho.png" alt="" /></span>
       <h1>Como posso te ajudar?</h1>
-      <p>Converse com o Assistente IA do FAQ EB.</p>
+      <p>Converse com o Browninho do FAQ EB.</p>
       <div className="ai-empty-state__suggestions" aria-label="Sugestões de mensagem">
         {suggestions.map((suggestion, index) => {
           const Icon = ICONS[index];

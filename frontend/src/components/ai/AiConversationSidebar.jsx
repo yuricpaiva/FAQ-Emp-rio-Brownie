@@ -46,7 +46,7 @@ function AiConversationSidebar({ conversations, activeId, open, onClose, onNew, 
   };
 
   return (
-    <aside className={`ai-history ${open ? "ai-history--open" : ""}`} aria-label="Histórico do Assistente IA" aria-hidden={!open}>
+    <aside className={`ai-history ${open ? "ai-history--open" : ""}`} aria-label="Histórico do Browninho" aria-hidden={!open}>
       <div className="ai-history__header">
         <span><strong>Conversas</strong><small>Histórico local</small></span>
         <button type="button" className="ai-icon-button ai-history__desktop-close" onClick={onClose} aria-label="Recolher histórico" title="Recolher histórico"><PanelLeftClose size={18} /></button>
