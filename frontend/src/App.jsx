@@ -9,6 +9,7 @@ import { SystemNotificationProvider } from "./components/SystemNotification";
 const Home = lazy(() => import("./pages/Home"));
 const Category = lazy(() => import("./pages/Category"));
 const Article = lazy(() => import("./pages/Article"));
+const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const PowerBI = lazy(() => import("./pages/PowerBI"));
 const ProductionPlanning = lazy(() => import("./pages/ProductionPlanning"));
 const NewProductionPlanning = lazy(() => import("./pages/NewProductionPlanning"));
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
         <Route path="/categoria/:slug" element={<ProtectedRoute><Category /></ProtectedRoute>} />
         <Route path="/artigo/:slug" element={<ProtectedRoute><Article /></ProtectedRoute>} />
+        <Route path="/assistente" element={<ProtectedRoute><AiAssistant /></ProtectedRoute>} />
         <Route path="/power-bi" element={<ProtectedRoute><PowerBI /></ProtectedRoute>} />
         <Route
           path="/planejamento-producao"
@@ -108,7 +110,7 @@ function AppRoutes() {
 function App() {
   const location = useLocation();
   const isLoginPage = location.pathname === "/login" || location.pathname === "/admin/login";
-  const isFullPage = ["/power-bi", "/ranking-bolao"].includes(location.pathname);
+  const isFullPage = ["/assistente", "/power-bi", "/ranking-bolao"].includes(location.pathname);
 
   const content = isLoginPage ? (
       <>
