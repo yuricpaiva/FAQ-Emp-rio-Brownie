@@ -45,6 +45,7 @@ function PowerBI() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [remainingSeconds, setRemainingSeconds] = useState(DEFAULT_BI_REFRESH_INTERVAL_SECONDS);
   const [recentlyUpdated, setRecentlyUpdated] = useState(false);
+  const [showRefreshStatus, setShowRefreshStatus] = useState(true);
   const updatedMessageTimerRef = useRef(null);
 
   useEffect(() => {
@@ -143,34 +144,47 @@ function PowerBI() {
           allowFullScreen
         />
       </div>
-      <aside
-        className={`power-bi-refresh-status ${recentlyUpdated ? "power-bi-refresh-status--updated" : ""}`}
-        aria-label="Status da atualização automática do BI"
-      >
-        {recentlyUpdated ? (
-          <div className="power-bi-refresh-status__success" role="status" aria-live="polite">
+      {showRefreshStatus && (
+        <aside
+          className={`power-bi-refresh-status ${recentlyUpdated ? "power-bi-refresh-status--updated" : ""}`}
+          aria-label="Status da atualização automática do BI"
+        >
+          <button
+            type="button"
+            className="power-bi-refresh-status__close"
+            onClick={() => setShowRefreshStatus(false)}
+            aria-label="Ocultar status da atualização automática"
+            title="Ocultar informativo"
+          >
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m5 12 4 4L19 6" />
+              <path d="M6 6l12 12M18 6 6 18" />
             </svg>
-            <strong>BI atualizado</strong>
-          </div>
-        ) : (
-          <>
-            <div className="power-bi-refresh-status__heading">
+          </button>
+          {recentlyUpdated ? (
+            <div className="power-bi-refresh-status__success" role="status" aria-live="polite">
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M20 6v5h-5" />
-                <path d="M4 18v-5h5" />
-                <path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5" />
+                <path d="m5 12 4 4L19 6" />
               </svg>
-              <strong>Atualização automática a cada {formatRefreshInterval(refreshIntervalSeconds)}</strong>
+              <strong>BI atualizado</strong>
             </div>
-            <div className="power-bi-refresh-status__details">
-              <span>Última atualização: <strong>{formatTime(lastUpdatedAt)}</strong></span>
-              <span>Próxima atualização em: <strong>{formatCountdown(remainingSeconds)}</strong></span>
-            </div>
-          </>
-        )}
-      </aside>
+          ) : (
+            <>
+              <div className="power-bi-refresh-status__heading">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6v5h-5" />
+                  <path d="M4 18v-5h5" />
+                  <path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5" />
+                </svg>
+                <strong>Atualização automática a cada {formatRefreshInterval(refreshIntervalSeconds)}</strong>
+              </div>
+              <div className="power-bi-refresh-status__details">
+                <span>Última atualização: <strong>{formatTime(lastUpdatedAt)}</strong></span>
+                <span>Próxima atualização em: <strong>{formatCountdown(remainingSeconds)}</strong></span>
+              </div>
+            </>
+          )}
+        </aside>
+      )}
     </section>
   );
 }

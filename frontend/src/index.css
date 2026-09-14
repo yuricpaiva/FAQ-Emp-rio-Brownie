@@ -1673,6 +1673,43 @@ textarea:focus {
   transition: background-color 220ms ease, transform 220ms ease;
 }
 
+.power-bi-refresh-status__close {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 250, 245, 0.62);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+
+.power-bi-refresh-status__close:hover,
+.power-bi-refresh-status__close:focus-visible {
+  background: rgba(255, 250, 245, 0.12);
+  color: #fffaf5;
+}
+
+.power-bi-refresh-status__close:active {
+  transform: scale(0.92);
+}
+
+.power-bi-refresh-status__close svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
 .power-bi-refresh-status__heading,
 .power-bi-refresh-status__success {
   display: flex;
@@ -1694,6 +1731,7 @@ textarea:focus {
 
 .power-bi-refresh-status__heading strong,
 .power-bi-refresh-status__success strong {
+  padding-right: 1.15rem;
   font-size: 0.75rem;
   line-height: 1.35;
 }
