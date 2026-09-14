@@ -3,6 +3,9 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const DEFAULT_POWER_BI_URL =
   'https://app.powerbi.com/view?r=eyJrIjoiYTZiZDBjNWItYWU0YS00NjA0LWE1NmMtNTk3YzQ0YTViYzg3IiwidCI6IjU4ODNmMjZmLTk1ZDQtNDE2YS04OThmLTBmZDhmYzMyNGQ0NSJ9&pageName=e4f916ca95bbd083114d';
+const DEFAULT_POWER_BI_REFRESH_INTERVAL_SECONDS = 300;
+const MIN_POWER_BI_REFRESH_INTERVAL_SECONDS = 10;
+const MAX_POWER_BI_REFRESH_INTERVAL_SECONDS = 24 * 60 * 60;
 
 async function ensureSettings() {
   return prisma.appSettings.upsert({
@@ -12,7 +15,8 @@ async function ensureSettings() {
       id: 1,
       poolEnabled: true,
       powerBiEnabled: true,
-      powerBiUrl: DEFAULT_POWER_BI_URL
+      powerBiUrl: DEFAULT_POWER_BI_URL,
+      powerBiRefreshIntervalSeconds: DEFAULT_POWER_BI_REFRESH_INTERVAL_SECONDS
     }
   });
 }
@@ -36,7 +40,8 @@ async function getPowerBiConfiguration(req, res) {
   return res.json({
     enabled: settings.powerBiEnabled,
     hasAccess,
-    url: hasAccess ? settings.powerBiUrl : ''
+    url: hasAccess ? settings.powerBiUrl : '',
+    refreshIntervalSeconds: settings.powerBiRefreshIntervalSeconds
   });
 }
 
@@ -52,6 +57,7 @@ async function getPowerBiSettingsAdmin(_req, res) {
   return res.json({
     enabled: settings.powerBiEnabled,
     url: settings.powerBiUrl,
+    refreshIntervalSeconds: settings.powerBiRefreshIntervalSeconds,
     userIds: accesses.map((access) => access.userId)
   });
 }
@@ -59,6 +65,7 @@ async function getPowerBiSettingsAdmin(_req, res) {
 async function updatePowerBiSettings(req, res) {
   const enabled = req.body?.enabled;
   const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+  const rawRefreshIntervalSeconds = req.body?.refreshIntervalSeconds;
   const rawUserIds = req.body?.userIds;
 
   if (typeof enabled !== 'boolean') {
@@ -67,6 +74,19 @@ async function updatePowerBiSettings(req, res) {
 
   if (!url || !isValidHttpUrl(url)) {
     return res.status(400).json({ error: 'Informe um link http/https valido para o Power BI.' });
+  }
+
+  const hasRefreshInterval = rawRefreshIntervalSeconds !== undefined;
+  const refreshIntervalSeconds = hasRefreshInterval ? Number(rawRefreshIntervalSeconds) : null;
+  if (
+    hasRefreshInterval &&
+    (!Number.isInteger(refreshIntervalSeconds) ||
+      refreshIntervalSeconds < MIN_POWER_BI_REFRESH_INTERVAL_SECONDS ||
+      refreshIntervalSeconds > MAX_POWER_BI_REFRESH_INTERVAL_SECONDS)
+  ) {
+    return res.status(400).json({
+      error: 'A periodicidade do Power BI deve ser um numero inteiro entre 10 e 86400 segundos.'
+    });
   }
 
   if (!Array.isArray(rawUserIds)) {
@@ -87,22 +107,33 @@ async function updatePowerBiSettings(req, res) {
     return res.status(400).json({ error: 'Selecione apenas usuarios ativos e existentes.' });
   }
 
-  await prisma.$transaction([
+  const [savedSettings] = await prisma.$transaction([
     prisma.appSettings.upsert({
       where: { id: 1 },
-      update: { powerBiEnabled: enabled, powerBiUrl: url },
+      update: {
+        powerBiEnabled: enabled,
+        powerBiUrl: url,
+        ...(hasRefreshInterval ? { powerBiRefreshIntervalSeconds: refreshIntervalSeconds } : {})
+      },
       create: {
         id: 1,
         poolEnabled: true,
         powerBiEnabled: enabled,
-        powerBiUrl: url
+        powerBiUrl: url,
+        powerBiRefreshIntervalSeconds:
+          refreshIntervalSeconds ?? DEFAULT_POWER_BI_REFRESH_INTERVAL_SECONDS
       }
     }),
     prisma.powerBiAccess.deleteMany(),
     ...userIds.map((userId) => prisma.powerBiAccess.create({ data: { userId } }))
   ]);
 
-  return res.json({ enabled, url, userIds });
+  return res.json({
+    enabled,
+    url,
+    refreshIntervalSeconds: savedSettings.powerBiRefreshIntervalSeconds,
+    userIds
+  });
 }
 
 async function hasFormsAccess(user) {

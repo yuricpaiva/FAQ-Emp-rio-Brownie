@@ -113,11 +113,12 @@ model PoolParticipant {
 }
 
 model AppSettings {
-  id             Int      @id @default(1)
-  poolEnabled    Boolean  @default(true)
-  powerBiEnabled Boolean  @default(true)
-  powerBiUrl     String   @default("")
-  updatedAt      DateTime @updatedAt
+  id                            Int      @id @default(1)
+  poolEnabled                   Boolean  @default(true)
+  powerBiEnabled                Boolean  @default(true)
+  powerBiUrl                    String   @default("")
+  powerBiRefreshIntervalSeconds Int      @default(300)
+  updatedAt                     DateTime @updatedAt
 }
 
 model PowerBiAccess {

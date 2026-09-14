@@ -2315,6 +2315,13 @@ textarea:focus {
   font-weight: 700;
 }
 
+.settings-field > small {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .settings-access {
   display: flex;
   align-items: center;

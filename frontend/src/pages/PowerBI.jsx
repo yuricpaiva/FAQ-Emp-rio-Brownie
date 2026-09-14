@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import api from "../services/api";
 import SystemNotification from "../components/SystemNotification";
 
-const BI_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const DEFAULT_BI_REFRESH_INTERVAL_SECONDS = 300;
 const BI_UPDATED_MESSAGE_MS = 2500;
 
 function addRefreshParameter(url, refreshToken) {
@@ -29,13 +29,21 @@ function formatCountdown(totalSeconds) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function formatRefreshInterval(totalSeconds) {
+  if (totalSeconds % 60 === 0) {
+    const minutes = totalSeconds / 60;
+    return `${minutes} min`;
+  }
+  return `${totalSeconds} s`;
+}
+
 function PowerBI() {
   const [configuration, setConfiguration] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [refreshToken, setRefreshToken] = useState(() => Date.now());
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
-  const [remainingSeconds, setRemainingSeconds] = useState(BI_REFRESH_INTERVAL_MS / 1000);
+  const [remainingSeconds, setRemainingSeconds] = useState(DEFAULT_BI_REFRESH_INTERVAL_SECONDS);
   const [recentlyUpdated, setRecentlyUpdated] = useState(false);
   const updatedMessageTimerRef = useRef(null);
 
@@ -50,21 +58,27 @@ function PowerBI() {
   const canDisplayBi = Boolean(
     configuration?.enabled && configuration?.hasAccess && configuration?.url
   );
+  const refreshIntervalSeconds =
+    Number.isInteger(configuration?.refreshIntervalSeconds) &&
+    configuration.refreshIntervalSeconds >= 10
+    ? configuration.refreshIntervalSeconds
+    : DEFAULT_BI_REFRESH_INTERVAL_SECONDS;
+  const refreshIntervalMs = refreshIntervalSeconds * 1000;
 
   useEffect(() => {
     if (!canDisplayBi) return undefined;
 
-    let nextRefreshAt = Date.now() + BI_REFRESH_INTERVAL_MS;
+    let nextRefreshAt = Date.now() + refreshIntervalMs;
     const initialTime = Date.now();
     setLastUpdatedAt(initialTime);
-    setRemainingSeconds(BI_REFRESH_INTERVAL_MS / 1000);
+    setRemainingSeconds(refreshIntervalSeconds);
 
     const refreshBi = () => {
       const refreshedAt = Date.now();
-      nextRefreshAt = refreshedAt + BI_REFRESH_INTERVAL_MS;
+      nextRefreshAt = refreshedAt + refreshIntervalMs;
       setRefreshToken(refreshedAt);
       setLastUpdatedAt(refreshedAt);
-      setRemainingSeconds(BI_REFRESH_INTERVAL_MS / 1000);
+      setRemainingSeconds(refreshIntervalSeconds);
       setRecentlyUpdated(true);
 
       if (updatedMessageTimerRef.current) {
@@ -94,7 +108,7 @@ function PowerBI() {
         updatedMessageTimerRef.current = null;
       }
     };
-  }, [canDisplayBi, configuration?.url]);
+  }, [canDisplayBi, configuration?.url, refreshIntervalMs, refreshIntervalSeconds]);
 
   const iframeUrl = useMemo(
     () => addRefreshParameter(configuration?.url || "", refreshToken),
@@ -148,7 +162,7 @@ function PowerBI() {
                 <path d="M4 18v-5h5" />
                 <path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5" />
               </svg>
-              <strong>Atualização automática a cada 5 min</strong>
+              <strong>Atualização automática a cada {formatRefreshInterval(refreshIntervalSeconds)}</strong>
             </div>
             <div className="power-bi-refresh-status__details">
               <span>Última atualização: <strong>{formatTime(lastUpdatedAt)}</strong></span>

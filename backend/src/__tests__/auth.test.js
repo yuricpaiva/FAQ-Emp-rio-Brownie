@@ -93,13 +93,15 @@ test('pool ranking is readable by authenticated users and writable only by admin
       update: {
         poolEnabled: originalSettings?.poolEnabled ?? true,
         powerBiEnabled: originalSettings?.powerBiEnabled ?? true,
-        powerBiUrl: originalSettings?.powerBiUrl || 'https://app.powerbi.com/view'
+        powerBiUrl: originalSettings?.powerBiUrl || 'https://app.powerbi.com/view',
+        powerBiRefreshIntervalSeconds: originalSettings?.powerBiRefreshIntervalSeconds ?? 300
       },
       create: {
         id: 1,
         poolEnabled: true,
         powerBiEnabled: true,
-        powerBiUrl: 'https://app.powerbi.com/view'
+        powerBiUrl: 'https://app.powerbi.com/view',
+        powerBiRefreshIntervalSeconds: 300
       }
     });
     await prisma.powerBiAccess.deleteMany();
@@ -184,6 +186,7 @@ test('pool ranking is readable by authenticated users and writable only by admin
     body: JSON.stringify({
       enabled: true,
       url: 'https://app.powerbi.com/view?test=1',
+      refreshIntervalSeconds: 120,
       userIds: [reader.id]
     })
   });
@@ -202,10 +205,12 @@ test('pool ranking is readable by authenticated users and writable only by admin
     body: JSON.stringify({
       enabled: true,
       url: 'https://app.powerbi.com/view?test=1',
+      refreshIntervalSeconds: 120,
       userIds: [reader.id]
     })
   });
   assert.equal(powerBiSettingsUpdate.status, 200);
+  assert.equal((await powerBiSettingsUpdate.clone().json()).refreshIntervalSeconds, 120);
 
   const readerPowerBiConfig = await fetch(`${base}/knowledge/power-bi-config`, {
     headers: { cookie: readerCookie }
@@ -214,6 +219,19 @@ test('pool ranking is readable by authenticated users and writable only by admin
   assert.equal(readerPowerBiConfig.status, 200);
   assert.equal(readerPowerBiPayload.hasAccess, true);
   assert.equal(readerPowerBiPayload.url, 'https://app.powerbi.com/view?test=1');
+  assert.equal(readerPowerBiPayload.refreshIntervalSeconds, 120);
+
+  const invalidPowerBiRefreshInterval = await fetch(`${base}/admin/power-bi-settings`, {
+    method: 'PUT',
+    headers: { cookie: adminCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      enabled: true,
+      url: 'https://app.powerbi.com/view?test=1',
+      refreshIntervalSeconds: 0,
+      userIds: [reader.id]
+    })
+  });
+  assert.equal(invalidPowerBiRefreshInterval.status, 400);
 
   const creatorPowerBiConfig = await fetch(`${base}/knowledge/power-bi-config`, {
     headers: { cookie: creatorCookie }
@@ -221,6 +239,7 @@ test('pool ranking is readable by authenticated users and writable only by admin
   const creatorPowerBiPayload = await creatorPowerBiConfig.json();
   assert.equal(creatorPowerBiPayload.hasAccess, false);
   assert.equal(creatorPowerBiPayload.url, '');
+  assert.equal(creatorPowerBiPayload.refreshIntervalSeconds, 120);
 
   await fetch(`${base}/admin/power-bi-settings`, {
     method: 'PUT',
@@ -235,7 +254,9 @@ test('pool ranking is readable by authenticated users and writable only by admin
   const disabledPowerBiConfig = await fetch(`${base}/knowledge/power-bi-config`, {
     headers: { cookie: readerCookie }
   });
-  assert.equal((await disabledPowerBiConfig.json()).hasAccess, false);
+  const disabledPowerBiPayload = await disabledPowerBiConfig.json();
+  assert.equal(disabledPowerBiPayload.hasAccess, false);
+  assert.equal(disabledPowerBiPayload.refreshIntervalSeconds, 120);
 
   const settingsUpdate = await fetch(`${base}/admin/pool-settings`, {
     method: 'PUT',
