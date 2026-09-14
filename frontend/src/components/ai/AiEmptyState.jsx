@@ -1,12 +1,12 @@
-import { FileSearch, Image, ListChecks, Sparkles, TableProperties } from "lucide-react";
+import { FileSearch, Image, ListChecks, TableProperties } from "lucide-react";
 
 const ICONS = [FileSearch, TableProperties, ListChecks, Image];
 
 function AiEmptyState({ suggestions, onSuggestion }) {
   return (
     <div className="ai-empty-state">
-      <span className="ai-empty-state__mark" aria-hidden="true"><Sparkles size={25} /></span>
-      <h1>Como posso ajudar?</h1>
+      <span className="ai-empty-state__mark" aria-hidden="true"><img src="/brand-placeholder.png" alt="" /></span>
+      <h1>Como posso te ajudar?</h1>
       <p>Converse com o Assistente IA do FAQ EB.</p>
       <div className="ai-empty-state__suggestions" aria-label="Sugestões de mensagem">
         {suggestions.map((suggestion, index) => {
