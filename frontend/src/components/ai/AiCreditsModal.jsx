@@ -24,10 +24,9 @@ function AiCreditsModal({ open, onClose, onGoHome }) {
         <img src="/browninho-creditos-esgotados.png" alt="" />
       </div>
       <div className="ai-credits-modal__content">
-        <span className="ai-credits-modal__eyebrow">Hora da recarga</span>
-        <h2 id="ai-credits-title">Ops... acabaram os créditos!</h2>
-        <p id="ai-credits-description">O Browninho precisa recarregar para continuar.</p>
-        <p className="ai-credits-modal__help">Fale com o setor de <strong>Tecnologia</strong>.</p>
+        <span className="ai-credits-modal__eyebrow">Aviso</span>
+        <h2 id="ai-credits-title">Ops... os créditos acabaram!</h2>
+        <p id="ai-credits-description">Para mais informações, entre em contato com o setor de Tecnologia.</p>
         <div className="ai-credits-modal__actions">
           <button type="button" className="ai-credits-modal__secondary" onClick={onGoHome}><ArrowLeft size={16} />Voltar ao início</button>
           <button type="button" className="ai-credits-modal__primary" onClick={onClose}>Entendi</button>

@@ -300,7 +300,6 @@
 .ai-credits-modal__eyebrow { color: #9a5635; font-size: .66rem; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
 .ai-credits-modal h2 { max-width: 280px; margin: .45rem 0 .55rem; font-size: clamp(1.4rem, 3vw, 1.8rem); line-height: 1.1; letter-spacing: -.035em; }
 .ai-credits-modal p { margin: 0; color: rgba(63, 36, 24, .72); font-size: .8rem; line-height: 1.55; }
-.ai-credits-modal .ai-credits-modal__help { width: fit-content; margin-top: .75rem; padding: .45rem .65rem; border-radius: 999px; background: rgba(192, 142, 58, .17); color: rgba(63, 36, 24, .76); font-size: .7rem; }
 .ai-credits-modal__actions { display: flex; justify-content: flex-end; gap: .55rem; margin-top: 1.3rem; }
 .ai-credits-modal__actions button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: .38rem; padding: .58rem .82rem; border-radius: 11px; font: inherit; font-size: .72rem; font-weight: 800; cursor: pointer; }
 .ai-credits-modal__secondary { border: 1px solid rgba(63, 36, 24, .18); background: transparent; color: #3f2418; }
