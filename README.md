@@ -127,4 +127,6 @@ O Browninho usa a OpenAI Responses API para responder com base nos artigos publi
 3. Acesse `Painel > Configurações > Browninho` para escolher modelos, capacidades, instruções, limites e perfis autorizados a consultar vendas.
 4. Use “Testar conexão” antes de liberar o recurso.
 
+Para mostrar aos administradores o gasto real retornado pela OpenAI, configure também `OPENAI_ADMIN_KEY`. Use `OPENAI_PROJECT_ID` para limitar os custos ao projeto do Browninho; sem ele, o painel mostra os custos de toda a organização. A chave administrativa permanece somente no backend e deve ser criada por um proprietário da organização na plataforma da OpenAI.
+
 Imagens geradas são armazenadas em `AI_STORAGE_DIR`. Sem essa variável, o desenvolvimento usa `backend/ai-storage`; em produção, configure um diretório persistente e inclua-o nos backups. Arquivos enviados para análise são temporários na OpenAI e não são mantidos no servidor do FAQ.

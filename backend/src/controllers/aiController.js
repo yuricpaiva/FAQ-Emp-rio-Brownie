@@ -3,6 +3,7 @@ const { PrismaClient } = require('@prisma/client');
 const { getAiSettings, hasApiKey, publicSettings, saveAiSettings } = require('../services/aiSettingsService');
 const { generateBrowninhoResponse, testOpenAIConnection } = require('../services/aiAgentService');
 const { locateGeneratedFile, removeGeneratedFiles } = require('../services/aiStorageService');
+const { getOpenAiUsageSummary } = require('../services/aiUsageService');
 
 const prisma = new PrismaClient();
 const requestWindows = new Map();
@@ -226,4 +227,9 @@ async function testAdminConnection(_req, res) {
   } catch (error) { return errorResponse(res, error, 'Não foi possível validar a conexão com a OpenAI.'); }
 }
 
-module.exports = { deleteConversation, getAdminSettings, getAttachmentContent, getConfig, isOpenAiCreditsError, listConversations, sendMessage, testAdminConnection, updateAdminSettings, updateConversation };
+async function getAdminUsage(_req, res) {
+  try { return res.json(await getOpenAiUsageSummary()); }
+  catch (error) { return errorResponse(res, error, 'Não foi possível consultar os custos na OpenAI.'); }
+}
+
+module.exports = { deleteConversation, getAdminSettings, getAdminUsage, getAttachmentContent, getConfig, isOpenAiCreditsError, listConversations, sendMessage, testAdminConnection, updateAdminSettings, updateConversation };

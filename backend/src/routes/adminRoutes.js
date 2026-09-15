@@ -66,6 +66,7 @@ const {
 } = require('../controllers/databaseConnectionController');
 const {
   getAdminSettings,
+  getAdminUsage,
   testAdminConnection,
   updateAdminSettings
 } = require('../controllers/aiController');
@@ -134,6 +135,7 @@ router.put('/power-bi-settings', adminOnly, updatePowerBiSettings);
 router.get('/forms-settings', adminOnly, getFormsSettingsAdmin);
 router.put('/forms-settings', adminOnly, updateFormsSettings);
 router.get('/ai-settings', adminOnly, getAdminSettings);
+router.get('/ai-settings/usage', adminOnly, getAdminUsage);
 router.put('/ai-settings', adminOnly, updateAdminSettings);
 router.post('/ai-settings/test', adminOnly, testAdminConnection);
 router.get('/database-connections', adminOnly, getDatabaseConnections);
