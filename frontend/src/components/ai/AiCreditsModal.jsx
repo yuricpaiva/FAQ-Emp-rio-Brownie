@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { ArrowLeft, BatteryWarning, X } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 
 function AiCreditsModal({ open, onClose, onGoHome }) {
   const closeButtonRef = useRef(null);
@@ -19,14 +19,15 @@ function AiCreditsModal({ open, onClose, onGoHome }) {
       <button ref={closeButtonRef} type="button" className="ai-icon-button ai-credits-modal__close" onClick={onClose} aria-label="Fechar aviso" title="Fechar"><X size={18} /></button>
       <div className="ai-credits-modal__visual" aria-hidden="true">
         <span className="ai-credits-modal__halo" />
-        <img src="/browninho.png" alt="" />
-        <span className="ai-credits-modal__status"><BatteryWarning size={20} /></span>
+        <span className="ai-credits-modal__spark ai-credits-modal__spark--one" />
+        <span className="ai-credits-modal__spark ai-credits-modal__spark--two" />
+        <img src="/browninho-creditos-esgotados.png" alt="" />
       </div>
       <div className="ai-credits-modal__content">
-        <span className="ai-credits-modal__eyebrow">Pausa rápida</span>
-        <h2 id="ai-credits-title">Ops... o Browninho ficou sem créditos</h2>
-        <p id="ai-credits-description">A cota de inteligência artificial disponível para o FAQ EB acabou por enquanto. Seu histórico continua salvo e você poderá tentar novamente assim que os créditos forem renovados.</p>
-        <div className="ai-credits-modal__help"><strong>Precisa de ajuda?</strong><span>Entre em contato com o setor de Tecnologia.</span></div>
+        <span className="ai-credits-modal__eyebrow">Hora da recarga</span>
+        <h2 id="ai-credits-title">Ops... acabaram os créditos!</h2>
+        <p id="ai-credits-description">O Browninho precisa recarregar para continuar.</p>
+        <p className="ai-credits-modal__help">Fale com o setor de <strong>Tecnologia</strong>.</p>
         <div className="ai-credits-modal__actions">
           <button type="button" className="ai-credits-modal__secondary" onClick={onGoHome}><ArrowLeft size={16} />Voltar ao início</button>
           <button type="button" className="ai-credits-modal__primary" onClick={onClose}>Entendi</button>
