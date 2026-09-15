@@ -25,7 +25,7 @@ function AiCreditsModal({ open, onClose, onGoHome }) {
       <div className="ai-credits-modal__content">
         <span className="ai-credits-modal__eyebrow">Pausa rápida</span>
         <h2 id="ai-credits-title">Ops... o Browninho ficou sem créditos</h2>
-        <p id="ai-credits-description">A cota de inteligência artificial disponível para o FAQ EB acabou por enquanto. Sua conversa continua salva e você poderá tentar novamente assim que os créditos forem renovados.</p>
+        <p id="ai-credits-description">A cota de inteligência artificial disponível para o FAQ EB acabou por enquanto. Seu histórico continua salvo e você poderá tentar novamente assim que os créditos forem renovados.</p>
         <div className="ai-credits-modal__help"><strong>Precisa de ajuda?</strong><span>Entre em contato com o setor de Tecnologia.</span></div>
         <div className="ai-credits-modal__actions">
           <button type="button" className="ai-credits-modal__secondary" onClick={onGoHome}><ArrowLeft size={16} />Voltar ao início</button>
