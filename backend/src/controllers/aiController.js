@@ -6,6 +6,20 @@ const { locateGeneratedFile, removeGeneratedFiles } = require('../services/aiSto
 
 const prisma = new PrismaClient();
 const requestWindows = new Map();
+const OPENAI_CREDIT_CODES = new Set([
+  'billing_hard_limit_reached',
+  'billing_not_active',
+  'credit_balance_too_low',
+  'insufficient_quota',
+  'quota_exceeded',
+]);
+
+function isOpenAiCreditsError(error) {
+  const codes = [error?.code, error?.type, error?.error?.code, error?.error?.type]
+    .map((value) => String(value || '').toLowerCase());
+  if (codes.some((code) => OPENAI_CREDIT_CODES.has(code))) return true;
+  return /insufficient quota|exceeded your current quota|billing hard limit|credit balance.+too low|billing.+not active/i.test(String(error?.message || ''));
+}
 
 function parseMetadata(value) {
   try { return JSON.parse(value || '{}'); } catch { return {}; }
@@ -47,6 +61,12 @@ function serializeConversation(conversation, withMessages = true) {
 
 function errorResponse(res, error, fallback) {
   console.error('[Browninho]', error?.code || error?.name || 'Error', error?.message);
+  if (isOpenAiCreditsError(error)) {
+    return res.status(402).json({
+      error: 'Os créditos de inteligência artificial estão indisponíveis no momento.',
+      code: 'AI_CREDITS_EXHAUSTED',
+    });
+  }
   const status = Number(error?.status || error?.statusCode);
   return res.status(status >= 400 && status < 600 ? status : 502).json({
     error: status >= 400 && status < 500 ? error.message : fallback,
@@ -206,4 +226,4 @@ async function testAdminConnection(_req, res) {
   } catch (error) { return errorResponse(res, error, 'Não foi possível validar a conexão com a OpenAI.'); }
 }
 
-module.exports = { deleteConversation, getAdminSettings, getAttachmentContent, getConfig, listConversations, sendMessage, testAdminConnection, updateAdminSettings, updateConversation };
+module.exports = { deleteConversation, getAdminSettings, getAttachmentContent, getConfig, isOpenAiCreditsError, listConversations, sendMessage, testAdminConnection, updateAdminSettings, updateConversation };

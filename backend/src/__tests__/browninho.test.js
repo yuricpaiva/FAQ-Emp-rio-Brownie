@@ -4,6 +4,7 @@ const { buildInstructions, buildTools } = require('../services/aiAgentService');
 const { htmlToText, queryTerms, scoreArticle } = require('../services/aiKnowledgeService');
 const { validatePeriod } = require('../services/aiSalesService');
 const { DEFAULT_AI_SETTINGS, normalizeSettingsInput, publicSettings } = require('../services/aiSettingsService');
+const { isOpenAiCreditsError } = require('../controllers/aiController');
 
 test('Browninho settings validates limits and never exposes the API key', () => {
   const settings = normalizeSettingsInput({ ...DEFAULT_AI_SETTINGS });
@@ -36,4 +37,10 @@ test('Browninho base instructions identify read-only behavior', () => {
   const text = buildInstructions(DEFAULT_AI_SETTINGS, { id: 1, name: 'Teste', role: 'admin' });
   assert.match(text, /Browninho/);
   assert.match(text, /nunca afirme que alterou registros/i);
+});
+
+test('Browninho distinguishes exhausted credits from temporary rate limits', () => {
+  assert.equal(isOpenAiCreditsError({ code: 'insufficient_quota', status: 429 }), true);
+  assert.equal(isOpenAiCreditsError({ error: { code: 'billing_hard_limit_reached' } }), true);
+  assert.equal(isOpenAiCreditsError({ code: 'rate_limit_exceeded', status: 429 }), false);
 });

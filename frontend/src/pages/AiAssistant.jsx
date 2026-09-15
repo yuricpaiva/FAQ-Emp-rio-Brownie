@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AiComposer from "../components/ai/AiComposer";
 import AiConversationHeader from "../components/ai/AiConversationHeader";
 import AiConversationSidebar from "../components/ai/AiConversationSidebar";
+import AiCreditsModal from "../components/ai/AiCreditsModal";
 import AiDeleteDialog from "../components/ai/AiDeleteDialog";
 import AiEmptyState from "../components/ai/AiEmptyState";
 import AiMessageList from "../components/ai/AiMessageList";
@@ -19,6 +21,7 @@ function revokeAttachments(attachments = []) {
 }
 
 function AiAssistant() {
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [config, setConfig] = useState(null);
   const [activeId, setActiveId] = useState(null);
@@ -29,6 +32,7 @@ function AiAssistant() {
   const [respondingConversationId, setRespondingConversationId] = useState(null);
   const [conversationToDelete, setConversationToDelete] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [creditsModalOpen, setCreditsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const conversationsRef = useRef(conversations);
 
@@ -86,7 +90,8 @@ function AiAssistant() {
     } catch (error) {
       setConversations((current) => existingId ? current.map((item) => String(item.id) === String(existingId) ? { ...item, messages: item.messages.filter((message) => message.id !== temporaryMessage.id) } : item) : current.filter((item) => String(item.id) !== String(temporaryId)));
       if (!existingId) setActiveId(null);
-      setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível obter uma resposta do Browninho." });
+      if (error.response?.data?.code === "AI_CREDITS_EXHAUSTED") setCreditsModalOpen(true);
+      else setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível obter uma resposta do Browninho." });
     } finally { setRespondingConversationId(null); }
   };
 
@@ -103,6 +108,7 @@ function AiAssistant() {
       </div>
     </div>
     <AiDeleteDialog conversation={conversationToDelete} onCancel={() => setConversationToDelete(null)} onConfirm={confirmDelete} />
+    <AiCreditsModal open={creditsModalOpen} onClose={() => setCreditsModalOpen(false)} onGoHome={() => navigate("/")} />
   </section>;
 }
 
