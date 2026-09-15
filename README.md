@@ -117,3 +117,14 @@ O agrupador `Forms` oferece modelos configuráveis e preenchimentos com rascunho
 `FORMS_UPLOAD_DIR` deve ser um caminho absoluto, gravável e externo ao repositório, por exemplo `/var/lib/faq/forms`. A ausência ou invalidade dessa variável bloqueia somente operações de foto do Forms. Não existe fallback para `backend/uploads`.
 
 Para restaurar ou migrar o Forms é necessário preservar em conjunto o SQLite e o conteúdo de `FORMS_UPLOAD_DIR`. Alterar apenas a raiz configurada não exige migration, desde que os mesmos caminhos relativos sejam mantidos.
+
+## Browninho
+
+O Browninho usa a OpenAI Responses API para responder com base nos artigos publicados do FAQ, consultar indicadores de vendas autorizados, analisar arquivos e gerar imagens. As conversas ficam vinculadas ao usuário autenticado e as consultas ao banco analítico são feitas somente por ferramentas predefinidas e de leitura.
+
+1. Defina `OPENAI_API_KEY` apenas em `backend/.env`.
+2. Reinicie o backend.
+3. Acesse `Painel > Configurações > Browninho` para escolher modelos, capacidades, instruções, limites e perfis autorizados a consultar vendas.
+4. Use “Testar conexão” antes de liberar o recurso.
+
+Imagens geradas são armazenadas em `AI_STORAGE_DIR`. Sem essa variável, o desenvolvimento usa `backend/ai-storage`; em produção, configure um diretório persistente e inclua-o nos backups. Arquivos enviados para análise são temporários na OpenAI e não são mantidos no servidor do FAQ.

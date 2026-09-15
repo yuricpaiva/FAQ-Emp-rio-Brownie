@@ -64,6 +64,11 @@ const {
   saveConnection,
   testConnection
 } = require('../controllers/databaseConnectionController');
+const {
+  getAdminSettings,
+  testAdminConnection,
+  updateAdminSettings
+} = require('../controllers/aiController');
 
 const router = Router();
 const canCreateContent = requireRole(['creator', 'admin']);
@@ -128,6 +133,9 @@ router.get('/power-bi-settings', adminOnly, getPowerBiSettingsAdmin);
 router.put('/power-bi-settings', adminOnly, updatePowerBiSettings);
 router.get('/forms-settings', adminOnly, getFormsSettingsAdmin);
 router.put('/forms-settings', adminOnly, updateFormsSettings);
+router.get('/ai-settings', adminOnly, getAdminSettings);
+router.put('/ai-settings', adminOnly, updateAdminSettings);
+router.post('/ai-settings/test', adminOnly, testAdminConnection);
 router.get('/database-connections', adminOnly, getDatabaseConnections);
 router.get('/database-connections/everest/diagnostic', adminOnly, downloadEverestDiagnostic);
 router.post('/database-connections/:system/test', adminOnly, testConnection);

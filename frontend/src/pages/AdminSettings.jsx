@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
 import SystemNotification from "../components/SystemNotification";
+import BrowninhoSettings from "../components/settings/BrowninhoSettings";
 
 function UserSelector({ users, selectedIds, onChange }) {
   const toggle = (userId) => onChange(selectedIds.includes(userId) ? selectedIds.filter((id) => id !== userId) : [...selectedIds, userId]);
@@ -56,7 +57,7 @@ function AdminSettings() {
   const activeUsersWithoutAdmins = users.filter((user) => user.role !== "admin");
   return <section className="page-stack settings-page">
     <div className="section-heading section-heading--split"><div><span className="eyebrow">Administração</span><h1>Configurações</h1><p className="section-copy">Controle os recursos disponíveis para os colaboradores.</p></div><Link to="/admin/dashboard" className="button button--ghost">Voltar ao painel</Link></div>
-    <div className="settings-tabs" role="tablist"><button type="button" role="tab" aria-selected={activeTab === "general"} className={activeTab === "general" ? "active" : ""} onClick={() => setActiveTab("general")}>Geral</button><button type="button" role="tab" aria-selected={activeTab === "forms"} className={activeTab === "forms" ? "active" : ""} onClick={() => setActiveTab("forms")}>Formulários</button></div>
+    <div className="settings-tabs" role="tablist"><button type="button" role="tab" aria-selected={activeTab === "general"} className={activeTab === "general" ? "active" : ""} onClick={() => setActiveTab("general")}>Geral</button><button type="button" role="tab" aria-selected={activeTab === "forms"} className={activeTab === "forms" ? "active" : ""} onClick={() => setActiveTab("forms")}>Formulários</button><button type="button" role="tab" aria-selected={activeTab === "browninho"} className={activeTab === "browninho" ? "active" : ""} onClick={() => setActiveTab("browninho")}>Browninho</button></div>
 
     {activeTab === "general" && <div className="settings-tab-content">
       <section className="surface-card settings-panel"><div className="settings-panel__heading"><img src="/icon-ranking.svg" alt="" /><div><h2>Bolão da Copa</h2><p>Controle a exibição do ranking e gerencie seus participantes.</p></div></div><label className="settings-toggle"><input type="checkbox" checked={poolEnabled} disabled={loading || saving} onChange={handlePoolToggle} /><span className="settings-toggle__control" aria-hidden="true" /><span><strong>Habilitar bolão copa</strong><small>{poolEnabled ? "O ranking está disponível no menu lateral." : "O ranking está oculto para os colaboradores."}</small></span></label><div className="settings-panel__actions"><Link to="/admin/bolao" className="button">Configurar participantes</Link></div>{message && <SystemNotification variant={message.toLowerCase().includes("sucesso") ? "success" : "error"}>{message}</SystemNotification>}</section>
@@ -64,6 +65,7 @@ function AdminSettings() {
     </div>}
 
     {activeTab === "forms" && <form className="surface-card settings-panel settings-tab-content" onSubmit={handleFormsSave}><div className="settings-panel__heading"><img src="/icon-forms.svg" alt="" /><div><h2>Formulários</h2><p>Escolha quais usuários poderão acessar modelos autorizados, preenchimentos e observações.</p></div></div><div className="settings-access"><div><strong>Usuários com acesso</strong><span>{formsUserIds.length} selecionados</span><small>Administradores sempre possuem acesso.</small></div><button type="button" className="button button--ghost" onClick={() => setShowFormsUserSelector((value) => !value)}>{showFormsUserSelector ? "Fechar seleção" : "Selecionar usuários"}</button></div>{showFormsUserSelector && <UserSelector users={activeUsersWithoutAdmins} selectedIds={formsUserIds} onChange={setFormsUserIds} />}<div className="settings-panel__actions"><button type="submit" className="button" disabled={loading || saving}>{saving ? "Salvando..." : "Salvar acessos de Formulários"}</button></div>{formsMessage && <SystemNotification variant={formsMessage.toLowerCase().includes("sucesso") ? "success" : "error"}>{formsMessage}</SystemNotification>}</form>}
+    {activeTab === "browninho" && <BrowninhoSettings />}
   </section>;
 }
 

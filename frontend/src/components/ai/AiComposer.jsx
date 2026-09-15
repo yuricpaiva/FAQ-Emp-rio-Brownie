@@ -16,7 +16,7 @@ function createAttachment(file) {
   };
 }
 
-function AiComposer({ value, onChange, onSend, isProcessing, resetKey }) {
+function AiComposer({ value, onChange, onSend, isProcessing, disabled = false, resetKey, capabilities }) {
   const [attachments, setAttachments] = useState([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const textareaRef = useRef(null);
@@ -79,7 +79,7 @@ function AiComposer({ value, onChange, onSend, isProcessing, resetKey }) {
   };
 
   const submit = () => {
-    if (isProcessing || (!value.trim() && attachments.length === 0)) return;
+    if (isProcessing || disabled || (!value.trim() && attachments.length === 0)) return;
     onSend({ content: value.trim(), attachments });
     attachmentsRef.current = [];
     onChange("");
@@ -109,12 +109,12 @@ function AiComposer({ value, onChange, onSend, isProcessing, resetKey }) {
           onKeyDown={handleKeyDown}
           placeholder="Pergunte alguma coisa..."
           rows="1"
-          disabled={isProcessing}
+          disabled={isProcessing || disabled}
           aria-label="Mensagem para o Browninho"
         />
         <div className="ai-composer__toolbar">
           <div className="ai-composer__attachment-menu" ref={menuRef}>
-            <button type="button" className="ai-icon-button" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen} aria-haspopup="menu" aria-label="Adicionar anexo" title="Adicionar anexo" disabled={isProcessing}>
+            <button type="button" className="ai-icon-button" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen} aria-haspopup="menu" aria-label="Adicionar anexo" title="Adicionar anexo" disabled={isProcessing || disabled || capabilities?.documents === false}>
               {menuOpen ? <X size={18} /> : <Plus size={19} />}
             </button>
             {menuOpen && (
@@ -126,8 +126,8 @@ function AiComposer({ value, onChange, onSend, isProcessing, resetKey }) {
             <input ref={documentInputRef} className="ai-visually-hidden" type="file" accept={DOCUMENT_TYPES} multiple onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
             <input ref={imageInputRef} className="ai-visually-hidden" type="file" accept={IMAGE_TYPES} multiple onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
           </div>
-          <span className="ai-composer__hint"><Paperclip size={13} /> Arquivos não serão enviados nesta demonstração</span>
-          <button type="button" className="ai-composer__send" onClick={submit} disabled={isProcessing || (!value.trim() && attachments.length === 0)} aria-label="Enviar mensagem" title="Enviar mensagem">
+          <span className="ai-composer__hint"><Paperclip size={13} /> Até 6 arquivos, 10 MB cada</span>
+          <button type="button" className="ai-composer__send" onClick={submit} disabled={isProcessing || disabled || (!value.trim() && attachments.length === 0)} aria-label="Enviar mensagem" title="Enviar mensagem">
             <ArrowUp size={18} />
           </button>
         </div>

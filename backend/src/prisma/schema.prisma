@@ -32,6 +32,7 @@ model User {
   formSubmissionsRejected    FormSubmission[]          @relation("FormSubmissionRejectedBy")
   formModelsObserved         FormModel[]               @relation("FormModelDefaultObserver")
   formSubmissionsObserved    FormSubmission[]          @relation("FormSubmissionObserver")
+  aiConversations            AiConversation[]
 
   @@index([productionStoreId])
 }
@@ -101,6 +102,47 @@ model ArticleRevision {
   @@index([articleId, createdAt])
 }
 
+model AiConversation {
+  id        Int         @id @default(autoincrement())
+  userId    Int
+  title     String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  AiMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model AiMessage {
+  id             Int            @id @default(autoincrement())
+  conversationId Int
+  role           String
+  content        String
+  status         String         @default("completed")
+  metadata       String         @default("{}")
+  createdAt      DateTime       @default(now())
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments    AiAttachment[]
+
+  @@index([conversationId, createdAt])
+}
+
+model AiAttachment {
+  id         Int       @id @default(autoincrement())
+  messageId  Int
+  name       String
+  mimeType   String
+  size       Int
+  kind       String    @default("upload")
+  storageKey String    @default("")
+  createdAt  DateTime  @default(now())
+  message    AiMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([kind, createdAt])
+}
+
 model PoolParticipant {
   id        Int      @id @default(autoincrement())
   name      String
@@ -118,6 +160,7 @@ model AppSettings {
   powerBiEnabled                Boolean  @default(true)
   powerBiUrl                    String   @default("")
   powerBiRefreshIntervalSeconds Int      @default(300)
+  browninhoConfig               String   @default("{}")
   updatedAt                     DateTime @updatedAt
 }
 

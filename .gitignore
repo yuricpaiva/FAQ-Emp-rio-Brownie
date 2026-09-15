@@ -18,6 +18,7 @@ backend/src/prisma/*.db
 backend/src/prisma/*.db-*
 backend/src/uploads/
 backend/uploads/
+backend/ai-storage/
 
 # Logs
 *.log

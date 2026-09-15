@@ -268,6 +268,11 @@
 .ai-attachment__copy small { color: rgba(63, 36, 24, .56); font-size: .58rem; }
 .ai-attachment > button { display: grid; width: 25px; height: 25px; flex: 0 0 25px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: rgba(63, 36, 24, .62); cursor: pointer; }
 .ai-attachment > button:hover { background: rgba(63, 36, 24, .1); color: #3f2418; }
+
+.ai-notice { position: absolute; z-index: 8; top: .75rem; left: 50%; width: min(760px, calc(100% - 2rem)); transform: translateX(-50%); }
+.ai-message__generated-images { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 420px)); gap: .7rem; margin-top: .8rem; }
+.ai-message__generated-images a { display: block; overflow: hidden; border: 1px solid rgba(63, 36, 24, .14); border-radius: 16px; background: #f2e8da; }
+.ai-message__generated-images img { display: block; width: 100%; height: auto; }
 .ai-visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 
 .ai-dialog-backdrop { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 1rem; background: rgba(63, 36, 24, .42); animation: ai-fade-in 180ms ease both; }

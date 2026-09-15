@@ -2360,6 +2360,44 @@ textarea:focus {
   line-height: 1.45;
 }
 
+.browninho-settings__icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border-radius: 14px;
+  background: #ead8c4;
+  color: #3f2418;
+}
+
+.browninho-key-status {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  padding: .9rem 1rem;
+  border: 1px solid rgba(63, 36, 24, .14);
+  border-radius: 12px;
+  background: #f7f1e9;
+}
+.browninho-key-status.is-configured { border-color: rgba(39, 121, 75, .3); background: #eef7f1; color: #1e6840; }
+.browninho-key-status.is-missing { border-color: rgba(166, 100, 20, .3); background: #fff7e9; color: #84500f; }
+.browninho-key-status > div { display: grid; flex: 1; gap: .18rem; }
+.browninho-key-status small { color: inherit; opacity: .82; }
+.browninho-key-status code { padding: .08rem .3rem; border-radius: 4px; background: rgba(63, 36, 24, .08); }
+.browninho-settings__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.browninho-settings textarea { width: 100%; resize: vertical; }
+.browninho-settings__capabilities { display: grid; gap: .8rem; }
+.browninho-settings__capabilities h3 { margin: 0; color: #3f2418; }
+.browninho-settings__roles { padding: 1rem; border: 1px solid rgba(63, 36, 24, .14); border-radius: 12px; }
+.browninho-settings__roles legend { padding: 0 .35rem; color: #3f2418; font-weight: 800; }
+.browninho-settings__roles > div { display: flex; flex-wrap: wrap; gap: .65rem 1.2rem; }
+.browninho-settings__roles label { display: inline-flex; align-items: center; gap: .42rem; }
+
+@media (max-width: 720px) {
+  .browninho-settings__grid { grid-template-columns: 1fr; }
+}
+
 .settings-access {
   display: flex;
   align-items: center;

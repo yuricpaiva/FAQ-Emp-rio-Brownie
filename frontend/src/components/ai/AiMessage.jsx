@@ -8,6 +8,8 @@ function AiMessage({ message }) {
   const [feedback, setFeedback] = useState("");
   const copiedTimerRef = useRef(null);
   const isAssistant = message.role === "assistant";
+  const generatedImages = message.attachments?.filter((attachment) => attachment.kind === "generated_image") || [];
+  const regularAttachments = message.attachments?.filter((attachment) => attachment.kind !== "generated_image") || [];
 
   const handleCopy = async () => {
     await copyText(message.content);
@@ -31,9 +33,14 @@ function AiMessage({ message }) {
         )}
         <div className="ai-message__content">
           {isAssistant ? <AiRichText content={message.content} /> : <p>{message.content}</p>}
-          {message.attachments?.length > 0 && (
+          {generatedImages.length > 0 && (
+            <div className="ai-message__generated-images">
+              {generatedImages.map((attachment) => <a key={attachment.id} href={attachment.previewUrl} target="_blank" rel="noreferrer" title="Abrir imagem em tamanho original"><img src={attachment.previewUrl} alt={attachment.name || "Imagem criada pelo Browninho"} /></a>)}
+            </div>
+          )}
+          {regularAttachments.length > 0 && (
             <div className="ai-message__attachments">
-              {message.attachments.map((attachment) => <AiAttachmentPreview key={attachment.id} attachment={attachment} compact />)}
+              {regularAttachments.map((attachment) => <AiAttachmentPreview key={attachment.id} attachment={attachment} compact />)}
             </div>
           )}
         </div>
