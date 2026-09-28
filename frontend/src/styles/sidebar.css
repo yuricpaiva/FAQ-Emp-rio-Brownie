@@ -36,6 +36,10 @@
 .sidebar__brand strong { font-size: 15px; font-weight: 650; letter-spacing: -.01em; }
 .sidebar--collapsed .sidebar__brand { display: none; }
 .sidebar__top-actions { width: auto; justify-content: flex-end; margin-left: auto; }
+.sidebar--collapsed .sidebar__top { padding-inline: 3px; }
+.sidebar--collapsed .sidebar__top-actions { gap: 2px; }
+.sidebar--collapsed .sidebar__toggle,
+.sidebar--collapsed .notification-bell { width: 25px; height: 32px; flex-basis: 25px; }
 
 .sidebar__toggle {
   display: grid;

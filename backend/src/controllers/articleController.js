@@ -71,8 +71,8 @@ async function ensureCategoryExists(categoryName) {
   return category?.active ? category : null;
 }
 
-async function createRevision(article, updatedBy) {
-  await prisma.articleRevision.create({
+async function createRevision(article, updatedBy, client = prisma) {
+  await client.articleRevision.create({
     data: {
       articleId: article.id,
       title: article.title,
@@ -83,6 +83,29 @@ async function createRevision(article, updatedBy) {
       tags: article.tags,
       updatedBy: updatedBy || article.updatedBy || 'Admin'
     }
+  });
+}
+
+async function createPublishedArticleNotifications(article, authorId, client = prisma) {
+  const recipients = await client.user.findMany({
+    where: {
+      active: true,
+      ...(authorId ? { id: { not: authorId } } : {})
+    },
+    select: { id: true }
+  });
+
+  if (!recipients.length) return;
+
+  await client.notification.createMany({
+    data: recipients.map((recipient) => ({
+      userId: recipient.id,
+      articleId: article.id,
+      type: 'ARTICLE_PUBLISHED',
+      title: 'Novo artigo publicado',
+      message: article.title,
+      link: `/artigo/${article.slug}`
+    }))
   });
 }
 
@@ -250,23 +273,29 @@ async function createArticle(req, res) {
     const authorName = currentUser?.name || req.user?.name || 'Admin';
     const authorPhoto = currentUser?.photoUrl || req.user?.photoUrl || '';
 
-    const article = await prisma.article.create({
-      data: {
-        title,
-        slug,
-        summary,
-        category,
-        content,
-        status,
-        sortOrder,
-        tags: '',
-        author: authorName,
-        authorPhoto,
-        updatedBy: authorName
-      }
-    });
+    const article = await prisma.$transaction(async (tx) => {
+      const created = await tx.article.create({
+        data: {
+          title,
+          slug,
+          summary,
+          category,
+          content,
+          status,
+          sortOrder,
+          tags: '',
+          author: authorName,
+          authorPhoto,
+          updatedBy: authorName
+        }
+      });
 
-    await createRevision(article, authorName);
+      await createRevision(created, authorName, tx);
+      if (created.status === 'published') {
+        await createPublishedArticleNotifications(created, currentUser?.id, tx);
+      }
+      return created;
+    });
     return res.status(201).json(serializeArticle(article, categoryRecord));
   } catch (err) {
     return res.status(400).json({ error: 'Não foi possível criar o artigo.', details: err.message });
@@ -291,29 +320,44 @@ async function updateArticle(req, res) {
   }
 
   try {
+    const previousArticle = await prisma.article.findUnique({ where: { id: parsedId.value } });
+    if (!previousArticle) {
+      return res.status(404).json({ error: 'Artigo n\u00e3o encontrado.' });
+    }
     const currentUser = req.user?.id
       ? await prisma.user.findUnique({ where: { id: req.user.id } })
       : null;
     const userName = currentUser?.name || req.user?.name || 'Admin';
     const userPhoto = currentUser?.photoUrl || req.user?.photoUrl || '';
 
-    const article = await prisma.article.update({
-      where: { id: parsedId.value },
-      data: {
-        title,
-        slug,
-        summary,
-        category,
-        content,
-        status,
-        sortOrder,
-        tags: '',
-        authorPhoto: userPhoto,
-        updatedBy: userName
-      }
-    });
+    const article = await prisma.$transaction(async (tx) => {
+      const updated = await tx.article.update({
+        where: { id: parsedId.value },
+        data: {
+          title,
+          slug,
+          summary,
+          category,
+          content,
+          status,
+          sortOrder,
+          tags: '',
+          authorPhoto: userPhoto,
+          updatedBy: userName
+        }
+      });
 
-    await createRevision(article, userName);
+      await createRevision(updated, userName, tx);
+      if (previousArticle.status !== 'published' && updated.status === 'published') {
+        await createPublishedArticleNotifications(updated, currentUser?.id, tx);
+      } else if (previousArticle.slug !== updated.slug) {
+        await tx.notification.updateMany({
+          where: { articleId: updated.id },
+          data: { link: `/artigo/${updated.slug}` }
+        });
+      }
+      return updated;
+    });
     return res.json(serializeArticle(article, categoryRecord));
   } catch (err) {
     return res.status(404).json({ error: 'Artigo não encontrado.', details: err.message });

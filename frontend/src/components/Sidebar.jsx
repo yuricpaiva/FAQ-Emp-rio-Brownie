@@ -5,6 +5,7 @@ import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { getCategoryIcon } from "../constants/categoryIcons";
 import SystemNotification from "./SystemNotification";
+import NotificationBell from "./NotificationBell";
 
 const MOBILE_QUERY = "(max-width: 720px)";
 
@@ -108,6 +109,7 @@ function Sidebar() {
       <div className="sidebar__top">
         <Link to="/" className="sidebar__brand"><span className="sidebar__brand-kicker">EMPÓRIO BROWNIE</span><strong>FAQ</strong></Link>
         <div className="sidebar__top-actions">
+          <NotificationBell />
           {isMobile && <button type="button" className="sidebar__mobile-profile" onClick={openProfile} aria-label="Abrir perfil">{avatar}</button>}
           <button type="button" className="sidebar__toggle" onClick={() => setNavigationOpen((value) => !value)} aria-expanded={navigationOpen} aria-label={navigationOpen ? "Recolher menu" : "Abrir menu"}>{isMobile ? <Menu size={18} /> : navigationOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}</button>
         </div>

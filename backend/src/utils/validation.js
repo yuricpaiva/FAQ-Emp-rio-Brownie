@@ -87,6 +87,12 @@ function validateArticleInput(body = {}) {
     return { error: 'Categoria muito longa.' };
   }
 
+  const { validateArticleVideoEmbeds } = require('../services/articleVideoService');
+  const videoValidation = validateArticleVideoEmbeds(content);
+  if (videoValidation.error) {
+    return videoValidation;
+  }
+
   return {
     value: {
       title,

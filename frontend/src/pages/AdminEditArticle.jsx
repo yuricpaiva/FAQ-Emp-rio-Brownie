@@ -1,13 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
-import ArticleEmojiPicker from "../components/ArticleEmojiPicker";
-import ReactQuill, { Quill } from "react-quill";
-import ImageResize from "quill-image-resize-module-react";
-import "react-quill/dist/quill.snow.css";
+import ArticleContentEditor from "../components/ArticleContentEditor";
 import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
-
-Quill.register("modules/imageResize", ImageResize);
 
 function slugify(text) {
   return text
@@ -22,9 +17,7 @@ function AdminEditArticle() {
   const { confirm } = useSystemNotification();
   const { id } = useParams();
   const navigate = useNavigate();
-  const quillRef = useRef(null);
   const wordInputRef = useRef(null);
-  const selectionRef = useRef(null);
   const [categories, setCategories] = useState([]);
   const [revisions, setRevisions] = useState([]);
   const [title, setTitle] = useState("");
@@ -39,7 +32,6 @@ function AdminEditArticle() {
   const [importing, setImporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   useEffect(() => {
     api
@@ -64,62 +56,6 @@ function AdminEditArticle() {
       })
       .catch(() => setError("Não foi possível carregar o artigo."));
   }, [id]);
-
-  const handleImageUpload = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const formData = new FormData();
-      formData.append("file", file);
-      try {
-        const res = await api.post("/admin/uploads", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        const editor = quillRef.current?.getEditor();
-        const range = editor.getSelection(true);
-        editor.insertEmbed(range.index, "image", res.data.url);
-        editor.setSelection(range.index + 1);
-      } catch (err) {
-        setError(err.response?.data?.error || "Erro ao enviar imagem");
-      }
-    };
-    input.click();
-  };
-
-  const handleEmojiSelect = (emoji) => {
-    const editor = quillRef.current?.getEditor();
-    if (!editor) return;
-
-    const range = editor.getSelection() || selectionRef.current;
-    const index = range?.index ?? Math.max(editor.getLength() - 1, 0);
-
-    editor.insertText(index, emoji, "user");
-    editor.setSelection(index + emoji.length, 0, "user");
-    editor.focus();
-  };
-
-  const quillModules = useMemo(
-    () => ({
-      toolbar: {
-        container: [
-          [{ header: [1, 2, 3, false] }],
-          ["bold", "italic", "underline", "strike"],
-          [{ list: "ordered" }, { list: "bullet" }],
-          ["link", "image", "emoji"],
-          ["clean"],
-        ],
-        handlers: {
-          image: handleImageUpload,
-          emoji: () => setEmojiPickerOpen((current) => !current),
-        },
-      },
-      imageResize: { modules: ["Resize", "DisplaySize"] },
-    }),
-    []
-  );
 
   const handleWordImport = async (event) => {
     const file = event.target.files?.[0];
@@ -269,25 +205,7 @@ function AdminEditArticle() {
           </label>
           <label className="form-grid__full">
             <span>Conteúdo</span>
-            <div className="editor-wrap">
-              <div className="editor-shell">
-                <ReactQuill
-                  ref={quillRef}
-                  theme="snow"
-                  value={content}
-                  onChange={setContent}
-                  onChangeSelection={(range) => {
-                    if (range) selectionRef.current = range;
-                  }}
-                  modules={quillModules}
-                />
-              </div>
-              <ArticleEmojiPicker
-                open={emojiPickerOpen}
-                onClose={() => setEmojiPickerOpen(false)}
-                onSelect={handleEmojiSelect}
-              />
-            </div>
+            <ArticleContentEditor value={content} onChange={setContent} onError={setError} />
           </label>
 
           <div className="form-actions">

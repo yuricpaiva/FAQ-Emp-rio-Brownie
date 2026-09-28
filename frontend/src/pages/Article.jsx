@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import DOMPurify from "dompurify";
 import api from "../services/api";
+import { safeArticleHtml } from "../utils/articleVideo";
 
 function Article() {
   const { slug } = useParams();
@@ -43,6 +44,11 @@ function Article() {
     };
   }, [article]);
 
+  const sanitizedContent = useMemo(
+    () => safeArticleHtml(article?.content || "", DOMPurify),
+    [article?.content]
+  );
+
   if (notFound) {
     return <p className="empty-state">Artigo não encontrado.</p>;
   }
@@ -79,7 +85,7 @@ function Article() {
 
       <div
         className="article-detail__content prose"
-        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content) }}
+        dangerouslySetInnerHTML={{ __html: sanitizedContent }}
       />
     </article>
   );
