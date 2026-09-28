@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Video, X } from "lucide-react";
 import { parseArticleVideoUrl } from "../utils/articleVideo";
 
@@ -18,11 +19,12 @@ function ArticleVideoModal({ initialValue, onClose, onSave, onRemove }) {
 
   const submit = (event) => {
     event.preventDefault();
+    event.stopPropagation();
     if (!parsed) return;
     onSave({ ...parsed, caption: caption.trim() });
   };
 
-  return (
+  return createPortal(
     <div className="modal-backdrop article-video-modal-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
@@ -83,7 +85,8 @@ function ArticleVideoModal({ initialValue, onClose, onSave, onRemove }) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
