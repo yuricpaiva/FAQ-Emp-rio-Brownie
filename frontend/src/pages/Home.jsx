@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import { getCategoryIcon } from "../constants/categoryIcons";
 import { useAuth } from "../context/AuthContext";
+import EventWeekStrip from "../components/EventWeekStrip";
 
 function Home() {
   const { user } = useAuth();
@@ -86,6 +87,8 @@ function Home() {
           <img src="/brand-placeholder.png" alt="FAQ EB" />
         </div>
       </div>
+
+      <EventWeekStrip />
 
       <div className="search-panel">
         <label className="search-panel__label" htmlFor="global-search">

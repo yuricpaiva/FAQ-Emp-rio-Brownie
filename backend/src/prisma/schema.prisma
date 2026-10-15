@@ -34,6 +34,8 @@ model User {
   formSubmissionsObserved    FormSubmission[]          @relation("FormSubmissionObserver")
   aiConversations            AiConversation[]
   notifications              Notification[]
+  calendarEventsCreated      CalendarEvent[]             @relation("CalendarEventCreatedBy")
+  calendarEventParticipants  CalendarEventParticipant[]
 
   @@index([productionStoreId])
 }
@@ -104,6 +106,39 @@ model Notification {
   @@unique([userId, type, articleId])
   @@index([userId, readAt, createdAt])
   @@index([articleId])
+}
+
+model CalendarEvent {
+  id                Int      @id @default(autoincrement())
+  title             String
+  description       String   @default("")
+  startDate         String
+  endDate           String
+  time              String
+  imageUrl          String   @default("")
+  allUsersParticipants Boolean @default(true)
+  recurrence        String   @default("NONE")
+  recurrenceEndDate String?
+  createdById       Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  createdBy         User     @relation("CalendarEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  participants      CalendarEventParticipant[]
+
+  @@index([startDate, endDate])
+  @@index([recurrence, recurrenceEndDate])
+  @@index([createdById, createdAt])
+}
+
+model CalendarEventParticipant {
+  eventId   Int
+  userId    Int
+  createdAt DateTime      @default(now())
+  event     CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, userId])
+  @@index([userId, eventId])
 }
 
 model ArticleRevision {

@@ -17,6 +17,7 @@ const ProductionPlanningSettings = lazy(() => import("./pages/ProductionPlanning
 const StockCounts = lazy(() => import("./pages/StockCounts"));
 const StockCountEntry = lazy(() => import("./pages/StockCountEntry"));
 const Reservations = lazy(() => import("./pages/Reservations"));
+const Events = lazy(() => import("./pages/Events"));
 const FormsModels = lazy(() => import("./pages/FormsModels"));
 const FormModelEditor = lazy(() => import("./pages/FormModelEditor"));
 const FormSubmissions = lazy(() => import("./pages/FormSubmissions"));
@@ -77,6 +78,7 @@ function AppRoutes() {
         />
         <Route path="/ranking-bolao" element={<ProtectedRoute><PoolRanking /></ProtectedRoute>} />
         <Route path="/reservas" element={<ProtectedRoute><Reservations /></ProtectedRoute>} />
+        <Route path="/eventos" element={<ProtectedRoute><Events /></ProtectedRoute>} />
         <Route path="/forms/preenchimentos" element={<ProtectedRoute><FormsAccessRoute><FormSubmissions /></FormsAccessRoute></ProtectedRoute>} />
         <Route path="/forms/preenchimentos/:id" element={<ProtectedRoute><FormsAccessRoute><FormSubmission /></FormsAccessRoute></ProtectedRoute>} />
         <Route path="/forms/modelos" element={<ProtectedRoute roles={["admin"]}><FormsAccessRoute><FormsModels /></FormsAccessRoute></ProtectedRoute>} />
