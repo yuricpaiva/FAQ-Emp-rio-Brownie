@@ -7,7 +7,7 @@ const {
 } = require('../controllers/articleController');
 const { authenticate } = require('../middleware/authAdmin');
 const { getPoolSettings, listPoolParticipants } = require('../controllers/poolController');
-const { getPowerBiConfiguration } = require('../controllers/settingsController');
+const { getPowerBiConfiguration, getPurchaseSettings } = require('../controllers/settingsController');
 
 const router = Router();
 
@@ -20,5 +20,6 @@ router.get('/categories', listCategories);
 router.get('/pool-ranking', listPoolParticipants);
 router.get('/pool-settings', getPoolSettings);
 router.get('/power-bi-config', getPowerBiConfiguration);
+router.get('/purchase-settings', getPurchaseSettings);
 
 module.exports = router;

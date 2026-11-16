@@ -3,6 +3,9 @@ import { Link } from "react-router-dom";
 import api from "../services/api";
 import SystemNotification from "../components/SystemNotification";
 import BrowninhoSettings from "../components/settings/BrowninhoSettings";
+import { parseMoneyToCents } from "../utils/purchaseOrders";
+
+const formatMoneyInput = (cents) => (Number(cents || 0) / 100).toFixed(2).replace(".", ",");
 
 function UserSelector({ users, selectedIds, onChange }) {
   const toggle = (userId) => onChange(selectedIds.includes(userId) ? selectedIds.filter((id) => id !== userId) : [...selectedIds, userId]);
@@ -18,18 +21,23 @@ function AdminSettings() {
   const [users, setUsers] = useState([]);
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [formsUserIds, setFormsUserIds] = useState([]);
+  const [purchaseUserIds, setPurchaseUserIds] = useState([]);
+  const [purchaseSignatureThresholdInput, setPurchaseSignatureThresholdInput] = useState("0,00");
+  const [purchaseSignatureLabel, setPurchaseSignatureLabel] = useState("");
   const [showUserSelector, setShowUserSelector] = useState(false);
   const [showFormsUserSelector, setShowFormsUserSelector] = useState(true);
+  const [showPurchaseUserSelector, setShowPurchaseUserSelector] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [powerBiMessage, setPowerBiMessage] = useState("");
   const [formsMessage, setFormsMessage] = useState("");
+  const [purchasesMessage, setPurchasesMessage] = useState("");
 
   useEffect(() => {
-    Promise.all([api.get("/knowledge/pool-settings"), api.get("/admin/power-bi-settings"), api.get("/admin/forms-settings"), api.get("/admin/users")])
-      .then(([poolResponse, powerBiResponse, formsResponse, usersResponse]) => {
-        setPoolEnabled(poolResponse.data.poolEnabled); setPowerBiEnabled(powerBiResponse.data.enabled); setPowerBiUrl(powerBiResponse.data.url); setPowerBiRefreshIntervalSeconds(powerBiResponse.data.refreshIntervalSeconds ?? 300); setSelectedUserIds(powerBiResponse.data.userIds); setFormsUserIds(formsResponse.data.userIds); setUsers(usersResponse.data.filter((user) => user.active));
+    Promise.all([api.get("/knowledge/pool-settings"), api.get("/admin/power-bi-settings"), api.get("/admin/forms-settings"), api.get("/admin/purchase-settings"), api.get("/admin/users")])
+      .then(([poolResponse, powerBiResponse, formsResponse, purchaseResponse, usersResponse]) => {
+        setPoolEnabled(poolResponse.data.poolEnabled); setPowerBiEnabled(powerBiResponse.data.enabled); setPowerBiUrl(powerBiResponse.data.url); setPowerBiRefreshIntervalSeconds(powerBiResponse.data.refreshIntervalSeconds ?? 300); setSelectedUserIds(powerBiResponse.data.userIds); setFormsUserIds(formsResponse.data.userIds); setPurchaseUserIds(purchaseResponse.data.userIds || []); setPurchaseSignatureThresholdInput(formatMoneyInput(purchaseResponse.data.signatureThresholdCents)); setPurchaseSignatureLabel(purchaseResponse.data.signatureLabel || ""); setUsers(usersResponse.data.filter((user) => user.active));
       }).catch(() => setMessage("Não foi possível carregar as configurações.")).finally(() => setLoading(false));
   }, []);
 
@@ -54,10 +62,23 @@ function AdminSettings() {
     finally { setSaving(false); }
   };
 
+  const handlePurchasesSave = async (event) => {
+    event.preventDefault(); setPurchasesMessage("");
+    const signatureThresholdCents = parseMoneyToCents(purchaseSignatureThresholdInput);
+    const signatureLabel = purchaseSignatureLabel.trim();
+    if (signatureThresholdCents === null) { setPurchasesMessage("Informe um valor mínimo válido."); return; }
+    if (signatureThresholdCents > 0 && !signatureLabel) { setPurchasesMessage("Informe quem deve assinar os pedidos que atingirem o valor mínimo."); return; }
+    setSaving(true);
+    try { const res = await api.put("/admin/purchase-settings", { signatureThresholdCents, signatureLabel, userIds: purchaseUserIds }); setPurchaseSignatureThresholdInput(formatMoneyInput(res.data.signatureThresholdCents)); setPurchaseSignatureLabel(res.data.signatureLabel); setPurchaseUserIds(res.data.userIds || []); window.dispatchEvent(new CustomEvent("purchase-settings-updated")); setPurchasesMessage("Configuração de compras salva com sucesso."); }
+    catch (error) { setPurchasesMessage(error.response?.data?.error || "Não foi possível salvar a configuração de compras."); }
+    finally { setSaving(false); }
+  };
+
   const activeUsersWithoutAdmins = users.filter((user) => user.role !== "admin");
+  const activeCreators = users.filter((user) => user.role === "creator");
   return <section className="page-stack settings-page">
     <div className="section-heading section-heading--split"><div><span className="eyebrow">Administração</span><h1>Configurações</h1><p className="section-copy">Controle os recursos disponíveis para os colaboradores.</p></div><Link to="/admin/dashboard" className="button button--ghost">Voltar ao painel</Link></div>
-    <div className="settings-tabs" role="tablist"><button type="button" role="tab" aria-selected={activeTab === "general"} className={activeTab === "general" ? "active" : ""} onClick={() => setActiveTab("general")}>Geral</button><button type="button" role="tab" aria-selected={activeTab === "forms"} className={activeTab === "forms" ? "active" : ""} onClick={() => setActiveTab("forms")}>Formulários</button><button type="button" role="tab" aria-selected={activeTab === "browninho"} className={activeTab === "browninho" ? "active" : ""} onClick={() => setActiveTab("browninho")}>Browninho</button></div>
+    <div className="settings-tabs" role="tablist"><button type="button" role="tab" aria-selected={activeTab === "general"} className={activeTab === "general" ? "active" : ""} onClick={() => setActiveTab("general")}>Geral</button><button type="button" role="tab" aria-selected={activeTab === "forms"} className={activeTab === "forms" ? "active" : ""} onClick={() => setActiveTab("forms")}>Formulários</button><button type="button" role="tab" aria-selected={activeTab === "purchases"} className={activeTab === "purchases" ? "active" : ""} onClick={() => setActiveTab("purchases")}>Compras</button><button type="button" role="tab" aria-selected={activeTab === "browninho"} className={activeTab === "browninho" ? "active" : ""} onClick={() => setActiveTab("browninho")}>Browninho</button></div>
 
     {activeTab === "general" && <div className="settings-tab-content">
       <section className="surface-card settings-panel"><div className="settings-panel__heading"><img src="/icon-ranking.svg" alt="" /><div><h2>Bolão da Copa</h2><p>Controle a exibição do ranking e gerencie seus participantes.</p></div></div><label className="settings-toggle"><input type="checkbox" checked={poolEnabled} disabled={loading || saving} onChange={handlePoolToggle} /><span className="settings-toggle__control" aria-hidden="true" /><span><strong>Habilitar bolão copa</strong><small>{poolEnabled ? "O ranking está disponível no menu lateral." : "O ranking está oculto para os colaboradores."}</small></span></label><div className="settings-panel__actions"><Link to="/admin/bolao" className="button">Configurar participantes</Link></div>{message && <SystemNotification variant={message.toLowerCase().includes("sucesso") ? "success" : "error"}>{message}</SystemNotification>}</section>
@@ -65,6 +86,7 @@ function AdminSettings() {
     </div>}
 
     {activeTab === "forms" && <form className="surface-card settings-panel settings-tab-content" onSubmit={handleFormsSave}><div className="settings-panel__heading"><img src="/icon-forms.svg" alt="" /><div><h2>Formulários</h2><p>Escolha quais usuários poderão acessar modelos autorizados, preenchimentos e observações.</p></div></div><div className="settings-access"><div><strong>Usuários com acesso</strong><span>{formsUserIds.length} selecionados</span><small>Administradores sempre possuem acesso.</small></div><button type="button" className="button button--ghost" onClick={() => setShowFormsUserSelector((value) => !value)}>{showFormsUserSelector ? "Fechar seleção" : "Selecionar usuários"}</button></div>{showFormsUserSelector && <UserSelector users={activeUsersWithoutAdmins} selectedIds={formsUserIds} onChange={setFormsUserIds} />}<div className="settings-panel__actions"><button type="submit" className="button" disabled={loading || saving}>{saving ? "Salvando..." : "Salvar acessos de Formulários"}</button></div>{formsMessage && <SystemNotification variant={formsMessage.toLowerCase().includes("sucesso") ? "success" : "error"}>{formsMessage}</SystemNotification>}</form>}
+    {activeTab === "purchases" && <form className="surface-card settings-panel settings-tab-content" onSubmit={handlePurchasesSave}><div className="settings-panel__heading"><img src="/icon-operacao.svg" alt="" /><div><h2>Compras</h2><p>Defina compradores autorizados e quando o Romaneio deve incluir uma assinatura adicional.</p></div></div><div className="settings-access"><div><strong>Compradores autorizados</strong><span>{purchaseUserIds.length} selecionado{purchaseUserIds.length === 1 ? "" : "s"}</span><small>Somente usuários com perfil Criador podem ser compradores. Administradores sempre possuem acesso.</small></div><button type="button" className="button button--ghost" onClick={() => setShowPurchaseUserSelector((value) => !value)}>{showPurchaseUserSelector ? "Fechar seleção" : "Selecionar compradores"}</button></div>{showPurchaseUserSelector && <UserSelector users={activeCreators} selectedIds={purchaseUserIds} onChange={setPurchaseUserIds} />}<div className="settings-purchase-grid"><label className="settings-field"><span>Valor mínimo do pedido</span><div className="settings-money-input"><span>R$</span><input inputMode="decimal" value={purchaseSignatureThresholdInput} onChange={(event) => setPurchaseSignatureThresholdInput(event.target.value)} placeholder="0,00" required /></div><small>Pedidos a partir deste valor exigirão a assinatura. Use 0,00 para desativar.</small></label><label className="settings-field"><span>Identificação da assinatura</span><input type="text" maxLength="80" value={purchaseSignatureLabel} onChange={(event) => setPurchaseSignatureLabel(event.target.value)} placeholder="Ex.: Gerente Financeiro" /><small>Este texto será exibido abaixo da linha de assinatura no Romaneio.</small></label></div><div className="settings-panel__actions"><button type="submit" className="button" disabled={loading || saving}>{saving ? "Salvando..." : "Salvar configurações de compras"}</button></div>{purchasesMessage && <SystemNotification variant={purchasesMessage.toLowerCase().includes("sucesso") ? "success" : "error"}>{purchasesMessage}</SystemNotification>}</form>}
     {activeTab === "browninho" && <BrowninhoSettings />}
   </section>;
 }

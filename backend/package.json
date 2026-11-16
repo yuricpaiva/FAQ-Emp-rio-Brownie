@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate --schema ./src/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --name init --schema ./src/prisma/schema.prisma",
     "prisma:seed": "node src/prisma/seed.js",
-    "test": "node --test src/__tests__/*.test.js"
+    "test": "node --test --test-concurrency=1 src/__tests__/*.test.js"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",

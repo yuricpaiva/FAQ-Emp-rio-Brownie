@@ -8,34 +8,37 @@ datasource db {
 }
 
 model User {
-  id                         Int                       @id @default(autoincrement())
+  id                         Int                        @id @default(autoincrement())
   name                       String
-  email                      String                    @unique
+  email                      String                     @unique
   passwordHash               String
-  role                       String                    @default("reader")
-  photoUrl                   String                    @default("")
-  active                     Boolean                   @default(true)
-  authVersion                Int                       @default(0)
+  role                       String                     @default("reader")
+  photoUrl                   String                     @default("")
+  active                     Boolean                    @default(true)
+  authVersion                Int                        @default(0)
   productionStoreId          Int?
   powerBiAccess              PowerBiAccess?
   formAccess                 FormAccess?
-  productionStore            ProductionStore?          @relation("UserProductionStore", fields: [productionStoreId], references: [id], onDelete: SetNull)
-  createdStockCounts         StockCount[]              @relation("StockCountCreatedBy")
-  reservationsCreated        Reservation[]             @relation("ReservationCreatedBy")
-  reservationsCancelled      Reservation[]             @relation("ReservationCancelledBy")
-  reservationBlocksCreated   ReservationBlock[]        @relation("ReservationBlockCreatedBy")
-  reservationBlocksCancelled ReservationBlock[]        @relation("ReservationBlockCancelledBy")
-  formModelsCreated          FormModel[]               @relation("FormModelCreatedBy")
+  purchaseAccess             PurchaseAccess?
+  productionStore            ProductionStore?           @relation("UserProductionStore", fields: [productionStoreId], references: [id], onDelete: SetNull)
+  createdStockCounts         StockCount[]               @relation("StockCountCreatedBy")
+  reservationsCreated        Reservation[]              @relation("ReservationCreatedBy")
+  reservationsCancelled      Reservation[]              @relation("ReservationCancelledBy")
+  reservationBlocksCreated   ReservationBlock[]         @relation("ReservationBlockCreatedBy")
+  reservationBlocksCancelled ReservationBlock[]         @relation("ReservationBlockCancelledBy")
+  formModelsCreated          FormModel[]                @relation("FormModelCreatedBy")
   formModelPermissions       FormModelUserPermission[]
-  formSubmissions            FormSubmission[]          @relation("FormSubmissionCreatedBy")
-  formSubmissionsApproved    FormSubmission[]          @relation("FormSubmissionApprovedBy")
-  formSubmissionsRejected    FormSubmission[]          @relation("FormSubmissionRejectedBy")
-  formModelsObserved         FormModel[]               @relation("FormModelDefaultObserver")
-  formSubmissionsObserved    FormSubmission[]          @relation("FormSubmissionObserver")
+  formSubmissions            FormSubmission[]           @relation("FormSubmissionCreatedBy")
+  formSubmissionsApproved    FormSubmission[]           @relation("FormSubmissionApprovedBy")
+  formSubmissionsRejected    FormSubmission[]           @relation("FormSubmissionRejectedBy")
+  formModelsObserved         FormModel[]                @relation("FormModelDefaultObserver")
+  formSubmissionsObserved    FormSubmission[]           @relation("FormSubmissionObserver")
   aiConversations            AiConversation[]
   notifications              Notification[]
-  calendarEventsCreated      CalendarEvent[]             @relation("CalendarEventCreatedBy")
+  calendarEventsCreated      CalendarEvent[]            @relation("CalendarEventCreatedBy")
   calendarEventParticipants  CalendarEventParticipant[]
+  purchaseOrdersCreated      PurchaseOrder[]            @relation("PurchaseOrderBuyer")
+  purchaseOrdersCancelled    PurchaseOrder[]            @relation("PurchaseOrderCancelledBy")
 
   @@index([productionStoreId])
 }
@@ -109,21 +112,21 @@ model Notification {
 }
 
 model CalendarEvent {
-  id                Int      @id @default(autoincrement())
-  title             String
-  description       String   @default("")
-  startDate         String
-  endDate           String
-  time              String
-  imageUrl          String   @default("")
-  allUsersParticipants Boolean @default(true)
-  recurrence        String   @default("NONE")
-  recurrenceEndDate String?
-  createdById       Int
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  createdBy         User     @relation("CalendarEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  participants      CalendarEventParticipant[]
+  id                   Int                        @id @default(autoincrement())
+  title                String
+  description          String                     @default("")
+  startDate            String
+  endDate              String
+  time                 String
+  imageUrl             String                     @default("")
+  allUsersParticipants Boolean                    @default(true)
+  recurrence           String                     @default("NONE")
+  recurrenceEndDate    String?
+  createdById          Int
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  createdBy            User                       @relation("CalendarEventCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  participants         CalendarEventParticipant[]
 
   @@index([startDate, endDate])
   @@index([recurrence, recurrenceEndDate])
@@ -210,19 +213,90 @@ model PoolParticipant {
 }
 
 model AppSettings {
-  id                            Int      @id @default(1)
-  poolEnabled                   Boolean  @default(true)
-  powerBiEnabled                Boolean  @default(true)
-  powerBiUrl                    String   @default("")
-  powerBiRefreshIntervalSeconds Int      @default(300)
-  browninhoConfig               String   @default("{}")
-  updatedAt                     DateTime @updatedAt
+  id                              Int      @id @default(1)
+  poolEnabled                     Boolean  @default(true)
+  powerBiEnabled                  Boolean  @default(true)
+  powerBiUrl                      String   @default("")
+  powerBiRefreshIntervalSeconds   Int      @default(300)
+  purchaseSignatureThresholdCents Int      @default(0)
+  purchaseSignatureLabel          String   @default("")
+  browninhoConfig                 String   @default("{}")
+  updatedAt                       DateTime @updatedAt
 }
 
 model PowerBiAccess {
   userId    Int      @id
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PurchaseAccess {
+  userId    Int      @id
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PurchaseOrder {
+  id                      Int                     @id @default(autoincrement())
+  number                  String                  @unique
+  status                  String                  @default("ACTIVE")
+  buyerId                 Int
+  supplierId              String
+  supplierSource          String                  @default("EVEREST")
+  supplierEverestId       String                  @default("")
+  supplierName            String
+  supplierLegalName       String                  @default("")
+  supplierCnpj            String                  @default("")
+  productSubtotalCents    Int
+  additionsTotalCents     Int
+  totalCents              Int
+  signatureLabel          String?
+  signatureThresholdCents Int?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  cancelledAt             DateTime?
+  cancelledById           Int?
+  buyer                   User                    @relation("PurchaseOrderBuyer", fields: [buyerId], references: [id], onDelete: Restrict)
+  cancelledBy             User?                   @relation("PurchaseOrderCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  items                   PurchaseOrderItem[]
+  additions               PurchaseOrderAddition[]
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([buyerId, createdAt])
+  @@index([supplierId, createdAt])
+  @@index([cancelledById])
+}
+
+model PurchaseOrderItem {
+  id                    Int           @id @default(autoincrement())
+  orderId               Int
+  productId             String
+  productSource         String        @default("EVEREST")
+  everestProductId      String        @default("")
+  code                  String
+  description           String
+  quantity              Decimal
+  supplierUnitId        String
+  supplierUnitEverestId String        @default("")
+  supplierUnitCode      String        @default("")
+  supplierUnitLabel     String
+  unitPriceCents        Int
+  subtotalCents         Int
+  order                 PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([productId, orderId])
+}
+
+model PurchaseOrderAddition {
+  id          Int           @id @default(autoincrement())
+  orderId     Int
+  description String
+  amountCents Int
+  order       PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 }
 
 model ProductionProduct {
@@ -495,19 +569,19 @@ model FormModel {
 }
 
 model FormQuestion {
-  id               Int       @id @default(autoincrement())
+  id               Int               @id @default(autoincrement())
   modelId          Int
   text             String
   type             String
   position         Int
-  required         Boolean   @default(false)
-  allowPhoto       Boolean   @default(false)
-  photoRequired    Boolean   @default(false)
-  allowObservation Boolean   @default(false)
-  weight           Decimal   @default(1)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  model            FormModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  required         Boolean           @default(false)
+  allowPhoto       Boolean           @default(false)
+  photoRequired    Boolean           @default(false)
+  allowObservation Boolean           @default(false)
+  weight           Decimal           @default(1)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  model            FormModel         @relation(fields: [modelId], references: [id], onDelete: Cascade)
   subQuestions     FormSubQuestion[]
 
   @@unique([modelId, position])
@@ -617,18 +691,18 @@ model FormAnswer {
 }
 
 model FormSubAnswer {
-  id                      Int        @id @default(autoincrement())
-  answerId                Int
-  sourceSubQuestionId     Int
-  questionTextSnapshot    String
-  questionTypeSnapshot    String
-  positionSnapshot        Int
-  booleanValue            Boolean?
-  scoreValue              Decimal?
-  notApplicable           Boolean    @default(false)
-  createdAt               DateTime   @default(now())
-  updatedAt               DateTime   @updatedAt
-  answer                   FormAnswer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  id                   Int        @id @default(autoincrement())
+  answerId             Int
+  sourceSubQuestionId  Int
+  questionTextSnapshot String
+  questionTypeSnapshot String
+  positionSnapshot     Int
+  booleanValue         Boolean?
+  scoreValue           Decimal?
+  notApplicable        Boolean    @default(false)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  answer               FormAnswer @relation(fields: [answerId], references: [id], onDelete: Cascade)
 
   @@unique([answerId, sourceSubQuestionId])
   @@index([answerId, positionSnapshot])

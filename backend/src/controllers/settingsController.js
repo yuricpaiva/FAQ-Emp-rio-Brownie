@@ -6,6 +6,8 @@ const DEFAULT_POWER_BI_URL =
 const DEFAULT_POWER_BI_REFRESH_INTERVAL_SECONDS = 300;
 const MIN_POWER_BI_REFRESH_INTERVAL_SECONDS = 10;
 const MAX_POWER_BI_REFRESH_INTERVAL_SECONDS = 24 * 60 * 60;
+const MAX_PURCHASE_SIGNATURE_THRESHOLD_CENTS = 1_000_000_000;
+const MAX_PURCHASE_SIGNATURE_LABEL_LENGTH = 80;
 
 async function ensureSettings() {
   return prisma.appSettings.upsert({
@@ -136,6 +138,100 @@ async function updatePowerBiSettings(req, res) {
   });
 }
 
+function purchaseSettingsPayload(settings) {
+  const signatureLabel = String(settings.purchaseSignatureLabel || '').trim();
+  const signatureThresholdCents = Number(settings.purchaseSignatureThresholdCents) || 0;
+  return {
+    signatureRequired: signatureThresholdCents > 0 && Boolean(signatureLabel),
+    signatureThresholdCents,
+    signatureLabel
+  };
+}
+
+async function getPurchaseSettings(_req, res) {
+  return res.json(purchaseSettingsPayload(await ensureSettings()));
+}
+
+async function getPurchaseSettingsAdmin(_req, res) {
+  const [settings, accesses] = await Promise.all([
+    ensureSettings(),
+    prisma.purchaseAccess.findMany({
+      where: { user: { active: true, role: 'creator' } },
+      orderBy: { userId: 'asc' },
+      select: { userId: true }
+    })
+  ]);
+  return res.json({ ...purchaseSettingsPayload(settings), userIds: accesses.map((access) => access.userId) });
+}
+
+async function updatePurchaseSettings(req, res) {
+  const signatureThresholdCents = Number(req.body?.signatureThresholdCents);
+  const signatureLabel = typeof req.body?.signatureLabel === 'string' ? req.body.signatureLabel.trim() : '';
+
+  if (
+    !Number.isInteger(signatureThresholdCents)
+    || signatureThresholdCents < 0
+    || signatureThresholdCents > MAX_PURCHASE_SIGNATURE_THRESHOLD_CENTS
+  ) {
+    return res.status(400).json({ error: 'Informe um valor minimo valido para a assinatura.' });
+  }
+  if (signatureLabel.length > MAX_PURCHASE_SIGNATURE_LABEL_LENGTH) {
+    return res.status(400).json({ error: 'A identificacao da assinatura deve ter no maximo 80 caracteres.' });
+  }
+  if (signatureThresholdCents > 0 && !signatureLabel) {
+    return res.status(400).json({ error: 'Informe quem deve assinar os pedidos que atingirem o valor minimo.' });
+  }
+
+  const rawUserIds = req.body?.userIds;
+  if (rawUserIds !== undefined && !Array.isArray(rawUserIds)) {
+    return res.status(400).json({ error: 'A lista de compradores autorizados é obrigatória.' });
+  }
+  const userIds = rawUserIds === undefined ? null : [...new Set(rawUserIds.map(Number))];
+  if (userIds?.some((id) => !Number.isInteger(id) || id <= 0)) {
+    return res.status(400).json({ error: 'A lista de compradores possui IDs inválidos.' });
+  }
+  if (userIds) {
+    const validUsers = await prisma.user.findMany({
+      where: { id: { in: userIds }, active: true, role: 'creator' },
+      select: { id: true }
+    });
+    if (validUsers.length !== userIds.length) {
+      return res.status(400).json({ error: 'Selecione apenas usuários ativos com perfil Criador.' });
+    }
+  }
+
+  const transaction = [
+    prisma.appSettings.upsert({
+      where: { id: 1 },
+      update: { purchaseSignatureThresholdCents: signatureThresholdCents, purchaseSignatureLabel: signatureLabel },
+      create: {
+        id: 1,
+        poolEnabled: true,
+        powerBiEnabled: true,
+        powerBiUrl: DEFAULT_POWER_BI_URL,
+        powerBiRefreshIntervalSeconds: DEFAULT_POWER_BI_REFRESH_INTERVAL_SECONDS,
+        purchaseSignatureThresholdCents: signatureThresholdCents,
+        purchaseSignatureLabel: signatureLabel
+      }
+    })
+  ];
+  if (userIds) {
+    transaction.push(
+      prisma.purchaseAccess.deleteMany(),
+      ...userIds.map((userId) => prisma.purchaseAccess.create({ data: { userId } }))
+    );
+  }
+  const [settings] = await prisma.$transaction(transaction);
+  const savedAccesses = userIds ?? (await prisma.purchaseAccess.findMany({ select: { userId: true } })).map((item) => item.userId);
+  return res.json({ ...purchaseSettingsPayload(settings), userIds: savedAccesses });
+}
+
+async function hasPurchaseAccess(user) {
+  if (user?.role === 'admin') return true;
+  if (!user?.id || user.role !== 'creator') return false;
+  return Boolean(await prisma.purchaseAccess.findUnique({ where: { userId: user.id }, select: { userId: true } }));
+}
+
 async function hasFormsAccess(user) {
   if (user?.role === 'admin') return true;
   if (!user?.id) return false;
@@ -182,6 +278,10 @@ module.exports = {
   getPowerBiConfiguration,
   getPowerBiSettingsAdmin,
   updatePowerBiSettings,
+  getPurchaseSettings,
+  getPurchaseSettingsAdmin,
+  updatePurchaseSettings,
+  hasPurchaseAccess,
   hasFormsAccess,
   getFormsAccessConfiguration,
   getFormsSettingsAdmin,

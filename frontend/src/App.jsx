@@ -2,9 +2,11 @@ import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import FormsAccessRoute from "./components/FormsAccessRoute";
+import PurchasesAccessRoute from "./components/PurchasesAccessRoute";
 import PwaManager from "./components/PwaManager";
 import Sidebar from "./components/Sidebar";
 import { SystemNotificationProvider } from "./components/SystemNotification";
+import { PURCHASE_ALLOWED_ROLES } from "./constants/purchaseAccess";
 
 const Home = lazy(() => import("./pages/Home"));
 const Category = lazy(() => import("./pages/Category"));
@@ -18,6 +20,10 @@ const StockCounts = lazy(() => import("./pages/StockCounts"));
 const StockCountEntry = lazy(() => import("./pages/StockCountEntry"));
 const Reservations = lazy(() => import("./pages/Reservations"));
 const Events = lazy(() => import("./pages/Events"));
+const PurchaseOrders = lazy(() => import("./pages/PurchaseOrders"));
+const PurchaseOrderForm = lazy(() => import("./pages/PurchaseOrderForm"));
+const PurchaseOrderDetail = lazy(() => import("./pages/PurchaseOrderDetail"));
+const PurchaseOrderReceipt = lazy(() => import("./pages/PurchaseOrderReceipt"));
 const FormsModels = lazy(() => import("./pages/FormsModels"));
 const FormModelEditor = lazy(() => import("./pages/FormModelEditor"));
 const FormSubmissions = lazy(() => import("./pages/FormSubmissions"));
@@ -79,6 +85,11 @@ function AppRoutes() {
         <Route path="/ranking-bolao" element={<ProtectedRoute><PoolRanking /></ProtectedRoute>} />
         <Route path="/reservas" element={<ProtectedRoute><Reservations /></ProtectedRoute>} />
         <Route path="/eventos" element={<ProtectedRoute><Events /></ProtectedRoute>} />
+        <Route path="/compras/pedidos" element={<ProtectedRoute roles={PURCHASE_ALLOWED_ROLES}><PurchasesAccessRoute><PurchaseOrders /></PurchasesAccessRoute></ProtectedRoute>} />
+        <Route path="/compras/pedidos/novo" element={<ProtectedRoute roles={PURCHASE_ALLOWED_ROLES}><PurchasesAccessRoute><PurchaseOrderForm /></PurchasesAccessRoute></ProtectedRoute>} />
+        <Route path="/compras/pedidos/:id" element={<ProtectedRoute roles={PURCHASE_ALLOWED_ROLES}><PurchasesAccessRoute><PurchaseOrderDetail /></PurchasesAccessRoute></ProtectedRoute>} />
+        <Route path="/compras/pedidos/:id/editar" element={<ProtectedRoute roles={["admin"]}><PurchasesAccessRoute adminOnly><PurchaseOrderForm /></PurchasesAccessRoute></ProtectedRoute>} />
+        <Route path="/compras/pedidos/:id/conferencia" element={<ProtectedRoute roles={PURCHASE_ALLOWED_ROLES}><PurchasesAccessRoute><PurchaseOrderReceipt /></PurchasesAccessRoute></ProtectedRoute>} />
         <Route path="/forms/preenchimentos" element={<ProtectedRoute><FormsAccessRoute><FormSubmissions /></FormsAccessRoute></ProtectedRoute>} />
         <Route path="/forms/preenchimentos/:id" element={<ProtectedRoute><FormsAccessRoute><FormSubmission /></FormsAccessRoute></ProtectedRoute>} />
         <Route path="/forms/modelos" element={<ProtectedRoute roles={["admin"]}><FormsAccessRoute><FormsModels /></FormsAccessRoute></ProtectedRoute>} />

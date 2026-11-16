@@ -25,6 +25,8 @@ const {
 const {
   getPowerBiSettingsAdmin,
   updatePowerBiSettings,
+  getPurchaseSettingsAdmin,
+  updatePurchaseSettings,
   getFormsSettingsAdmin,
   updateFormsSettings
 } = require('../controllers/settingsController');
@@ -132,6 +134,8 @@ router.delete('/pool-participants/:id', adminOnly, deletePoolParticipant);
 router.put('/pool-settings', adminOnly, updatePoolSettings);
 router.get('/power-bi-settings', adminOnly, getPowerBiSettingsAdmin);
 router.put('/power-bi-settings', adminOnly, updatePowerBiSettings);
+router.get('/purchase-settings', adminOnly, getPurchaseSettingsAdmin);
+router.put('/purchase-settings', adminOnly, updatePurchaseSettings);
 router.get('/forms-settings', adminOnly, getFormsSettingsAdmin);
 router.put('/forms-settings', adminOnly, updateFormsSettings);
 router.get('/ai-settings', adminOnly, getAdminSettings);

@@ -2,6 +2,16 @@
 
 > Documento técnico e funcional baseado no estado da branch `main` em 23/07/2026, commit `91ff6ae`.
 
+## Módulo de Compras
+
+O fluxo **Compras → Pedido de Compra** permite que administradores e compradores autorizados criem, consultem e imprimam pedidos de compra usando fornecedores e produtos simulados. Compradores são usuários ativos com perfil `creator` selecionados pelo Admin em **Configurações → Compras**; administradores sempre possuem acesso.
+
+Os pedidos são persistidos no banco do FAQ e compartilhados entre usuários e dispositivos. Somente administradores podem editar ou cancelar pedidos. O cancelamento preserva o registro, identifica responsável e horário e mantém o Romaneio consultável com a marca **CANCELADO**.
+
+A interface consome a API para listar, filtrar, consultar, criar, editar e cancelar pedidos. Fornecedores, produtos e as duas últimas compras de um produto com o fornecedor são consultados no PostgreSQL do Everest, banco `everest_impostos_db`, tabela `raw.tb_505_compra`. Os pedidos continuam mantendo snapshots de fornecedor, produtos, unidades e valores no banco do FAQ.
+
+Quando um CNPJ ou produto não existir no Everest, o comprador pode informá-lo somente naquele pedido. O CNPJ manual é validado e o produto avulso exige descrição e unidade, com código opcional. Esses dados são gravados apenas como snapshots do pedido, não criam cadastros locais, não são enviados ao Everest e não aparecem como sugestões futuras. O histórico de preços recentes permanece exclusivo dos produtos identificados pelo Everest e usa a quantidade e o valor da embalagem informados na origem.
+
 ## 1. Visão geral
 
 O **FAQ EB** é uma plataforma web interna que começou como uma base de conhecimento e evoluiu para concentrar processos operacionais da empresa.
@@ -523,6 +533,7 @@ Valores reais e senhas não devem ser incluídos em documentação, logs ou comm
 | `TRUST_PROXY` | Confiança no proxy reverso |
 | `COOKIE_SAMESITE` | Política SameSite do cookie |
 | `DW_DB_HOST`, `DW_DB_PORT`, `DW_DB_NAME`, `DW_DB_USER`, `DW_DB_PASSWORD` | PostgreSQL/DW |
+| `PURCHASE_DB_HOST`, `PURCHASE_DB_PORT`, `PURCHASE_DB_NAME`, `PURCHASE_DB_USER`, `PURCHASE_DB_PASSWORD`, `PURCHASE_DB_SSL` | PostgreSQL de compras do Everest; host, usuário e senha usam `DW_DB_*` como fallback |
 | `EVEREST_DB_ENABLED` | Habilita a consulta Everest |
 | `EVEREST_DB_HOST`, `EVEREST_DB_PORT`, `EVEREST_DB_NAME`, `EVEREST_DB_USER`, `EVEREST_DB_PASSWORD` | MySQL/Everest |
 | `EVEREST_DB_CHARSET` | Charset da conexão Everest |

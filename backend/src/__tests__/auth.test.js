@@ -199,6 +199,39 @@ test('pool ranking is readable by authenticated users and writable only by admin
   });
   const adminCookie = adminLogin.headers.get('set-cookie')?.split(';')[0];
 
+  const readerPurchaseSettingsUpdate = await fetch(`${base}/admin/purchase-settings`, {
+    method: 'PUT',
+    headers: { cookie: readerCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signatureThresholdCents: 50000, signatureLabel: 'Gerente Financeiro', userIds: [] })
+  });
+  assert.equal(readerPurchaseSettingsUpdate.status, 403);
+
+  const purchaseSettingsUpdate = await fetch(`${base}/admin/purchase-settings`, {
+    method: 'PUT',
+    headers: { cookie: adminCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signatureThresholdCents: 50000, signatureLabel: 'Gerente Financeiro', userIds: [] })
+  });
+  assert.equal(purchaseSettingsUpdate.status, 200);
+  assert.deepEqual(await purchaseSettingsUpdate.json(), {
+    signatureRequired: true,
+    signatureThresholdCents: 50000,
+    signatureLabel: 'Gerente Financeiro',
+    userIds: []
+  });
+
+  const readerPurchaseSettings = await fetch(`${base}/knowledge/purchase-settings`, {
+    headers: { cookie: readerCookie }
+  });
+  assert.equal(readerPurchaseSettings.status, 200);
+  assert.equal((await readerPurchaseSettings.json()).signatureLabel, 'Gerente Financeiro');
+
+  const invalidPurchaseSettings = await fetch(`${base}/admin/purchase-settings`, {
+    method: 'PUT',
+    headers: { cookie: adminCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signatureThresholdCents: 50000, signatureLabel: '' })
+  });
+  assert.equal(invalidPurchaseSettings.status, 400);
+
   const powerBiSettingsUpdate = await fetch(`${base}/admin/power-bi-settings`, {
     method: 'PUT',
     headers: { cookie: adminCookie, 'Content-Type': 'application/json' },

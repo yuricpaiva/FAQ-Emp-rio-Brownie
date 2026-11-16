@@ -1,0 +1,30 @@
+.settings-purchase-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+  gap: 1rem;
+}
+
+.settings-money-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.settings-money-input > span {
+  position: absolute;
+  left: .85rem;
+  color: var(--text-soft);
+  font-size: .82rem;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.settings-money-input input {
+  width: 100%;
+  padding-left: 2.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+  .settings-purchase-grid { grid-template-columns: 1fr; }
+}

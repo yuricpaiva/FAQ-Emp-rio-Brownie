@@ -1,0 +1,2 @@
+ALTER TABLE "PurchaseOrder" ADD COLUMN "supplierSource" TEXT NOT NULL DEFAULT 'EVEREST';
+ALTER TABLE "PurchaseOrderItem" ADD COLUMN "productSource" TEXT NOT NULL DEFAULT 'EVEREST';

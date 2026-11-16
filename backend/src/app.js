@@ -13,6 +13,7 @@ const formRoutes = require('./routes/formRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const calendarEventRoutes = require('./routes/calendarEventRoutes');
+const purchaseOrderRoutes = require('./routes/purchaseOrderRoutes');
 
 dotenv.config();
 
@@ -63,6 +64,7 @@ app.use('/api/forms', formRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/events', calendarEventRoutes);
+app.use('/api/purchases', purchaseOrderRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
