@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, BookOpen, CalendarDays, CalendarRange, ChevronDown, ClipboardCheck, FileText, Home, LayoutDashboard, LogOut, Menu, PackageCheck, PanelLeftClose, PanelLeftOpen, Settings, ShoppingCart, Trophy } from "lucide-react";
+import { BarChart3, BookOpen, CalendarDays, CalendarRange, ChevronDown, ClipboardCheck, FileText, Home, LayoutDashboard, LogOut, Menu, MessageSquareWarning, PackageCheck, PanelLeftClose, PanelLeftOpen, Settings, ShoppingCart, Trophy } from "lucide-react";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { getCategoryIcon } from "../constants/categoryIcons";
@@ -25,11 +25,13 @@ function Sidebar() {
   const [knowledgeOpen, setKnowledgeOpen] = useState(() => window.location.pathname.startsWith("/categoria"));
   const [formsOpen, setFormsOpen] = useState(() => window.location.pathname.startsWith("/forms"));
   const [purchasesOpen, setPurchasesOpen] = useState(() => window.location.pathname.startsWith("/compras"));
+  const [sacOpen, setSacOpen] = useState(() => window.location.pathname.startsWith("/sac"));
   const [categories, setCategories] = useState([]);
   const [poolEnabled, setPoolEnabled] = useState(false);
   const [powerBiAccess, setPowerBiAccess] = useState(false);
   const [formsAccess, setFormsAccess] = useState(false);
   const [purchasesAccess, setPurchasesAccess] = useState(false);
+  const [sacAccess, setSacAccess] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
@@ -55,6 +57,7 @@ function Sidebar() {
   useEffect(() => { if (location.pathname.startsWith("/categoria")) setKnowledgeOpen(true); }, [location.pathname]);
   useEffect(() => { if (location.pathname.startsWith("/forms")) setFormsOpen(true); }, [location.pathname]);
   useEffect(() => { if (location.pathname.startsWith("/compras")) setPurchasesOpen(true); }, [location.pathname]);
+  useEffect(() => { if (location.pathname.startsWith("/sac")) setSacOpen(true); }, [location.pathname]);
   useEffect(() => {
     const mediaQuery = window.matchMedia(MOBILE_QUERY);
     const syncMobile = (event) => { setIsMobile(event.matches); setNavigationOpen(false); };
@@ -76,6 +79,11 @@ function Sidebar() {
     const loadAccess = () => getPurchaseAccess().then((result) => setPurchasesAccess(Boolean(result.hasAccess))).catch(() => setPurchasesAccess(false));
     loadAccess(); window.addEventListener("purchase-settings-updated", loadAccess);
     return () => window.removeEventListener("purchase-settings-updated", loadAccess);
+  }, [user?.id, user?.role]);
+  useEffect(() => {
+    const loadAccess = () => api.get("/sac/access").then((response) => setSacAccess(Boolean(response.data.hasAccess))).catch(() => setSacAccess(false));
+    loadAccess(); window.addEventListener("sac-settings-updated", loadAccess);
+    return () => window.removeEventListener("sac-settings-updated", loadAccess);
   }, [user?.id, user?.role]);
   useEffect(() => { if (user) { setFormName(user.name || ""); setFormEmail(user.email || ""); } }, [user]);
   useEffect(() => { api.get("/knowledge/categories").then((res) => setCategories(res.data)).catch(() => setCategories([])); }, []);
@@ -140,6 +148,7 @@ function Sidebar() {
           <button type="button" className={`sidebar__link ${location.pathname.startsWith("/compras") ? "active" : ""}`} onClick={() => toggleSection(setPurchasesOpen)} aria-expanded={purchasesOpen} aria-controls="purchases-menu"><ShoppingCart className="sidebar__nav-icon" /><span className="sidebar__label">Compras</span><ChevronDown size={14} className={`sidebar__chevron ${purchasesOpen ? "sidebar__chevron--open" : ""}`} /></button>
           {purchasesOpen && <div id="purchases-menu" className="sidebar__submenu"><NavLink to="/compras/pedidos" className="sidebar__submenu-link">Pedido de Compra</NavLink></div>}
         </SidebarGroup>}
+        {sacAccess && <SidebarGroup label="SAC"><button type="button" className={`sidebar__link ${location.pathname.startsWith("/sac") ? "active" : ""}`} onClick={() => toggleSection(setSacOpen)} aria-expanded={sacOpen} aria-controls="sac-menu"><MessageSquareWarning className="sidebar__nav-icon" /><span className="sidebar__label">SAC</span><ChevronDown size={14} className={`sidebar__chevron ${sacOpen ? "sidebar__chevron--open" : ""}`} /></button>{sacOpen && <div id="sac-menu" className="sidebar__submenu"><NavLink to="/sac/reclamacoes" className="sidebar__submenu-link">Reclamações</NavLink></div>}</SidebarGroup>}
         {powerBiAccess && <SidebarGroup label="Análises"><NavLink to="/power-bi" className="sidebar__link"><BarChart3 className="sidebar__nav-icon" /><span className="sidebar__label">Power BI</span></NavLink></SidebarGroup>}
         {poolEnabled && <SidebarGroup label="Recursos"><NavLink to="/ranking-bolao" className="sidebar__link"><Trophy className="sidebar__nav-icon" /><span className="sidebar__label">Ranking do Bolão</span></NavLink></SidebarGroup>}
         {hasRole(["creator", "admin"]) && <SidebarGroup label="Administração"><NavLink to="/admin/dashboard" className="sidebar__link"><LayoutDashboard className="sidebar__nav-icon" /><span className="sidebar__label">Painel</span></NavLink>{hasRole(["admin"]) && <NavLink to="/admin/configuracoes" className="sidebar__link"><Settings className="sidebar__nav-icon" /><span className="sidebar__label">Configurações</span></NavLink>}</SidebarGroup>}

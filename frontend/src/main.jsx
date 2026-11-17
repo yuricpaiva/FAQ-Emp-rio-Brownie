@@ -7,6 +7,7 @@ import './index.css';
 import './styles/sidebar.css';
 import './styles/settings.css';
 import './styles/purchases.css';
+import './styles/sac.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

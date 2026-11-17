@@ -72,6 +72,7 @@ const {
   testAdminConnection,
   updateAdminSettings
 } = require('../controllers/aiController');
+const sacController = require('../controllers/sacController');
 
 const router = Router();
 const canCreateContent = requireRole(['creator', 'admin']);
@@ -138,6 +139,10 @@ router.get('/purchase-settings', adminOnly, getPurchaseSettingsAdmin);
 router.put('/purchase-settings', adminOnly, updatePurchaseSettings);
 router.get('/forms-settings', adminOnly, getFormsSettingsAdmin);
 router.put('/forms-settings', adminOnly, updateFormsSettings);
+router.get('/sac-settings', adminOnly, sacController.getAdminSettings);
+router.put('/sac-settings', adminOnly, sacController.updateAdminSettings);
+router.post('/sac-options', adminOnly, sacController.createOption);
+router.put('/sac-options/:id', adminOnly, sacController.updateOption);
 router.get('/ai-settings', adminOnly, getAdminSettings);
 router.get('/ai-settings/usage', adminOnly, getAdminUsage);
 router.put('/ai-settings', adminOnly, updateAdminSettings);

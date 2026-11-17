@@ -39,6 +39,11 @@ model User {
   calendarEventParticipants  CalendarEventParticipant[]
   purchaseOrdersCreated      PurchaseOrder[]            @relation("PurchaseOrderBuyer")
   purchaseOrdersCancelled    PurchaseOrder[]            @relation("PurchaseOrderCancelledBy")
+  sacAccess                  SacAccess?
+  sacAuditorSettings         SacSettings?               @relation("SacConfiguredAuditor")
+  sacComplaintsCreated       SacComplaint[]             @relation("SacComplaintCreatedBy")
+  sacComplaintsAudited       SacComplaint[]             @relation("SacComplaintAuditedBy")
+  sacHistoryEntries          SacComplaintHistory[]      @relation("SacHistoryActor")
 
   @@index([productionStoreId])
 }
@@ -222,6 +227,102 @@ model AppSettings {
   purchaseSignatureLabel          String   @default("")
   browninhoConfig                 String   @default("{}")
   updatedAt                       DateTime @updatedAt
+}
+
+model SacSettings {
+  id            Int      @id @default(1)
+  auditorUserId Int?     @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  auditor       User?    @relation("SacConfiguredAuditor", fields: [auditorUserId], references: [id], onDelete: SetNull)
+}
+
+model SacAccess {
+  userId    Int      @id
+  canCreate Boolean  @default(false)
+  canView   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SacOption {
+  id                       Int            @id @default(autoincrement())
+  category                 String
+  label                    String
+  normalizedLabel          String
+  active                   Boolean        @default(true)
+  position                 Int            @default(0)
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+  complaintsProblemType    SacComplaint[] @relation("SacProblemType")
+  complaintsLocation       SacComplaint[] @relation("SacLocation")
+  complaintsPurchaseStore  SacComplaint[] @relation("SacPurchaseStore")
+  complaintsSuggestedStore SacComplaint[] @relation("SacSuggestedOriginStore")
+  complaintsOffenderStore  SacComplaint[] @relation("SacOffenderStore")
+  complaintsStatus         SacComplaint[] @relation("SacOccurrenceStatus")
+  complaintsType           SacComplaint[] @relation("SacComplaintType")
+
+  @@unique([category, normalizedLabel])
+  @@index([category, active, position])
+}
+
+model SacComplaint {
+  id                     Int                   @id @default(autoincrement())
+  customerName           String
+  occurrenceDate         DateTime
+  problemTypeId          Int
+  locationId             Int
+  purchaseStoreId        Int
+  suggestedOriginStoreId Int
+  offenderStoreId        Int?
+  occurrenceStatusId     Int
+  complaintText          String
+  complaintTypeId        Int
+  actionTaken            String
+  treatmentOwner         String
+  observation            String                @default("")
+  resolution             String                @default("")
+  workflowStatus         String                @default("RASCUNHO")
+  createdById            Int
+  auditedById            Int?
+  submittedAt            DateTime?
+  auditedAt              DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  problemType            SacOption             @relation("SacProblemType", fields: [problemTypeId], references: [id], onDelete: Restrict)
+  location               SacOption             @relation("SacLocation", fields: [locationId], references: [id], onDelete: Restrict)
+  purchaseStore          SacOption             @relation("SacPurchaseStore", fields: [purchaseStoreId], references: [id], onDelete: Restrict)
+  suggestedOriginStore   SacOption             @relation("SacSuggestedOriginStore", fields: [suggestedOriginStoreId], references: [id], onDelete: Restrict)
+  offenderStore          SacOption?            @relation("SacOffenderStore", fields: [offenderStoreId], references: [id], onDelete: Restrict)
+  occurrenceStatus       SacOption             @relation("SacOccurrenceStatus", fields: [occurrenceStatusId], references: [id], onDelete: Restrict)
+  complaintType          SacOption             @relation("SacComplaintType", fields: [complaintTypeId], references: [id], onDelete: Restrict)
+  createdBy              User                  @relation("SacComplaintCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  auditedBy              User?                 @relation("SacComplaintAuditedBy", fields: [auditedById], references: [id], onDelete: SetNull)
+  history                SacComplaintHistory[]
+
+  @@index([workflowStatus, occurrenceDate])
+  @@index([createdById, createdAt])
+  @@index([purchaseStoreId, occurrenceDate])
+  @@index([suggestedOriginStoreId, occurrenceDate])
+  @@index([offenderStoreId, occurrenceDate])
+  @@index([problemTypeId, occurrenceDate])
+  @@index([complaintTypeId, occurrenceDate])
+}
+
+model SacComplaintHistory {
+  id          Int          @id @default(autoincrement())
+  complaintId Int
+  actorId     Int
+  action      String
+  reason      String       @default("")
+  changesJson String       @default("{}")
+  createdAt   DateTime     @default(now())
+  complaint   SacComplaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  actor       User         @relation("SacHistoryActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([complaintId, createdAt])
+  @@index([actorId, createdAt])
 }
 
 model PowerBiAccess {

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import FormsAccessRoute from "./components/FormsAccessRoute";
 import PurchasesAccessRoute from "./components/PurchasesAccessRoute";
+import SacAccessRoute from "./components/SacAccessRoute";
 import PwaManager from "./components/PwaManager";
 import Sidebar from "./components/Sidebar";
 import { SystemNotificationProvider } from "./components/SystemNotification";
@@ -28,6 +29,9 @@ const FormsModels = lazy(() => import("./pages/FormsModels"));
 const FormModelEditor = lazy(() => import("./pages/FormModelEditor"));
 const FormSubmissions = lazy(() => import("./pages/FormSubmissions"));
 const FormSubmission = lazy(() => import("./pages/FormSubmission"));
+const SacComplaints = lazy(() => import("./pages/SacComplaints"));
+const SacComplaintForm = lazy(() => import("./pages/SacComplaintForm"));
+const SacComplaintDetail = lazy(() => import("./pages/SacComplaintDetail"));
 const PoolRanking = lazy(() => import("./pages/PoolRanking"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
@@ -95,6 +99,10 @@ function AppRoutes() {
         <Route path="/forms/modelos" element={<ProtectedRoute roles={["admin"]}><FormsAccessRoute><FormsModels /></FormsAccessRoute></ProtectedRoute>} />
         <Route path="/forms/modelos/novo" element={<ProtectedRoute roles={["admin"]}><FormsAccessRoute><FormModelEditor /></FormsAccessRoute></ProtectedRoute>} />
         <Route path="/forms/modelos/:id/editar" element={<ProtectedRoute roles={["admin"]}><FormsAccessRoute><FormModelEditor /></FormsAccessRoute></ProtectedRoute>} />
+        <Route path="/sac/reclamacoes" element={<ProtectedRoute><SacAccessRoute><SacComplaints /></SacAccessRoute></ProtectedRoute>} />
+        <Route path="/sac/reclamacoes/nova" element={<ProtectedRoute><SacAccessRoute><SacComplaintForm /></SacAccessRoute></ProtectedRoute>} />
+        <Route path="/sac/reclamacoes/:id" element={<ProtectedRoute><SacAccessRoute><SacComplaintDetail /></SacAccessRoute></ProtectedRoute>} />
+        <Route path="/sac/reclamacoes/:id/editar" element={<ProtectedRoute><SacAccessRoute><SacComplaintForm /></SacAccessRoute></ProtectedRoute>} />
         <Route
           path="/admin/dashboard"
           element={<ProtectedRoute roles={["creator", "admin"]}><AdminDashboard /></ProtectedRoute>}
