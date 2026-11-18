@@ -10,14 +10,15 @@
 .sac-table-wrap { width: 100%; overflow: visible; }
 .sac-table { width: 100%; min-width: 0; table-layout: fixed; font-size: .78rem; }
 .sac-table th { min-width: 0; }
-.sac-table th:nth-child(1) { width: 13%; }
-.sac-table th:nth-child(2) { width: 12%; }
-.sac-table th:nth-child(3) { width: 13%; }
-.sac-table th:nth-child(4) { width: 17%; }
-.sac-table th:nth-child(5) { width: 9%; }
-.sac-table th:nth-child(6) { width: auto; }
-.sac-table th:nth-child(7) { width: 165px; }
-.sac-table th:nth-child(8) { width: 145px; }
+.sac-table th:nth-child(1) { width: 11%; }
+.sac-table th:nth-child(2) { width: 90px; }
+.sac-table th:nth-child(3) { width: 11%; }
+.sac-table th:nth-child(4) { width: 12%; }
+.sac-table th:nth-child(5) { width: 16%; }
+.sac-table th:nth-child(6) { width: 8%; }
+.sac-table th:nth-child(7) { width: auto; }
+.sac-table th:nth-child(8) { width: 165px; }
+.sac-table th:nth-child(9) { width: 145px; }
 .sac-table th, .sac-table td { text-align: center; }
 .sac-table td { min-width: 0; vertical-align: middle; overflow-wrap: anywhere; }
 .sac-table .faq-table-heading { justify-content: center; }

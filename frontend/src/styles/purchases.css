@@ -464,7 +464,7 @@
   .purchase-receipt__bottom { grid-template-columns: 1fr; }
   .purchase-receipt__meta div { border-right: 0; border-bottom: 1px solid #d8cbc2; }
   .purchase-receipt__meta div:last-child { border-bottom: 0; }
-  .purchase-receipt__table { min-width: 760px; }
+  .purchase-receipt__table { min-width: 860px; }
   .purchase-receipt__signatures { grid-template-columns: 1fr; gap: 3rem; }
   .purchase-receipt__cancelled-mark { font-size: 3.2rem; }
 }
@@ -514,13 +514,14 @@
   .purchase-receipt__table { width: 100% !important; min-width: 0 !important; table-layout: fixed; }
   .purchase-receipt__table th,
   .purchase-receipt__table td { padding: 2.2mm 1.6mm; overflow-wrap: anywhere; }
-  .purchase-receipt__table th:nth-child(1) { width: 12%; }
-  .purchase-receipt__table th:nth-child(2) { width: 23%; }
-  .purchase-receipt__table th:nth-child(3) { width: 12%; }
-  .purchase-receipt__table th:nth-child(4) { width: 14%; }
-  .purchase-receipt__table th:nth-child(5) { width: 14%; }
+  .purchase-receipt__table th:nth-child(1) { width: 10%; }
+  .purchase-receipt__table th:nth-child(2) { width: 20%; }
+  .purchase-receipt__table th:nth-child(3) { width: 11%; }
+  .purchase-receipt__table th:nth-child(4) { width: 11%; }
+  .purchase-receipt__table th:nth-child(5) { width: 12%; }
   .purchase-receipt__table th:nth-child(6) { width: 12%; }
-  .purchase-receipt__table th:nth-child(7) { width: 13%; }
+  .purchase-receipt__table th:nth-child(7) { width: 12%; }
+  .purchase-receipt__table th:nth-child(8) { width: 12%; }
   .purchase-receipt__blank { min-width: 0; }
   .purchase-receipt__bottom { grid-template-columns: 1.2fr .8fr; }
   .purchase-receipt__signatures { grid-template-columns: repeat(auto-fit, minmax(35mm, 1fr)); gap: 8mm; }
