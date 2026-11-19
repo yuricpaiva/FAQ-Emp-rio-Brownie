@@ -77,6 +77,9 @@ test('pedidos são compartilhados e edição/cancelamento são exclusivos de adm
   assert.equal((await request(base, '/api/purchases/orders', { cookie: readerCookie })).status, 403);
 
   const draft = {
+    paid: false,
+    paymentMethod: 'PIX',
+    paymentNote: 'Pagar no vencimento acordado.',
     supplier: { id: 'sup-cacau', everestId: 'EV-FOR-1042', name: 'Cacau Nobre', legalName: 'Cacau Nobre Ltda.', cnpj: '12.345.678/0001-90' },
     items: [{ productId: 'prd-cacau-po', everestProductId: 'EV-PRD-503', code: 'CACAU-100', description: 'Cacau em pó 100%', quantity: '2', supplierUnit: { id: 'un-sc-5kg', code: 'SC', label: 'Saco 5 kg' }, unitPriceCents: 2500 }],
     additions: []
@@ -86,10 +89,16 @@ test('pedidos são compartilhados e edição/cancelamento são exclusivos de adm
   assert.equal(created.supplier.source, 'EVEREST');
   assert.equal(created.items[0].productSource, 'EVEREST');
   assert.equal(created.totalCents, 5000);
+  assert.equal(created.paid, false);
+  assert.equal(created.paymentMethod, 'PIX');
+  assert.equal(created.paymentNote, 'Pagar no vencimento acordado.');
   assert.deepEqual(created.signatureRequirement, { label: 'Gerente Financeiro', thresholdCents: 5000 });
   assert.match(created.number, /^PC-\d{6}-\d{4}$/);
 
   const manualDraft = {
+    paid: true,
+    paymentMethod: 'CARTAO',
+    paymentNote: '',
     supplier: { source: 'MANUAL_CNPJ', id: 'ignored-by-server', cnpj: '11.222.333/0001-81' },
     items: [{
       productId: `manual:${suffix}`,
@@ -111,6 +120,13 @@ test('pedidos são compartilhados e edição/cancelamento são exclusivos de adm
   assert.equal(manualOrder.items[0].code, '');
   assert.equal(manualOrder.items[0].everestProductId, '');
   assert.equal(manualOrder.items[0].supplierUnit.everestId, '');
+  assert.equal(manualOrder.paid, true);
+  assert.equal(manualOrder.paymentMethod, 'CARTAO');
+
+  const invalidPaymentResponse = await request(base, '/api/purchases/orders', {
+    method: 'POST', cookie: buyerCookie, body: { ...draft, paymentMethod: 'DINHEIRO' }
+  });
+  assert.equal(invalidPaymentResponse.status, 400);
 
   const invalidCnpjResponse = await request(base, '/api/purchases/orders', {
     method: 'POST', cookie: buyerCookie, body: { ...manualDraft, supplier: { ...manualDraft.supplier, cnpj: '11.111.111/1111-11' } }

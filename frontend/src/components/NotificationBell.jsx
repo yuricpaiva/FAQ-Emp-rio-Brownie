@@ -16,8 +16,9 @@ function relativeTime(value) {
   return new Date(value).toLocaleDateString("pt-BR");
 }
 
-function NotificationBell() {
+function NotificationBell({ variant = "icon" }) {
   const navigate = useNavigate();
+  const navigationVariant = variant === "navigation";
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -31,11 +32,15 @@ function NotificationBell() {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const panelWidth = Math.min(390, window.innerWidth - 16);
+    if (navigationVariant && window.innerWidth > 720) {
+      setPanelStyle({ bottom: "12px", left: `${rect.right + 8}px`, width: `${panelWidth}px` });
+      return;
+    }
     const left = window.innerWidth <= 720
       ? window.innerWidth - panelWidth - 8
       : Math.min(Math.max(8, rect.left), window.innerWidth - panelWidth - 8);
     setPanelStyle({ top: `${rect.bottom + 8}px`, left: `${left}px`, width: `${panelWidth}px` });
-  }, []);
+  }, [navigationVariant]);
 
   const load = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setLoading(true);
@@ -109,17 +114,23 @@ function NotificationBell() {
   };
 
   return (
-    <div className="notification-center">
+    <div className={`notification-center ${navigationVariant ? "notification-center--navigation" : ""}`}>
       <button
         ref={triggerRef}
         type="button"
-        className={`notification-bell ${open ? "notification-bell--open" : ""}`}
+        className={`notification-bell ${navigationVariant ? "notification-bell--navigation" : ""} ${open ? "notification-bell--open" : ""}`}
         onClick={() => setOpen((current) => !current)}
         aria-label={unreadCount ? `${unreadCount} notificações não lidas` : "Notificações"}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <Bell size={18} />
+        <Bell size={18} aria-hidden="true" />
+        {navigationVariant && (
+          <span className="notification-bell__copy">
+            <strong>Notificações</strong>
+            <small>{unreadCount ? `${unreadCount} não lida${unreadCount === 1 ? "" : "s"}` : "Tudo em dia"}</small>
+          </span>
+        )}
         {unreadCount > 0 && <span className="notification-bell__badge">{unreadCount > 99 ? "99+" : unreadCount}</span>}
       </button>
 

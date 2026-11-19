@@ -38,6 +38,9 @@ export default function PurchaseOrderForm() {
   const [editingItemId, setEditingItemId] = useState(null);
   const [items, setItems] = useState([]);
   const [additions, setAdditions] = useState([newAddition()]);
+  const [paid, setPaid] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
   const [errors, setErrors] = useState({});
   const [productError, setProductError] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -62,6 +65,9 @@ export default function PurchaseOrderForm() {
         setSupplierQuery(supplierLabel(selectedSupplier));
         setItems(order.items);
         setAdditions(order.additions.length ? order.additions.map((addition) => ({ ...addition, amountInput: (addition.amountCents / 100).toFixed(2).replace(".", ",") })) : [newAddition()]);
+        setPaid(Boolean(order.paid));
+        setPaymentMethod(order.paymentMethod || "");
+        setPaymentNote(order.paymentNote || "");
         setDirty(false);
       })
       .catch(() => setLoadError(isEditing ? "Não foi possível carregar o pedido para edição." : "Não foi possível carregar os fornecedores simulados."))
@@ -311,7 +317,7 @@ export default function PurchaseOrderForm() {
     event.preventDefault();
     if (saving || confirming || submissionLockRef.current) return;
     const preparedAdditions = validAdditions.filter((item) => item.description.trim() || item.amountCents > 0);
-    const nextErrors = validatePurchaseDraft({ supplier, items, additions: preparedAdditions });
+    const nextErrors = validatePurchaseDraft({ supplier, items, additions: preparedAdditions, paid, paymentMethod });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) { document.querySelector(".purchase-field-error")?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
     submissionLockRef.current = true;
@@ -321,7 +327,7 @@ export default function PurchaseOrderForm() {
     if (!accepted) { submissionLockRef.current = false; return; }
     setSaving(true);
     try {
-      const payload = { supplier, items, additions: preparedAdditions };
+      const payload = { supplier, items, additions: preparedAdditions, paid, paymentMethod, paymentNote };
       const order = isEditing ? await updatePurchaseOrder(id, payload) : await createPurchaseOrder(payload);
       sessionStorage.setItem(isEditing ? "purchase-order-updated" : "purchase-order-created", order.number);
       setDirty(false);
@@ -339,6 +345,18 @@ export default function PurchaseOrderForm() {
       <section className="purchase-card purchase-form-section"><header><div><h2>Dados do pedido e fornecedor</h2></div></header>
         <div className="purchase-field purchase-field--wide"><label htmlFor="supplier-search">Fornecedor</label><div className="purchase-combobox"><div className="purchase-search"><Search size={17} /><input id="supplier-search" role="combobox" aria-autocomplete="list" aria-controls="supplier-options" aria-expanded={supplierListOpen} aria-activedescendant={activeSupplierIndex >= 0 ? `supplier-option-${filteredSuppliers[activeSupplierIndex]?.id}` : undefined} autoComplete="off" autoFocus value={supplierQuery} onChange={(event) => changeSupplierQuery(event.target.value)} onFocus={() => setSupplierListOpen(true)} onClick={() => setSupplierListOpen(true)} onBlur={closeSupplierList} onKeyDown={handleSupplierKeyDown} placeholder="Clique para ver ou digite nome, razão social ou CNPJ" /></div>{supplierListOpen && <div className="purchase-combobox__options" id="supplier-options" role="listbox" aria-label="Fornecedores encontrados">{filteredSuppliers.map((item, index) => <button className={index === activeSupplierIndex ? "is-active" : ""} id={`supplier-option-${item.id}`} key={item.id} type="button" role="option" aria-selected={item.id === supplier?.id} onMouseDown={(event) => event.preventDefault()} onClick={() => chooseSupplier(item)}><strong>{item.name}</strong><span>{item.legalName} · CNPJ {item.cnpj}</span></button>)}{!filteredSuppliers.length && !canUseManualSupplier && <div className="purchase-combobox__empty" role="option" aria-disabled="true">{hasInvalidCompleteCnpj ? "CNPJ inválido. Confira os números informados." : "Nenhum fornecedor encontrado."}</div>}{canUseManualSupplier && <button className="purchase-combobox__create" type="button" onMouseDown={(event) => event.preventDefault()} onClick={chooseManualSupplier}><Plus size={16} /><span><strong>Usar este CNPJ no pedido</strong><small>{formatCnpj(supplierCnpjDigits)} · não será cadastrado no Everest</small></span></button>}</div>}</div>{errors.supplier && <small className="purchase-field-error">{errors.supplier}</small>}</div>
         {supplier && <dl className="purchase-supplier-summary"><div><dt>Nome</dt><dd>{supplier.name}</dd></div><div><dt>Razão social</dt><dd>{supplier.legalName || "—"}</dd></div><div><dt>CNPJ</dt><dd>{supplier.cnpj}</dd></div>{supplier.source === "MANUAL_CNPJ" && <div className="purchase-supplier-summary__note"><dt>Origem</dt><dd>Informado somente neste pedido</dd></div>}</dl>}
+      </section>
+
+      <section className="purchase-card purchase-form-section purchase-payment-section"><header><div><h2>Pagamento</h2><p>Registre a situação e a forma combinada com o fornecedor.</p></div></header>
+        <label className="purchase-payment-switch" htmlFor="purchase-paid">
+          <input id="purchase-paid" type="checkbox" role="switch" aria-describedby="purchase-paid-help" checked={paid} onChange={(event) => { setPaid(event.target.checked); setErrors((current) => ({ ...current, paymentMethod: undefined })); touch(); }} />
+          <span className="purchase-payment-switch__control" aria-hidden="true" />
+          <span className="purchase-payment-switch__copy"><strong>Pedido pago</strong><small id="purchase-paid-help">{paid ? "O pagamento já foi realizado." : "O pagamento ainda será realizado."}</small></span>
+        </label>
+        <div className="purchase-payment-fields" aria-live="polite">
+          <div className="purchase-field"><label htmlFor="payment-method">{paid ? "Forma de pagamento utilizada" : "Forma de pagamento prevista"}</label><select id="payment-method" value={paymentMethod} aria-invalid={Boolean(errors.paymentMethod)} onChange={(event) => { setPaymentMethod(event.target.value); setErrors((current) => ({ ...current, paymentMethod: undefined })); touch(); }}><option value="">Selecione</option><option value="BOLETO">Boleto</option><option value="PIX">PIX</option><option value="CARTAO">Cartão</option></select>{errors.paymentMethod && <small className="purchase-field-error">{errors.paymentMethod}</small>}</div>
+          <div className="purchase-field"><label htmlFor="payment-note">Observação <span>(opcional)</span></label><textarea id="payment-note" rows="2" maxLength="240" value={paymentNote} onChange={(event) => { setPaymentNote(event.target.value); touch(); }} placeholder={paid ? "Ex.: Pago em duas transações" : "Ex.: Vencimento em 30 dias"} /></div>
+        </div>
       </section>
 
       <section className={`purchase-card purchase-form-section ${!supplier ? "purchase-form-section--disabled" : ""}`}><header><div><h2>Produtos e acréscimos</h2></div></header>

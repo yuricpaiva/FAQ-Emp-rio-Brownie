@@ -2,7 +2,7 @@ function ParticipantAvatar({ name, photoUrl, className = "" }) {
   const initial = name?.trim().charAt(0).toLocaleUpperCase("pt-BR") || "?";
 
   if (photoUrl) {
-    return <img src={photoUrl} alt="" className={className} />;
+    return <img src={photoUrl} alt="" className={className} loading="lazy" decoding="async" />;
   }
 
   return (

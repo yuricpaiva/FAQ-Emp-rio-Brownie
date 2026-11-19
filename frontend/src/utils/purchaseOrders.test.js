@@ -31,6 +31,7 @@ describe("validação e filtros", () => {
     const errors = validatePurchaseDraft({ supplier: null, items: [], additions: [{ description: "Frete", amountInput: "", amountCents: 0 }] });
     expect(errors.supplier).toBeTruthy();
     expect(errors.items).toBeTruthy();
+    expect(errors.paymentMethod).toBeTruthy();
     expect(errors["addition-0"]).toBeTruthy();
   });
 

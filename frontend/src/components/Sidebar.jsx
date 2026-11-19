@@ -1,18 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, BookOpen, CalendarDays, CalendarRange, ChevronDown, ClipboardCheck, FileText, Home, LayoutDashboard, LogOut, Menu, MessageSquareWarning, PackageCheck, PanelLeftClose, PanelLeftOpen, Settings, ShoppingCart, Trophy } from "lucide-react";
+import { BarChart3, BookOpen, CalendarDays, CalendarRange, ChevronDown, ClipboardCheck, FileText, Home, LayoutDashboard, LogOut, Menu, MessageSquareWarning, PackageCheck, Settings, ShoppingCart, Trophy, Wrench } from "lucide-react";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { getCategoryIcon } from "../constants/categoryIcons";
 import SystemNotification from "./SystemNotification";
 import NotificationBell from "./NotificationBell";
+import AccessibleDialog from "./AccessibleDialog";
 import { PURCHASE_ALLOWED_ROLES } from "../constants/purchaseAccess";
 import { getPurchaseAccess } from "../services/purchaseOrderService";
 
 const MOBILE_QUERY = "(max-width: 720px)";
 
-function SidebarGroup({ children, label }) {
-  return <section className="sidebar__group" aria-label={label}><span className="sidebar__group-title">{label}</span>{children}</section>;
+function initialSectionState(pathname) {
+  return {
+    agenda: pathname.startsWith("/eventos") || pathname.startsWith("/reservas"),
+    knowledge: pathname.startsWith("/categoria") || pathname.startsWith("/artigo"),
+    operations: ["/planejamento-producao", "/contagem-estoque", "/forms", "/compras", "/sac"].some((path) => pathname.startsWith(path)),
+    management: pathname.startsWith("/power-bi") || pathname.startsWith("/ranking-bolao") || pathname.startsWith("/admin"),
+  };
 }
 
 function Sidebar() {
@@ -20,12 +26,12 @@ function Sidebar() {
   const location = useLocation();
   const { user, logout, updateUser, endSession, hasRole } = useAuth();
   const sidebarRef = useRef(null);
-  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navRef = useRef(null);
+  const toggleRef = useRef(null);
+  const wasMobileOpen = useRef(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
-  const [knowledgeOpen, setKnowledgeOpen] = useState(() => window.location.pathname.startsWith("/categoria"));
-  const [formsOpen, setFormsOpen] = useState(() => window.location.pathname.startsWith("/forms"));
-  const [purchasesOpen, setPurchasesOpen] = useState(() => window.location.pathname.startsWith("/compras"));
-  const [sacOpen, setSacOpen] = useState(() => window.location.pathname.startsWith("/sac"));
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const [sections, setSections] = useState(() => initialSectionState(window.location.pathname));
   const [categories, setCategories] = useState([]);
   const [poolEnabled, setPoolEnabled] = useState(false);
   const [powerBiAccess, setPowerBiAccess] = useState(false);
@@ -39,12 +45,39 @@ function Sidebar() {
   const [formPhoto, setFormPhoto] = useState(null);
   const [message, setMessage] = useState("");
 
-  useEffect(() => { window.localStorage.removeItem("faq_sidebar_collapsed"); }, []);
-  useEffect(() => { setNavigationOpen(false); }, [location.key, location.pathname, location.search, location.hash]);
+  useEffect(() => {
+    if (isMobile) setNavigationOpen(false);
+    setSections((current) => ({ ...current, ...initialSectionState(location.pathname) }));
+  }, [isMobile, location.key, location.pathname, location.search, location.hash]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(MOBILE_QUERY);
+    const syncMobile = (event) => {
+      setIsMobile(event.matches);
+      setNavigationOpen(false);
+    };
+    mediaQuery.addEventListener("change", syncMobile);
+    return () => mediaQuery.removeEventListener("change", syncMobile);
+  }, []);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || !isMobile) return undefined;
+    if (navigationOpen) {
+      nav.removeAttribute("inert");
+      window.requestAnimationFrame(() => nav.querySelector("a, button")?.focus());
+    } else {
+      nav.setAttribute("inert", "");
+      if (wasMobileOpen.current) toggleRef.current?.focus();
+    }
+    wasMobileOpen.current = navigationOpen;
+    return undefined;
+  }, [isMobile, navigationOpen]);
+
   useEffect(() => {
     if (!navigationOpen) return undefined;
     const closeOnOutsidePointer = (event) => {
-      if (sidebarRef.current && !sidebarRef.current.contains(event.target)) setNavigationOpen(false);
+      if (isMobile && sidebarRef.current && !sidebarRef.current.contains(event.target)) setNavigationOpen(false);
     };
     const closeOnEscape = (event) => { if (event.key === "Escape") setNavigationOpen(false); };
     document.addEventListener("pointerdown", closeOnOutsidePointer, true);
@@ -53,18 +86,8 @@ function Sidebar() {
       document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [navigationOpen]);
-  useEffect(() => { if (location.pathname.startsWith("/categoria")) setKnowledgeOpen(true); }, [location.pathname]);
-  useEffect(() => { if (location.pathname.startsWith("/forms")) setFormsOpen(true); }, [location.pathname]);
-  useEffect(() => { if (location.pathname.startsWith("/compras")) setPurchasesOpen(true); }, [location.pathname]);
-  useEffect(() => { if (location.pathname.startsWith("/sac")) setSacOpen(true); }, [location.pathname]);
-  useEffect(() => {
-    const mediaQuery = window.matchMedia(MOBILE_QUERY);
-    const syncMobile = (event) => { setIsMobile(event.matches); setNavigationOpen(false); };
-    setIsMobile(mediaQuery.matches);
-    mediaQuery.addEventListener("change", syncMobile);
-    return () => mediaQuery.removeEventListener("change", syncMobile);
-  }, []);
+  }, [isMobile, navigationOpen]);
+
   useEffect(() => {
     const loadAccess = () => api.get("/knowledge/power-bi-config").then((res) => setPowerBiAccess(res.data.enabled && res.data.hasAccess)).catch(() => setPowerBiAccess(false));
     loadAccess(); window.addEventListener("power-bi-settings-updated", loadAccess);
@@ -95,12 +118,12 @@ function Sidebar() {
   }, []);
 
   const initials = useMemo(() => user?.name?.split(" ").filter(Boolean).map((word) => word[0]?.toUpperCase()).join("").slice(0, 2) || "US", [user]);
-  const closeNavigation = () => setNavigationOpen(false);
-  const handleSidebarClick = (event) => {
-    if (event.target instanceof Element && event.target.closest("a[href]")) closeNavigation();
-  };
+  const closeNavigation = () => { if (isMobile) setNavigationOpen(false); };
   const openProfile = () => { closeNavigation(); setMessage(""); setFormPassword(""); setFormPhoto(null); setShowProfile(true); };
-  const toggleSection = (setter) => { if (!navigationOpen) setNavigationOpen(true); setter((value) => !value); };
+  const closeProfile = useCallback(() => setShowProfile(false), []);
+  const toggleSection = (name) => {
+    setSections((current) => ({ ...current, [name]: !current[name] }));
+  };
   const handleLogout = async () => { closeNavigation(); await logout(); navigate("/login", { replace: true }); };
   const handleProfileSave = async (event) => {
     event.preventDefault(); setMessage("");
@@ -116,48 +139,68 @@ function Sidebar() {
       const response = await api.put("/admin/users/me", payload);
       if (formPassword) { setShowProfile(false); endSession("Senha alterada. Entre novamente com sua nova senha."); return; }
       updateUser(response.data); setShowProfile(false);
-    } catch (error) { setMessage(error.response?.data?.error || "Não foi possível atualizar o perfil."); }
+    } catch (error) { setMessage(error.response?.data?.error || "Não foi possível atualizar o perfil. Tente novamente."); }
   };
 
-  const avatar = user?.photoUrl ? <img src={user.photoUrl} alt={user.name} className="sidebar__avatar" /> : <span className="sidebar__avatar sidebar__avatar--fallback">{initials}</span>;
-  const sidebarClasses = ["sidebar", !navigationOpen && !isMobile ? "sidebar--collapsed" : "", isMobile ? "sidebar--mobile" : "", isMobile && navigationOpen ? "sidebar--mobile-open" : ""].filter(Boolean).join(" ");
+  const avatar = user?.photoUrl ? <img src={user.photoUrl} alt="" className="sidebar__avatar" /> : <span className="sidebar__avatar sidebar__avatar--fallback" aria-hidden="true">{initials}</span>;
+  const sidebarClasses = ["sidebar", isMobile ? "sidebar--mobile" : "", isMobile && navigationOpen ? "sidebar--mobile-open" : ""].filter(Boolean).join(" ");
+  const operationActive = ["/planejamento-producao", "/contagem-estoque", "/forms", "/compras", "/sac"].some((path) => location.pathname.startsWith(path));
+  const managementVisible = powerBiAccess || poolEnabled || hasRole(["creator", "admin"]);
+
+  const sectionButton = (name, label, Icon, active = false) => (
+    <button type="button" className={`sidebar__link ${active ? "active" : ""}`} onClick={() => toggleSection(name)} aria-expanded={sections[name]} aria-controls={`${name}-menu`} aria-label={label} data-tooltip={label}>
+      <Icon className="sidebar__nav-icon" aria-hidden="true" /><span className="sidebar__label">{label}</span><ChevronDown size={14} className={`sidebar__chevron ${sections[name] ? "sidebar__chevron--open" : ""}`} aria-hidden="true" />
+    </button>
+  );
+  const sectionMenu = (name, content) => (
+    <div
+      id={`${name}-menu`}
+      className={`sidebar__submenu-shell ${sections[name] ? "sidebar__submenu-shell--open" : ""}`}
+      aria-hidden={!sections[name]}
+      inert={!sections[name] ? "" : undefined}
+    >
+      <div className="sidebar__submenu">{content}</div>
+    </div>
+  );
 
   return <>
-    <aside ref={sidebarRef} className={sidebarClasses} onClick={handleSidebarClick}>
+    <aside ref={sidebarRef} className={sidebarClasses}>
       <div className="sidebar__top">
-        <Link to="/" className="sidebar__brand"><span className="sidebar__brand-kicker">EMPÓRIO BROWNIE</span><strong>FAQ</strong></Link>
-        <div className="sidebar__top-actions">
-          <NotificationBell />
-          {isMobile && <button type="button" className="sidebar__mobile-profile" onClick={openProfile} aria-label="Abrir perfil">{avatar}</button>}
-          <button type="button" className="sidebar__toggle" onClick={() => setNavigationOpen((value) => !value)} aria-expanded={navigationOpen} aria-label={navigationOpen ? "Recolher menu" : "Abrir menu"}>{isMobile ? <Menu size={18} /> : navigationOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}</button>
-        </div>
+        <Link to="/" className="sidebar__brand" onClick={closeNavigation}><span className="sidebar__brand-kicker">EMPÓRIO BROWNIE</span><strong>FAQ</strong></Link>
+        {isMobile && <div className="sidebar__top-actions"><NotificationBell /><button type="button" className="sidebar__mobile-profile" onClick={openProfile} aria-label="Abrir perfil">{avatar}</button><button ref={toggleRef} type="button" className="sidebar__toggle" onClick={() => setNavigationOpen((value) => !value)} aria-expanded={navigationOpen} aria-controls="sidebar-navigation" aria-label={navigationOpen ? "Fechar menu" : "Abrir menu"}><Menu size={20} /></button></div>}
       </div>
-      <nav className="sidebar__nav" aria-label="Navegação principal">
-        <SidebarGroup label="Principal"><NavLink to="/" end className="sidebar__link"><Home className="sidebar__nav-icon" /><span className="sidebar__label">Início</span></NavLink><NavLink to="/eventos" className="sidebar__link"><CalendarRange className="sidebar__nav-icon" /><span className="sidebar__label">Eventos</span></NavLink><NavLink to="/assistente" className="sidebar__link"><span className="sidebar__nav-icon sidebar__browninho-icon" aria-hidden="true" /><span className="sidebar__label">Browninho</span></NavLink></SidebarGroup>
-        <SidebarGroup label="Conhecimento">
-          <button type="button" className={`sidebar__link ${location.pathname.startsWith("/categoria") || location.pathname.startsWith("/artigo") ? "active" : ""}`} onClick={() => toggleSection(setKnowledgeOpen)} aria-expanded={knowledgeOpen} aria-controls="knowledge-menu"><BookOpen className="sidebar__nav-icon" /><span className="sidebar__label">Base de conhecimento</span><ChevronDown size={14} className={`sidebar__chevron ${knowledgeOpen ? "sidebar__chevron--open" : ""}`} /></button>
-          {knowledgeOpen && <div id="knowledge-menu" className="sidebar__submenu">{categories.map((category) => <NavLink key={category.id} to={`/categoria/${category.slug}`} className="sidebar__submenu-link"><img src={getCategoryIcon(category.iconKey)} alt="" className="sidebar__category-icon" /><span>{category.name}</span></NavLink>)}{!categories.length && <span className="sidebar__submenu-empty">Nenhuma categoria cadastrada</span>}</div>}
-        </SidebarGroup>
-        <SidebarGroup label="Operação">
-          {hasRole(["admin", "production_manager"]) && <NavLink to="/planejamento-producao" className="sidebar__link"><ClipboardCheck className="sidebar__nav-icon" /><span className="sidebar__label">Planejamento</span></NavLink>}
-          {hasRole(["store", "admin", "production_manager"]) && <NavLink to="/contagem-estoque" className="sidebar__link"><PackageCheck className="sidebar__nav-icon" /><span className="sidebar__label">Contagem de estoque</span></NavLink>}
-          {formsAccess && <><button type="button" className={`sidebar__link ${location.pathname.startsWith("/forms") ? "active" : ""}`} onClick={() => toggleSection(setFormsOpen)} aria-expanded={formsOpen} aria-controls="forms-menu"><FileText className="sidebar__nav-icon" /><span className="sidebar__label">Formulários</span><ChevronDown size={14} className={`sidebar__chevron ${formsOpen ? "sidebar__chevron--open" : ""}`} /></button>{formsOpen && <div id="forms-menu" className="sidebar__submenu">{hasRole(["admin"]) && <NavLink to="/forms/modelos" className="sidebar__submenu-link">Modelos</NavLink>}<NavLink to="/forms/preenchimentos" className="sidebar__submenu-link">Preenchimentos</NavLink></div>}</>}
-          <NavLink to="/reservas" className="sidebar__link"><CalendarDays className="sidebar__nav-icon" /><span className="sidebar__label">Reservas</span></NavLink>
-        </SidebarGroup>
-        {hasRole(PURCHASE_ALLOWED_ROLES) && purchasesAccess && <SidebarGroup label="Compras">
-          <button type="button" className={`sidebar__link ${location.pathname.startsWith("/compras") ? "active" : ""}`} onClick={() => toggleSection(setPurchasesOpen)} aria-expanded={purchasesOpen} aria-controls="purchases-menu"><ShoppingCart className="sidebar__nav-icon" /><span className="sidebar__label">Compras</span><ChevronDown size={14} className={`sidebar__chevron ${purchasesOpen ? "sidebar__chevron--open" : ""}`} /></button>
-          {purchasesOpen && <div id="purchases-menu" className="sidebar__submenu"><NavLink to="/compras/pedidos" className="sidebar__submenu-link">Pedido de Compra</NavLink></div>}
-        </SidebarGroup>}
-        {sacAccess && <SidebarGroup label="SAC"><button type="button" className={`sidebar__link ${location.pathname.startsWith("/sac") ? "active" : ""}`} onClick={() => toggleSection(setSacOpen)} aria-expanded={sacOpen} aria-controls="sac-menu"><MessageSquareWarning className="sidebar__nav-icon" /><span className="sidebar__label">SAC</span><ChevronDown size={14} className={`sidebar__chevron ${sacOpen ? "sidebar__chevron--open" : ""}`} /></button>{sacOpen && <div id="sac-menu" className="sidebar__submenu"><NavLink to="/sac/reclamacoes" className="sidebar__submenu-link">Reclamações</NavLink></div>}</SidebarGroup>}
-        {powerBiAccess && <SidebarGroup label="Análises"><NavLink to="/power-bi" className="sidebar__link"><BarChart3 className="sidebar__nav-icon" /><span className="sidebar__label">Power BI</span></NavLink></SidebarGroup>}
-        {poolEnabled && <SidebarGroup label="Recursos"><NavLink to="/ranking-bolao" className="sidebar__link"><Trophy className="sidebar__nav-icon" /><span className="sidebar__label">Ranking do Bolão</span></NavLink></SidebarGroup>}
-        {hasRole(["creator", "admin"]) && <SidebarGroup label="Administração"><NavLink to="/admin/dashboard" className="sidebar__link"><LayoutDashboard className="sidebar__nav-icon" /><span className="sidebar__label">Painel</span></NavLink>{hasRole(["admin"]) && <NavLink to="/admin/configuracoes" className="sidebar__link"><Settings className="sidebar__nav-icon" /><span className="sidebar__label">Configurações</span></NavLink>}</SidebarGroup>}
+
+      <nav ref={navRef} id="sidebar-navigation" className="sidebar__nav" aria-label="Navegação principal" aria-hidden={isMobile && !navigationOpen ? "true" : undefined}>
+        <div className="sidebar__group sidebar__group--primary">
+          <NavLink to="/" end className="sidebar__link" onClick={closeNavigation} aria-label="Início" data-tooltip="Início"><Home className="sidebar__nav-icon" aria-hidden="true" /><span className="sidebar__label">Início</span></NavLink>
+          <NavLink to="/assistente" className="sidebar__link" onClick={closeNavigation} aria-label="Browninho" data-tooltip="Browninho"><span className="sidebar__nav-icon sidebar__browninho-icon" aria-hidden="true" /><span className="sidebar__label">Browninho</span></NavLink>
+        </div>
+        <div className="sidebar__group">
+          {sectionButton("agenda", "Agenda", CalendarRange, location.pathname.startsWith("/eventos") || location.pathname.startsWith("/reservas"))}
+          {sectionMenu("agenda", <><NavLink to="/eventos" className="sidebar__submenu-link" onClick={closeNavigation}><CalendarDays size={15} aria-hidden="true" /><span>Eventos da empresa</span></NavLink><NavLink to="/reservas" className="sidebar__submenu-link" onClick={closeNavigation}><CalendarRange size={15} aria-hidden="true" /><span>Reservas de recursos</span></NavLink></>)}
+          {sectionButton("knowledge", "Conhecimento", BookOpen, location.pathname.startsWith("/categoria") || location.pathname.startsWith("/artigo"))}
+          {sectionMenu("knowledge", <>{categories.map((category) => <NavLink key={category.id} to={`/categoria/${category.slug}`} className="sidebar__submenu-link" onClick={closeNavigation}><img src={getCategoryIcon(category.iconKey)} alt="" className="sidebar__category-icon" /><span>{category.name}</span></NavLink>)}{!categories.length && <span className="sidebar__submenu-empty">Nenhuma categoria disponível</span>}</>)}
+          {sectionButton("operations", "Operações", Wrench, operationActive)}
+          {sectionMenu("operations", <>
+            {hasRole(["admin", "production_manager"]) && <NavLink to="/planejamento-producao" className="sidebar__submenu-link" onClick={closeNavigation}><ClipboardCheck size={15} aria-hidden="true" /><span>Planejamento</span></NavLink>}
+            {hasRole(["store", "admin", "production_manager"]) && <NavLink to="/contagem-estoque" className="sidebar__submenu-link" onClick={closeNavigation}><PackageCheck size={15} aria-hidden="true" /><span>Contagem de estoque</span></NavLink>}
+            {formsAccess && <><NavLink to="/forms/preenchimentos" className="sidebar__submenu-link" onClick={closeNavigation}><FileText size={15} aria-hidden="true" /><span>Preenchimentos</span></NavLink>{hasRole(["admin"]) && <NavLink to="/forms/modelos" className="sidebar__submenu-link" onClick={closeNavigation}><FileText size={15} aria-hidden="true" /><span>Modelos de formulário</span></NavLink>}</>}
+            {hasRole(PURCHASE_ALLOWED_ROLES) && purchasesAccess && <NavLink to="/compras/pedidos" className="sidebar__submenu-link" onClick={closeNavigation}><ShoppingCart size={15} aria-hidden="true" /><span>Pedidos de compra</span></NavLink>}
+            {sacAccess && <NavLink to="/sac/reclamacoes" className="sidebar__submenu-link" onClick={closeNavigation}><MessageSquareWarning size={15} aria-hidden="true" /><span>Reclamações do SAC</span></NavLink>}
+          </>)}
+          {managementVisible && <>{sectionButton("management", "Gestão", Settings, location.pathname.startsWith("/power-bi") || location.pathname.startsWith("/ranking-bolao") || location.pathname.startsWith("/admin"))}{sectionMenu("management", <>
+            {powerBiAccess && <NavLink to="/power-bi" className="sidebar__submenu-link" onClick={closeNavigation}><BarChart3 size={15} aria-hidden="true" /><span>Power BI</span></NavLink>}
+            {poolEnabled && <NavLink to="/ranking-bolao" className="sidebar__submenu-link" onClick={closeNavigation}><Trophy size={15} aria-hidden="true" /><span>Ranking do Bolão</span></NavLink>}
+            {hasRole(["creator", "admin"]) && <NavLink to="/admin/dashboard" className="sidebar__submenu-link" onClick={closeNavigation}><LayoutDashboard size={15} aria-hidden="true" /><span>Painel de conteúdo</span></NavLink>}
+            {hasRole(["admin"]) && <NavLink to="/admin/configuracoes" className="sidebar__submenu-link" onClick={closeNavigation}><Settings size={15} aria-hidden="true" /><span>Configurações</span></NavLink>}
+          </>)}</>}
+        </div>
         <div className="sidebar__spacer" />
-        <div className="sidebar__footer"><button type="button" className="sidebar__profile" onClick={openProfile}>{avatar}<span className="sidebar__profile-copy"><strong>{user?.name}</strong><small>Perfil</small></span></button><button type="button" className="sidebar__logout" onClick={handleLogout}><LogOut className="sidebar__nav-icon" /><span className="sidebar__label">Sair</span></button></div>
+        <div className="sidebar__footer">{!isMobile && <NotificationBell variant="navigation" />}<button type="button" className="sidebar__profile" onClick={openProfile} aria-label={`Editar perfil de ${user?.name || "usuário"}`}>{avatar}<span className="sidebar__profile-copy"><strong>{user?.name}</strong><small>Editar perfil</small></span></button><button type="button" className="sidebar__logout" onClick={handleLogout} aria-label="Sair"><LogOut className="sidebar__nav-icon" aria-hidden="true" /><span className="sidebar__label">Sair</span></button></div>
       </nav>
     </aside>
     {isMobile && navigationOpen && <button type="button" className="sidebar__mobile-overlay" onClick={closeNavigation} aria-label="Fechar menu" />}
-    {showProfile && <div className="modal-backdrop" onClick={() => setShowProfile(false)}><div className="modal-card" onClick={(event) => event.stopPropagation()}><div className="modal-card__header"><h3>Editar perfil</h3><button type="button" onClick={() => setShowProfile(false)}>x</button></div><form className="form-grid" onSubmit={handleProfileSave}><label><span>Nome</span><input value={formName} onChange={(event) => setFormName(event.target.value)} required /></label><label><span>Email</span><input type="email" value={formEmail} onChange={(event) => setFormEmail(event.target.value)} required /></label><label><span>Senha</span><input type="password" value={formPassword} onChange={(event) => setFormPassword(event.target.value)} placeholder="Deixe em branco para manter" /></label><label><span>Foto</span><input type="file" accept="image/*" onChange={(event) => setFormPhoto(event.target.files?.[0] || null)} /></label>{message && <SystemNotification variant="error">{message}</SystemNotification>}<div className="form-actions"><button type="button" className="button button--ghost" onClick={() => setShowProfile(false)}>Cancelar</button><button type="submit" className="button">Salvar</button></div></form></div></div>}
+    {showProfile && <AccessibleDialog labelId="profile-dialog-title" onClose={closeProfile}><div className="modal-card__header"><h2 id="profile-dialog-title">Editar perfil</h2><button type="button" onClick={closeProfile} aria-label="Fechar edição do perfil">×</button></div><form className="form-grid" onSubmit={handleProfileSave}><label><span>Nome</span><input value={formName} onChange={(event) => setFormName(event.target.value)} maxLength={120} required /></label><label><span>E-mail</span><input type="email" value={formEmail} onChange={(event) => setFormEmail(event.target.value)} required /></label><label><span>Nova senha</span><input type="password" value={formPassword} onChange={(event) => setFormPassword(event.target.value)} placeholder="Deixe em branco para manter" autoComplete="new-password" /></label><label><span>Foto do perfil</span><input type="file" accept="image/*" onChange={(event) => setFormPhoto(event.target.files?.[0] || null)} /></label>{message && <SystemNotification variant="error">{message}</SystemNotification>}<div className="form-actions"><button type="button" className="button button--ghost" onClick={closeProfile}>Cancelar</button><button type="submit" className="button">Salvar perfil</button></div></form></AccessibleDialog>}
   </>;
 }
 

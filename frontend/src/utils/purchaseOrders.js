@@ -57,6 +57,8 @@ export function calculateSubtotalCents(quantity, unitPriceCents) {
 export const formatCurrency = (cents) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format((Number(cents) || 0) / 100);
 export const formatQuantity = (value) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 4 }).format(Number(value) || 0);
 export const formatDate = (value, withTime = false) => new Intl.DateTimeFormat("pt-BR", withTime ? { dateStyle: "short", timeStyle: "short" } : { dateStyle: "short" }).format(new Date(value));
+export const PAYMENT_METHOD_LABELS = { BOLETO: "Boleto", PIX: "PIX", CARTAO: "Cartão" };
+export const formatPaymentMethod = (value) => PAYMENT_METHOD_LABELS[value] || "Não informado";
 
 export function monthKey(date = new Date()) {
   const year = date.getFullYear();
@@ -82,9 +84,10 @@ export function filterPurchaseOrders(orders, filters = {}) {
   }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-export function validatePurchaseDraft({ supplier, items = [], additions = [] }) {
+export function validatePurchaseDraft({ supplier, items = [], additions = [], paymentMethod = "", paid = false }) {
   const errors = {};
   if (!supplier) errors.supplier = "Selecione um fornecedor.";
+  if (!PAYMENT_METHOD_LABELS[paymentMethod]) errors.paymentMethod = `Selecione a forma de pagamento ${paid ? "utilizada" : "prevista"}.`;
   if (!items.length) errors.items = "Adicione pelo menos um produto.";
   items.forEach((item, index) => {
     if (item.productSource === "MANUAL" && !item.description?.trim()) errors[`item-${index}-description`] = "Informe a descrição do produto avulso.";

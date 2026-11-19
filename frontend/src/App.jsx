@@ -39,6 +39,7 @@ const AdminNewArticle = lazy(() => import("./pages/AdminNewArticle"));
 const AdminEditArticle = lazy(() => import("./pages/AdminEditArticle"));
 const AdminPool = lazy(() => import("./pages/AdminPool"));
 const AdminSettings = lazy(() => import("./pages/AdminSettings"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 function RouteLoader() {
   return (
@@ -123,6 +124,7 @@ function AppRoutes() {
           path="/admin/configuracoes"
           element={<ProtectedRoute roles={["admin"]}><AdminSettings /></ProtectedRoute>}
         />
+        <Route path="*" element={<ProtectedRoute><NotFound /></ProtectedRoute>} />
       </Routes>
     </Suspense>
   );

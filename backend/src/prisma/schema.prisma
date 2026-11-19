@@ -351,6 +351,9 @@ model PurchaseOrder {
   productSubtotalCents    Int
   additionsTotalCents     Int
   totalCents              Int
+  paid                    Boolean                 @default(false)
+  paymentMethod           String?
+  paymentNote             String                  @default("")
   signatureLabel          String?
   signatureThresholdCents Int?
   createdAt               DateTime                @default(now())

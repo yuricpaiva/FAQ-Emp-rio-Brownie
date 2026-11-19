@@ -6,7 +6,7 @@ import { sacOptionCategories } from "../../utils/sac";
 
 function AccessList({ title, description, users, selectedIds, onChange }) {
   const toggle = (id) => onChange(selectedIds.includes(id) ? selectedIds.filter((value) => value !== id) : [...selectedIds, id]);
-  return <section className="sac-settings__access"><div><h3>{title}</h3><p>{description}</p></div><div className="settings-user-list">{users.map((user) => <label key={user.id} className="settings-user-item"><input type="checkbox" checked={selectedIds.includes(user.id)} onChange={() => toggle(user.id)} />{user.photoUrl ? <img src={user.photoUrl} alt="" /> : <span className="settings-user-item__avatar">{user.name.slice(0, 2).toUpperCase()}</span>}<span><strong>{user.name}</strong><small>{user.email}</small></span></label>)}</div></section>;
+  return <section className="sac-settings__access"><div><h3>{title}</h3><p>{description}</p></div><div className="settings-user-list">{users.map((user) => <label key={user.id} className="settings-user-item"><input type="checkbox" checked={selectedIds.includes(user.id)} onChange={() => toggle(user.id)} />{user.photoUrl ? <img src={user.photoUrl} alt="" loading="lazy" decoding="async" /> : <span className="settings-user-item__avatar">{user.name.slice(0, 2).toUpperCase()}</span>}<span><strong>{user.name}</strong><small>{user.email}</small></span></label>)}</div></section>;
 }
 
 function OptionGroup({ category, label, options, onCreated, onUpdated, onError }) {

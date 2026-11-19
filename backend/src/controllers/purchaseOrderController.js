@@ -12,6 +12,7 @@ const MAX_CENTS = 1_000_000_000;
 const EVEREST_SOURCE = 'EVEREST';
 const MANUAL_SUPPLIER_SOURCE = 'MANUAL_CNPJ';
 const MANUAL_PRODUCT_SOURCE = 'MANUAL';
+const PAYMENT_METHODS = new Set(['BOLETO', 'PIX', 'CARTAO']);
 const orderInclude = {
   buyer: { select: { id: true, name: true, email: true } },
   cancelledBy: { select: { id: true, name: true, email: true } },
@@ -68,6 +69,12 @@ function calculateSubtotalCents(quantity, unitPriceCents) {
 }
 
 function parseOrderInput(body) {
+  const paid = body?.paid === true;
+  const paymentMethod = cleanText(body?.paymentMethod, 30).toUpperCase();
+  const paymentNote = cleanText(body?.paymentNote, 240);
+  if (!PAYMENT_METHODS.has(paymentMethod)) {
+    return { error: `Selecione a forma de pagamento ${paid ? 'utilizada' : 'prevista'}.` };
+  }
   const supplier = body?.supplier;
   const supplierSource = cleanText(supplier?.source, 30) || EVEREST_SOURCE;
   if (!supplier || ![EVEREST_SOURCE, MANUAL_SUPPLIER_SOURCE].includes(supplierSource)) {
@@ -155,6 +162,7 @@ function parseOrderInput(body) {
     },
     items,
     additions,
+    payment: { paid, paymentMethod, paymentNote },
     totals: { productSubtotalCents, additionsTotalCents, totalCents }
   };
 }
@@ -199,6 +207,9 @@ function orderPayload(order) {
       description: addition.description,
       amountCents: addition.amountCents
     })),
+    paid: order.paid,
+    paymentMethod: order.paymentMethod,
+    paymentNote: order.paymentNote,
     signatureRequirement: order.signatureLabel
       ? { label: order.signatureLabel, thresholdCents: order.signatureThresholdCents || 0 }
       : null,
@@ -310,6 +321,7 @@ async function createAttempt(input, buyerId) {
         number: `${prefix}${String(sequence).padStart(4, '0')}`,
         buyerId,
         ...input.supplier,
+        ...input.payment,
         ...input.totals,
         ...signature,
         items: { create: input.items },
@@ -356,6 +368,7 @@ async function update(req, res, next) {
         where: { id },
         data: {
           ...input.supplier,
+          ...input.payment,
           ...input.totals,
           ...signature,
           items: { create: input.items },

@@ -67,6 +67,7 @@ function Events() {
   const [form, setForm] = useState(() => initialForm(initialDate));
   const [imageFile, setImageFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [mobileView, setMobileView] = useState(() => window.matchMedia("(max-width: 720px)").matches ? "agenda" : "calendar");
   const [userQuery, setUserQuery] = useState("");
   const [userResults, setUserResults] = useState([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
@@ -145,6 +146,13 @@ function Events() {
     const today = new Date();
     setMonth(new Date(today.getFullYear(), today.getMonth(), 1, 12));
     selectDate(today);
+  };
+
+  const selectDateFromInput = (value) => {
+    const next = fromIsoDate(value);
+    if (Number.isNaN(next.getTime())) return;
+    setMonth(new Date(next.getFullYear(), next.getMonth(), 1, 12));
+    selectDate(next);
   };
 
   const openCreate = () => {
@@ -285,7 +293,15 @@ function Events() {
       {error && <SystemNotification variant="error">{error}</SystemNotification>}
       {message && <SystemNotification variant="success">{message}</SystemNotification>}
 
-      <div className="events-layout">
+      <div className="events-mobile-view" aria-label="Visualização da agenda">
+        <div role="group" aria-label="Escolher visualização">
+          <button type="button" className={mobileView === "agenda" ? "active" : ""} aria-pressed={mobileView === "agenda"} onClick={() => setMobileView("agenda")}>Agenda</button>
+          <button type="button" className={mobileView === "calendar" ? "active" : ""} aria-pressed={mobileView === "calendar"} onClick={() => setMobileView("calendar")}>Mês</button>
+        </div>
+        {mobileView === "agenda" && <label><span>Data</span><input type="date" value={selectedDate} onChange={(event) => selectDateFromInput(event.target.value)} /></label>}
+      </div>
+
+      <div className={`events-layout events-layout--mobile-${mobileView}`}>
         <section className="event-calendar" aria-label="Calendário mensal">
           <header className="event-calendar__toolbar">
             <div className="event-calendar__navigation">
@@ -402,7 +418,7 @@ function Events() {
                         ) : userResults.length ? userResults.map((candidate) => (
                           <button type="button" key={candidate.id} onClick={() => addParticipant(candidate)}>
                             <span className="event-participant-avatar" aria-hidden="true">
-                              {candidate.photoUrl ? <img src={candidate.photoUrl} alt="" /> : candidate.name.slice(0, 1).toUpperCase()}
+                              {candidate.photoUrl ? <img src={candidate.photoUrl} alt="" loading="lazy" /> : candidate.name.slice(0, 1).toUpperCase()}
                             </span>
                             <span><strong>{candidate.name}</strong><small>{candidate.email}</small></span>
                             <UserPlus size={16} aria-hidden="true" />
@@ -455,7 +471,7 @@ function Events() {
                   const canEditEvent = isAdmin || event.createdBy?.id === user?.id;
                   return (
                   <article className="event-agenda__item" key={event.occurrenceId}>
-                    {event.imageUrl && <img src={event.imageUrl} alt="" />}
+                    {event.imageUrl && <img src={event.imageUrl} alt="" loading="lazy" decoding="async" />}
                     <div className="event-agenda__item-body">
                       <div className="event-agenda__time"><Clock size={14} /> <time>{event.time}</time></div>
                       <h3>{event.title}</h3>

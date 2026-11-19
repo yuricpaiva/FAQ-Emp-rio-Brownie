@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import { getCategoryIcon } from "../constants/categoryIcons";
 import { useAuth } from "../context/AuthContext";
@@ -7,6 +7,7 @@ import EventWeekStrip from "../components/EventWeekStrip";
 
 function Home() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [categories, setCategories] = useState([]);
   const [recentArticles, setRecentArticles] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
@@ -68,6 +69,10 @@ function Home() {
     };
   }, [query]);
 
+  useEffect(() => {
+    if (searchParams.get("buscar") === "1") document.getElementById("global-search")?.focus();
+  }, [searchParams]);
+
   const firstName = useMemo(() => {
     const fullName = user?.name?.trim() || "";
     return fullName.split(/\s+/)[0] || "usuário";
@@ -77,14 +82,14 @@ function Home() {
     <section className="page-stack">
       <div className="hero-card">
         <div>
-          <h1>Bem vindo(a), {firstName}</h1>
+          <h1>Bem-vindo(a), {firstName}</h1>
           <p className="hero-card__copy">
             Consulte processos, tire dúvidas e acompanhe conteúdos que ajudam você a
             resolver demandas do dia a dia com mais autonomia.
           </p>
         </div>
         <div className="hero-card__media">
-          <img src="/brand-placeholder.png" alt="FAQ EB" />
+          <img src="/brand-placeholder.png" alt="FAQ Empório Brownie" width="420" height="240" />
         </div>
       </div>
 
@@ -99,24 +104,26 @@ function Home() {
             id="global-search"
             className="search-input"
             type="text"
-            placeholder="Pesquise por título, resumo, autor, categoria ou conteúdo..."
+            placeholder="Buscar artigos..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            aria-describedby="global-search-status"
           />
+
+          <span id="global-search-status" className="sr-only" aria-live="polite">
+            {loadingSearch ? "Buscando artigos" : query.trim() ? `${searchResults.length} resultado${searchResults.length === 1 ? "" : "s"} encontrado${searchResults.length === 1 ? "" : "s"}` : ""}
+          </span>
 
           {query.trim() && (
             <div className="search-dropdown">
               {loadingSearch ? (
                 <p className="search-dropdown__empty">Buscando...</p>
               ) : searchResults.length ? (
-                searchResults.map((article, index) => (
+                searchResults.map((article) => (
                   <Link
                     key={article.id}
                     to={`/artigo/${article.slug}`}
                     className="search-dropdown__item"
-                    style={{
-                      borderBottom: index === searchResults.length - 1 ? "none" : undefined,
-                    }}
                   >
                     <strong>{article.title}</strong>
                     <span>
@@ -125,7 +132,7 @@ function Home() {
                   </Link>
                 ))
               ) : (
-                <p className="search-dropdown__empty">Nenhum artigo encontrado.</p>
+                <div className="search-dropdown__empty"><p>Nenhum artigo encontrado para “{query.trim()}”.</p><button type="button" onClick={() => setQuery("")}>Limpar busca</button></div>
               )}
             </div>
           )}
@@ -140,14 +147,16 @@ function Home() {
             </div>
           </div>
           <div className="category-grid">
-            {categories.map((category) => (
+            {categories.map((category) => category.articleCount > 0 ? (
               <Link key={category.id} to={`/categoria/${category.slug}`} className="category-tile">
-                <img src={getCategoryIcon(category.iconKey)} alt={category.name} />
-                <div>
-                  <strong>{category.name}</strong>
-                  <span>{category.articleCount} artigos</span>
-                </div>
+                <img src={getCategoryIcon(category.iconKey)} alt="" loading="lazy" width="48" height="48" />
+                <div><strong>{category.name}</strong><span>{category.articleCount} {category.articleCount === 1 ? "artigo" : "artigos"}</span></div>
               </Link>
+            ) : (
+              <div key={category.id} className="category-tile category-tile--disabled" aria-disabled="true">
+                <img src={getCategoryIcon(category.iconKey)} alt="" loading="lazy" width="48" height="48" />
+                <div><strong>{category.name}</strong><span>Em breve</span></div>
+              </div>
             ))}
           </div>
         </section>

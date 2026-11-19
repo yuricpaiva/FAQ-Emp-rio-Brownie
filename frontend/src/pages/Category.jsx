@@ -31,13 +31,12 @@ function Category() {
     <section className="page-stack">
       <div className="hero-card hero-card--compact">
         <div>
-          <p className="eyebrow">Categoria</p>
           <h1>{title}</h1>
-          <p className="hero-card__copy">{articles.length} artigo(s) encontrado(s) nesta área.</p>
+          <p className="hero-card__copy">{articles.length === 1 ? "1 artigo disponível" : `${articles.length} artigos disponíveis`} nesta área.</p>
         </div>
         {category && (
           <div className="hero-card__icon">
-            <img src={getCategoryIcon(category.iconKey)} alt={category.name} />
+            <img src={getCategoryIcon(category.iconKey)} alt="" width="96" height="96" />
           </div>
         )}
       </div>
@@ -54,7 +53,7 @@ function Category() {
             <small>Por {article.author}</small>
           </Link>
         ))}
-        {!articles.length && <p className="empty-state">Nenhum artigo disponível nesta categoria.</p>}
+        {!articles.length && <div className="empty-state empty-state--action"><h2>Nenhum artigo disponível</h2><p>Esta categoria ainda não possui conteúdo publicado.</p><Link className="button button--ghost" to="/">Voltar ao início</Link></div>}
       </div>
     </section>
   );
