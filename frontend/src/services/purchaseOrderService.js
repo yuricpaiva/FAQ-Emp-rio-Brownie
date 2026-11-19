@@ -31,8 +31,8 @@ export async function getPurchaseOrder(id) {
   }
 }
 
-export async function getProductPurchaseHistory({ supplierId, productId, limit = 2 }) {
-  const response = await api.get("/purchases/history/products", { params: { supplierId, productId, limit } });
+export async function getProductPurchaseHistory({ productId, limit = 2 }) {
+  const response = await api.get("/purchases/history/products", { params: { productId, limit } });
   return response.data;
 }
 

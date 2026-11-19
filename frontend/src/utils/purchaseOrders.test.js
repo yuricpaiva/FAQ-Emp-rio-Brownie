@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cancelPurchaseOrder, listPurchaseOrders, searchProducts, searchSuppliers, updatePurchaseOrder } from "../services/purchaseOrderService";
+import { cancelPurchaseOrder, getProductPurchaseHistory, listPurchaseOrders, searchProducts, searchSuppliers, updatePurchaseOrder } from "../services/purchaseOrderService";
 import { calculateSubtotalCents, calculateTotals, filterPurchaseOrders, formatCnpj, isValidCnpj, normalizeCnpj, normalizeDecimal, parseMoneyToCents, validatePurchaseDraft } from "./purchaseOrders";
 
 const apiMock = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn() }));
@@ -68,6 +68,13 @@ describe("serviço compartilhado", () => {
     const result = await listPurchaseOrders({ month: "2026-11", status: "", productId: "prd-1" });
     expect(apiMock.get).toHaveBeenCalledWith("/purchases/orders", { params: { month: "2026-11", productId: "prd-1" } });
     expect(result.orders).toHaveLength(1);
+  });
+
+  it("consulta o histórico do produto sem restringir por fornecedor", async () => {
+    apiMock.get.mockResolvedValueOnce({ data: [{ orderId: "77" }] });
+    const history = await getProductPurchaseHistory({ productId: "103", limit: 2 });
+    expect(apiMock.get).toHaveBeenCalledWith("/purchases/history/products", { params: { productId: "103", limit: 2 } });
+    expect(history).toHaveLength(1);
   });
 
   it("usa endpoints administrativos para editar e cancelar", async () => {

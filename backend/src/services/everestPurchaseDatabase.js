@@ -102,6 +102,10 @@ function historyPayload(row) {
     orderId: cleanText(row.source_id),
     orderNumber: row.invoice_number ? `NF ${cleanText(row.invoice_number)}` : 'Nota fiscal',
     createdAt: row.purchase_date,
+    supplier: {
+      name: cleanText(row.supplier_name) || 'Fornecedor não identificado',
+      cnpj: formatCnpj(row.supplier_cnpj)
+    },
     quantity: quantityText(row.quantity),
     supplierUnit: unitPayload(row),
     unitPriceCents: moneyToCents(row.unit_price)
@@ -178,10 +182,9 @@ async function searchProducts({ supplierId = '', query = '', limit = 1000, datab
   return result.rows.map(productPayload);
 }
 
-async function getProductPurchaseHistory({ supplierId = '', productId = '', limit = 2, database = getPurchaseDatabase() } = {}) {
-  const cnpj = normalizeCnpj(supplierId);
+async function getProductPurchaseHistory({ productId = '', limit = 2, database = getPurchaseDatabase() } = {}) {
   const product = cleanText(productId);
-  if (!cnpj || !product) return [];
+  if (!product) return [];
   const safeLimit = Math.min(10, Math.max(1, Number(limit) || 2));
   const result = await database.query(
     `
@@ -189,6 +192,8 @@ async function getProductPurchaseHistory({ supplierId = '', productId = '', limi
         id_espelho AS source_id,
         "N. Nota" AS invoice_number,
         "D. Emissão" AS purchase_date,
+        BTRIM(COALESCE("Razão Emitente", '')) AS supplier_name,
+        REGEXP_REPLACE(cpf_cnpj_emitente, '[^0-9]', '', 'g') AS supplier_cnpj,
         BTRIM("Item") AS product_id,
         BTRIM(COALESCE("Embalagem", '')) AS packaging,
         BTRIM(COALESCE("UM", '')) AS unit_code,
@@ -197,14 +202,13 @@ async function getProductPurchaseHistory({ supplierId = '', productId = '', limi
       FROM ${DEFAULT_SCHEMA}.${DEFAULT_TABLE}
       WHERE at_situacao = 1
         AND "Origem" = 'ENTRADA'
-        AND REGEXP_REPLACE(cpf_cnpj_emitente, '[^0-9]', '', 'g') = $1
-        AND BTRIM("Item") = $2
+        AND BTRIM("Item") = $1
         AND "Q. Embalagens" IS NOT NULL
         AND "V. Embalagem" IS NOT NULL
       ORDER BY "D. Emissão" DESC NULLS LAST, id_espelho DESC
-      LIMIT $3
+      LIMIT $2
     `,
-    [cnpj, product, safeLimit]
+    [product, safeLimit]
   );
   return result.rows.map(historyPayload);
 }

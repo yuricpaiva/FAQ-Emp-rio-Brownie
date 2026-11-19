@@ -345,7 +345,7 @@
 .purchase-history > header h3 { font-size: .86rem; }
 .purchase-history > header p { margin: .18rem 0 0; color: var(--text-soft); font-size: .7rem; }
 .purchase-history__list { display: grid; margin: 0; padding: 0; list-style: none; }
-.purchase-history__list li { display: grid; grid-template-columns: .78fr 1fr 1fr auto; align-items: center; gap: .8rem; padding: .72rem .85rem; border-bottom: 1px solid var(--purchase-row-border); }
+.purchase-history__list li { display: grid; grid-template-columns: minmax(9rem,1.3fr) .72fr .85fr .9fr auto; align-items: center; gap: .8rem; padding: .72rem .85rem; border-bottom: 1px solid var(--purchase-row-border); }
 .purchase-history__list li:last-child { border-bottom: 0; }
 .purchase-history__list li > div { display: grid; min-width: 0; gap: .12rem; }
 .purchase-history__list span { color: var(--text-soft); font-size: .62rem; font-weight: 800; text-transform: uppercase; }

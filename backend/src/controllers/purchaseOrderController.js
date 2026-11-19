@@ -403,11 +403,10 @@ async function cancel(req, res, next) {
 
 async function history(req, res, next) {
   try {
-    const supplierId = cleanText(req.query.supplierId);
     const productId = cleanText(req.query.productId);
     const limit = Math.min(10, Math.max(0, Math.floor(Number(req.query.limit) || 2)));
-    if (!supplierId || !productId) return res.json([]);
-    return res.json(await getProductPurchaseHistory({ supplierId, productId, limit }));
+    if (!productId) return res.json([]);
+    return res.json(await getProductPurchaseHistory({ productId, limit }));
   } catch (error) {
     return purchaseSourceError(res, error);
   }

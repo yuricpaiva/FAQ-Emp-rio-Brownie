@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  getProductPurchaseHistory,
   historyPayload,
   productPayload,
   searchProducts,
@@ -42,6 +43,8 @@ test('mapeia a compra anterior usando quantidade e valor da embalagem', () => {
     source_id: 77,
     invoice_number: 1234,
     purchase_date: '2026-11-12',
+    supplier_name: 'FORTALI DIST DE ALIMENTOS LTDA',
+    supplier_cnpj: '09317318000175',
     product_id: '103',
     packaging: 'UNIDADE 5KG',
     unit_code: 'KG',
@@ -51,10 +54,28 @@ test('mapeia a compra anterior usando quantidade e valor da embalagem', () => {
     orderId: '77',
     orderNumber: 'NF 1234',
     createdAt: '2026-11-12',
+    supplier: { name: 'FORTALI DIST DE ALIMENTOS LTDA', cnpj: '09.317.318/0001-75' },
     quantity: '240',
     supplierUnit: { id: '103:KG:UNIDADE 5KG', everestId: '103:KG:UNIDADE 5KG', code: 'KG', label: 'UNIDADE 5KG' },
     unitPriceCents: 8390
   });
+});
+
+test('consulta as compras mais recentes do produto em todos os fornecedores', async () => {
+  const calls = [];
+  const database = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      return { rows: [] };
+    }
+  };
+
+  await getProductPurchaseHistory({ productId: ' 103 ', limit: 2, database });
+
+  assert.deepEqual(calls[0].params, ['103', 2]);
+  assert.match(calls[0].sql, /BTRIM\("Item"\) = \$1/);
+  assert.doesNotMatch(calls[0].sql, /cpf_cnpj_emitente[^\n]*= \$1/);
+  assert.match(calls[0].sql, /"Razão Emitente"/);
 });
 
 test('normaliza filtros antes de consultar fornecedores e produtos', async () => {
