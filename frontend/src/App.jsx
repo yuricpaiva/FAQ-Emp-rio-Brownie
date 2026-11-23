@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import FormsAccessRoute from "./components/FormsAccessRoute";
 import PurchasesAccessRoute from "./components/PurchasesAccessRoute";
 import SacAccessRoute from "./components/SacAccessRoute";
+import TableReservationsAccessRoute from "./components/TableReservationsAccessRoute";
 import PwaManager from "./components/PwaManager";
 import Sidebar from "./components/Sidebar";
 import { SystemNotificationProvider } from "./components/SystemNotification";
@@ -20,6 +21,7 @@ const ProductionPlanningSettings = lazy(() => import("./pages/ProductionPlanning
 const StockCounts = lazy(() => import("./pages/StockCounts"));
 const StockCountEntry = lazy(() => import("./pages/StockCountEntry"));
 const Reservations = lazy(() => import("./pages/Reservations"));
+const TableReservations = lazy(() => import("./pages/TableReservations"));
 const Events = lazy(() => import("./pages/Events"));
 const PurchaseOrders = lazy(() => import("./pages/PurchaseOrders"));
 const PurchaseOrderForm = lazy(() => import("./pages/PurchaseOrderForm"));
@@ -89,6 +91,7 @@ function AppRoutes() {
         />
         <Route path="/ranking-bolao" element={<ProtectedRoute><PoolRanking /></ProtectedRoute>} />
         <Route path="/reservas" element={<ProtectedRoute><Reservations /></ProtectedRoute>} />
+        <Route path="/reservas-mesas" element={<ProtectedRoute><TableReservationsAccessRoute><TableReservations /></TableReservationsAccessRoute></ProtectedRoute>} />
         <Route path="/eventos" element={<ProtectedRoute><Events /></ProtectedRoute>} />
         <Route path="/compras/pedidos" element={<ProtectedRoute roles={PURCHASE_ALLOWED_ROLES}><PurchasesAccessRoute><PurchaseOrders /></PurchasesAccessRoute></ProtectedRoute>} />
         <Route path="/compras/pedidos/novo" element={<ProtectedRoute roles={PURCHASE_ALLOWED_ROLES}><PurchasesAccessRoute><PurchaseOrderForm /></PurchasesAccessRoute></ProtectedRoute>} />

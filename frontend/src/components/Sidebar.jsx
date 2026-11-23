@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, BookOpen, CalendarDays, CalendarRange, ChevronDown, ClipboardCheck, FileText, Home, LayoutDashboard, LogOut, Menu, MessageSquareWarning, PackageCheck, Settings, ShoppingCart, Trophy, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, CalendarCheck2, CalendarDays, CalendarRange, ChevronDown, ClipboardCheck, FileText, Home, LayoutDashboard, LogOut, Menu, MessageSquareWarning, PackageCheck, Settings, ShoppingCart, Trophy, Wrench } from "lucide-react";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { getCategoryIcon } from "../constants/categoryIcons";
@@ -16,7 +16,7 @@ function initialSectionState(pathname) {
   return {
     agenda: pathname.startsWith("/eventos") || pathname.startsWith("/reservas"),
     knowledge: pathname.startsWith("/categoria") || pathname.startsWith("/artigo"),
-    operations: ["/planejamento-producao", "/contagem-estoque", "/forms", "/compras", "/sac"].some((path) => pathname.startsWith(path)),
+    operations: ["/planejamento-producao", "/contagem-estoque", "/forms", "/compras", "/sac", "/reservas-mesas"].some((path) => pathname.startsWith(path)),
     management: pathname.startsWith("/power-bi") || pathname.startsWith("/ranking-bolao") || pathname.startsWith("/admin"),
   };
 }
@@ -38,6 +38,7 @@ function Sidebar() {
   const [formsAccess, setFormsAccess] = useState(false);
   const [purchasesAccess, setPurchasesAccess] = useState(false);
   const [sacAccess, setSacAccess] = useState(false);
+  const [tableReservationsAccess, setTableReservationsAccess] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
@@ -108,6 +109,11 @@ function Sidebar() {
     loadAccess(); window.addEventListener("sac-settings-updated", loadAccess);
     return () => window.removeEventListener("sac-settings-updated", loadAccess);
   }, [user?.id, user?.role]);
+  useEffect(() => {
+    const loadAccess = () => api.get("/table-reservations/access").then((response) => setTableReservationsAccess(Boolean(response.data.hasAccess))).catch(() => setTableReservationsAccess(false));
+    loadAccess(); window.addEventListener("table-reservations-settings-updated", loadAccess);
+    return () => window.removeEventListener("table-reservations-settings-updated", loadAccess);
+  }, [user?.id, user?.role]);
   useEffect(() => { if (user) { setFormName(user.name || ""); setFormEmail(user.email || ""); } }, [user]);
   useEffect(() => { api.get("/knowledge/categories").then((res) => setCategories(res.data)).catch(() => setCategories([])); }, []);
   useEffect(() => {
@@ -144,7 +150,7 @@ function Sidebar() {
 
   const avatar = user?.photoUrl ? <img src={user.photoUrl} alt="" className="sidebar__avatar" /> : <span className="sidebar__avatar sidebar__avatar--fallback" aria-hidden="true">{initials}</span>;
   const sidebarClasses = ["sidebar", isMobile ? "sidebar--mobile" : "", isMobile && navigationOpen ? "sidebar--mobile-open" : ""].filter(Boolean).join(" ");
-  const operationActive = ["/planejamento-producao", "/contagem-estoque", "/forms", "/compras", "/sac"].some((path) => location.pathname.startsWith(path));
+  const operationActive = ["/planejamento-producao", "/contagem-estoque", "/forms", "/compras", "/sac", "/reservas-mesas"].some((path) => location.pathname.startsWith(path));
   const managementVisible = powerBiAccess || poolEnabled || hasRole(["creator", "admin"]);
 
   const sectionButton = (name, label, Icon, active = false) => (
@@ -187,6 +193,7 @@ function Sidebar() {
             {formsAccess && <><NavLink to="/forms/preenchimentos" className="sidebar__submenu-link" onClick={closeNavigation}><FileText size={15} aria-hidden="true" /><span>Preenchimentos</span></NavLink>{hasRole(["admin"]) && <NavLink to="/forms/modelos" className="sidebar__submenu-link" onClick={closeNavigation}><FileText size={15} aria-hidden="true" /><span>Modelos de formulário</span></NavLink>}</>}
             {hasRole(PURCHASE_ALLOWED_ROLES) && purchasesAccess && <NavLink to="/compras/pedidos" className="sidebar__submenu-link" onClick={closeNavigation}><ShoppingCart size={15} aria-hidden="true" /><span>Pedidos de compra</span></NavLink>}
             {sacAccess && <NavLink to="/sac/reclamacoes" className="sidebar__submenu-link" onClick={closeNavigation}><MessageSquareWarning size={15} aria-hidden="true" /><span>Reclamações do SAC</span></NavLink>}
+            {tableReservationsAccess && <NavLink to="/reservas-mesas" className="sidebar__submenu-link" onClick={closeNavigation}><CalendarCheck2 size={15} aria-hidden="true" /><span>Central de Reservas</span></NavLink>}
           </>)}
           {managementVisible && <>{sectionButton("management", "Gestão", Settings, location.pathname.startsWith("/power-bi") || location.pathname.startsWith("/ranking-bolao") || location.pathname.startsWith("/admin"))}{sectionMenu("management", <>
             {powerBiAccess && <NavLink to="/power-bi" className="sidebar__submenu-link" onClick={closeNavigation}><BarChart3 size={15} aria-hidden="true" /><span>Power BI</span></NavLink>}

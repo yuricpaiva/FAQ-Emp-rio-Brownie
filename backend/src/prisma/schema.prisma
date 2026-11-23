@@ -44,6 +44,9 @@ model User {
   sacComplaintsCreated       SacComplaint[]             @relation("SacComplaintCreatedBy")
   sacComplaintsAudited       SacComplaint[]             @relation("SacComplaintAuditedBy")
   sacHistoryEntries          SacComplaintHistory[]      @relation("SacHistoryActor")
+  tableReservationAccess     TableReservationAccess?
+  tableReservationsCreated   TableReservation[]          @relation("TableReservationCreatedBy")
+  tableReservationsCheckedIn TableReservation[]          @relation("TableReservationCheckedInBy")
 
   @@index([productionStoreId])
 }
@@ -439,6 +442,7 @@ model ProductionStore {
   sourceName      String
   displayName     String
   active          Boolean                   @default(true)
+  tableReservationsEnabled Boolean          @default(false)
   createdAt       DateTime                  @default(now())
   updatedAt       DateTime                  @updatedAt
   routes          ProductionStoreRoute[]
@@ -446,8 +450,69 @@ model ProductionStore {
   users           User[]                    @relation("UserProductionStore")
   stockCounts     StockCount[]
   formSubmissions FormSubmission[]
+  restaurantTables RestaurantTable[]
+  tableReservations TableReservation[]
 
   @@index([active, displayName])
+}
+
+model TableReservationAccess {
+  userId    Int      @id
+  canCreate Boolean  @default(false)
+  canView   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RestaurantTable {
+  id                Int                          @id @default(autoincrement())
+  productionStoreId Int
+  name              String
+  capacity          Int?
+  active            Boolean                      @default(true)
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  productionStore   ProductionStore              @relation(fields: [productionStoreId], references: [id], onDelete: Restrict)
+  reservations      TableReservationAssignment[]
+
+  @@unique([productionStoreId, name])
+  @@index([productionStoreId, active, name])
+}
+
+model TableReservation {
+  id                Int                          @id @default(autoincrement())
+  productionStoreId Int
+  customerName      String
+  customerEmail     String
+  reservationAt     DateTime
+  peopleCount       Int
+  status            String                       @default("CONFIRMADA")
+  createdById       Int
+  checkedInById     Int?
+  checkedInAt       DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  productionStore   ProductionStore              @relation(fields: [productionStoreId], references: [id], onDelete: Restrict)
+  createdBy         User                         @relation("TableReservationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  checkedInBy       User?                        @relation("TableReservationCheckedInBy", fields: [checkedInById], references: [id], onDelete: SetNull)
+  tables            TableReservationAssignment[]
+
+  @@index([productionStoreId, reservationAt])
+  @@index([productionStoreId, status, reservationAt])
+  @@index([createdById, createdAt])
+  @@index([checkedInById, checkedInAt])
+}
+
+model TableReservationAssignment {
+  tableReservationId Int
+  restaurantTableId  Int
+  createdAt          DateTime         @default(now())
+  reservation        TableReservation @relation(fields: [tableReservationId], references: [id], onDelete: Cascade)
+  table              RestaurantTable  @relation(fields: [restaurantTableId], references: [id], onDelete: Restrict)
+
+  @@id([tableReservationId, restaurantTableId])
+  @@index([restaurantTableId, tableReservationId])
 }
 
 model StockCount {

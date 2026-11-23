@@ -4,6 +4,7 @@ import api from "../services/api";
 import SystemNotification from "../components/SystemNotification";
 import BrowninhoSettings from "../components/settings/BrowninhoSettings";
 import SacSettings from "../components/settings/SacSettings";
+import TableReservationSettings from "../components/settings/TableReservationSettings";
 import { parseMoneyToCents } from "../utils/purchaseOrders";
 
 const formatMoneyInput = (cents) => (Number(cents || 0) / 100).toFixed(2).replace(".", ",");
@@ -77,7 +78,7 @@ function AdminSettings() {
 
   const activeUsersWithoutAdmins = users.filter((user) => user.role !== "admin");
   const activeCreators = users.filter((user) => user.role === "creator");
-  const tabs = [["general", "Geral"], ["forms", "Formulários"], ["purchases", "Compras"], ["sac", "SAC"], ["browninho", "Browninho"]];
+  const tabs = [["general", "Geral"], ["forms", "Formulários"], ["purchases", "Compras"], ["reservations", "Reservas"], ["sac", "SAC"], ["browninho", "Browninho"]];
   const handleTabKeyDown = (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -100,6 +101,7 @@ function AdminSettings() {
     {activeTab === "purchases" && <form className="surface-card settings-panel settings-tab-content" onSubmit={handlePurchasesSave}><div className="settings-panel__heading"><img src="/icon-operacao.svg" alt="" /><div><h2>Compras</h2><p>Defina compradores autorizados e quando o Romaneio deve incluir uma assinatura adicional.</p></div></div><div className="settings-access"><div><strong>Compradores autorizados</strong><span>{purchaseUserIds.length} selecionado{purchaseUserIds.length === 1 ? "" : "s"}</span><small>Somente usuários com perfil Criador podem ser compradores. Administradores sempre possuem acesso.</small></div><button type="button" className="button button--ghost" onClick={() => setShowPurchaseUserSelector((value) => !value)}>{showPurchaseUserSelector ? "Fechar seleção" : "Selecionar compradores"}</button></div>{showPurchaseUserSelector && <UserSelector users={activeCreators} selectedIds={purchaseUserIds} onChange={setPurchaseUserIds} />}<div className="settings-purchase-grid"><label className="settings-field"><span>Valor mínimo do pedido</span><div className="settings-money-input"><span>R$</span><input inputMode="decimal" value={purchaseSignatureThresholdInput} onChange={(event) => setPurchaseSignatureThresholdInput(event.target.value)} placeholder="0,00" required /></div><small>Pedidos a partir deste valor exigirão a assinatura. Use 0,00 para desativar.</small></label><label className="settings-field"><span>Identificação da assinatura</span><input type="text" maxLength="80" value={purchaseSignatureLabel} onChange={(event) => setPurchaseSignatureLabel(event.target.value)} placeholder="Ex.: Gerente Financeiro" /><small>Este texto será exibido abaixo da linha de assinatura no Romaneio.</small></label></div><div className="settings-panel__actions"><button type="submit" className="button" disabled={loading || saving}>{saving ? "Salvando..." : "Salvar configurações de compras"}</button></div>{purchasesMessage && <SystemNotification variant={purchasesMessage.toLowerCase().includes("sucesso") ? "success" : "error"}>{purchasesMessage}</SystemNotification>}</form>}
     {activeTab === "browninho" && <BrowninhoSettings />}
     {activeTab === "sac" && <SacSettings />}
+    {activeTab === "reservations" && <TableReservationSettings />}
     </div>
   </section>;
 }

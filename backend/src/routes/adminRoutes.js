@@ -73,6 +73,7 @@ const {
   updateAdminSettings
 } = require('../controllers/aiController');
 const sacController = require('../controllers/sacController');
+const tableReservationController = require('../controllers/tableReservationController');
 
 const router = Router();
 const canCreateContent = requireRole(['creator', 'admin']);
@@ -80,6 +81,12 @@ const adminOnly = requireRole(['admin']);
 const canPlanProduction = requireRole(['admin', 'production_manager']);
 
 router.use(authenticate);
+
+router.get('/table-reservation-settings', adminOnly, tableReservationController.adminSettings);
+router.put('/table-reservation-settings', adminOnly, tableReservationController.adminUpdateSettings);
+router.get('/restaurant-tables', adminOnly, tableReservationController.adminTables);
+router.post('/restaurant-tables', adminOnly, tableReservationController.adminCreateTable);
+router.put('/restaurant-tables/:id', adminOnly, tableReservationController.adminUpdateTable);
 
 router.put('/users/me', updateUserMe);
 router.post('/uploads', (req, res) => {

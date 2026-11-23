@@ -15,6 +15,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const calendarEventRoutes = require('./routes/calendarEventRoutes');
 const purchaseOrderRoutes = require('./routes/purchaseOrderRoutes');
 const sacRoutes = require('./routes/sacRoutes');
+const tableReservationRoutes = require('./routes/tableReservationRoutes');
 
 dotenv.config();
 
@@ -67,6 +68,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/events', calendarEventRoutes);
 app.use('/api/purchases', purchaseOrderRoutes);
 app.use('/api/sac', sacRoutes);
+app.use('/api/table-reservations', tableReservationRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });

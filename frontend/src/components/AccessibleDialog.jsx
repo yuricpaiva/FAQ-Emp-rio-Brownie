@@ -9,7 +9,7 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
-function AccessibleDialog({ children, className = "", labelId, onClose }) {
+function AccessibleDialog({ children, className = "", backdropClassName = "", labelId, onClose }) {
   const dialogRef = useRef(null);
 
   useEffect(() => {
@@ -45,7 +45,7 @@ function AccessibleDialog({ children, className = "", labelId, onClose }) {
   }, [onClose]);
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className={`modal-backdrop ${backdropClassName}`.trim()} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div ref={dialogRef} className={`modal-card ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={labelId}>
         {children}
       </div>
