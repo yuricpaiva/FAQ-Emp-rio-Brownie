@@ -16,12 +16,14 @@ const SYSTEMS = {
       database: 'DW_DB_NAME',
       user: 'DW_DB_USER',
       password: 'DW_DB_PASSWORD',
+      ssl: 'DW_DB_SSL',
     },
     defaults: {
       host: '177.126.247.194',
       port: 5437,
       database: 'brownie_3s',
       user: 'admin',
+      ssl: true,
     },
   },
   everest: {
@@ -67,7 +69,7 @@ function getEffectiveConfiguration(system) {
     const fallback = definition.defaults[field];
     const rawValue = process.env[envKey];
     if (field === 'port') config[field] = Number(rawValue || fallback);
-    else if (field === 'enabled') config[field] = rawValue === undefined ? fallback : parseBoolean(rawValue);
+    else if (field === 'enabled' || field === 'ssl') config[field] = rawValue === undefined ? fallback : parseBoolean(rawValue);
     else config[field] = String(rawValue ?? fallback ?? '');
   });
   config.passwordConfigured = Boolean(String(process.env[definition.keys.password] || '').trim());
@@ -84,8 +86,8 @@ function normalizeConfiguration(system, input = {}, { useCurrentPassword = true 
       config.password = suppliedPassword || (useCurrentPassword ? String(process.env[definition.keys.password] || '') : '');
     } else if (field === 'port') {
       config.port = Number(input.port ?? current.port);
-    } else if (field === 'enabled') {
-      config.enabled = input.enabled === undefined ? current.enabled : parseBoolean(input.enabled);
+    } else if (field === 'enabled' || field === 'ssl') {
+      config[field] = input[field] === undefined ? current[field] : parseBoolean(input[field]);
     } else {
       config[field] = String(input[field] ?? current[field] ?? '').trim();
     }
@@ -144,8 +146,13 @@ function getBusinessDate(timezone = 'America/Fortaleza', now = new Date()) {
 
 function safeConnectionError(error) {
   const code = String(error?.code || 'CONNECTION_FAILED');
+  const rawMessage = String(error?.message || '');
+  if (code === '28000' && /no encryption|ssl off/i.test(rawMessage)) {
+    return { code, message: 'O servidor PostgreSQL exige uma conexao SSL. Ative o SSL e teste novamente.' };
+  }
   const messages = {
     '28P01': 'Usuario ou senha recusados pelo PostgreSQL.',
+    '28000': 'Conexao recusada pelas regras de acesso do PostgreSQL.',
     '3D000': 'Banco de dados nao encontrado.',
     '42P01': 'Tabela necessaria nao encontrada.',
     '42501': 'Usuario sem permissao de leitura na tabela.',
@@ -184,6 +191,7 @@ async function testDwConnection(config, poolFactory = (poolConfig) => new Postgr
     database: config.database,
     user: config.user,
     password: config.password,
+    ssl: config.ssl ? { rejectUnauthorized: false } : false,
     max: 1,
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 1000,

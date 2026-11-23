@@ -2,6 +2,10 @@ const { Pool } = require('pg');
 
 let pool;
 
+function isSslEnabled(value) {
+  return value === undefined || value === true || String(value).toLowerCase() === 'true';
+}
+
 function getDwPool() {
   if (!pool) {
     pool = new Pool({
@@ -10,6 +14,7 @@ function getDwPool() {
       database: process.env.DW_DB_NAME || 'brownie_3s',
       user: process.env.DW_DB_USER || 'admin',
       password: process.env.DW_DB_PASSWORD,
+      ssl: isSslEnabled(process.env.DW_DB_SSL) ? { rejectUnauthorized: false } : false,
       max: 5,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,

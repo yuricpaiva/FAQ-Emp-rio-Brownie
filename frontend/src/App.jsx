@@ -17,7 +17,6 @@ const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const PowerBI = lazy(() => import("./pages/PowerBI"));
 const ProductionPlanning = lazy(() => import("./pages/ProductionPlanning"));
 const NewProductionPlanning = lazy(() => import("./pages/NewProductionPlanning"));
-const ProductionPlanningSettings = lazy(() => import("./pages/ProductionPlanningSettings"));
 const StockCounts = lazy(() => import("./pages/StockCounts"));
 const StockCountEntry = lazy(() => import("./pages/StockCountEntry"));
 const Reservations = lazy(() => import("./pages/Reservations"));
@@ -79,7 +78,7 @@ function AppRoutes() {
         />
         <Route
           path="/planejamento-producao/configuracoes"
-          element={<ProtectedRoute roles={["admin"]}><ProductionPlanningSettings /></ProtectedRoute>}
+          element={<ProtectedRoute roles={["admin"]}><Navigate to="/admin/configuracoes?tab=production" replace /></ProtectedRoute>}
         />
         <Route
           path="/contagem-estoque"

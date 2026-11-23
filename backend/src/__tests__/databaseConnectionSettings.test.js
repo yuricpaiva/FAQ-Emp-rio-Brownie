@@ -18,6 +18,7 @@ const dwConfig = {
   database: 'brownie_3s',
   user: 'admin',
   password: 'secret',
+  ssl: true,
 };
 
 const everestConfig = {
@@ -64,6 +65,7 @@ test('env updater preserves unrelated keys and replaces only selected values', (
 
 test('DW test validates tables and returns safe availability metadata', async () => {
   let ended = false;
+  let receivedPoolConfig;
   const fakePool = {
     async query(sql) {
       if (sql.includes('ORDER BY data_movimento')) return { rows: [{ latest_date: '2026-07-15' }] };
@@ -72,11 +74,38 @@ test('DW test validates tables and returns safe availability metadata', async ()
     },
     async end() { ended = true; },
   };
-  const result = await testDwConnection(dwConfig, () => fakePool);
+  const result = await testDwConnection(dwConfig, (poolConfig) => {
+    receivedPoolConfig = poolConfig;
+    return fakePool;
+  });
   assert.equal(result.success, true);
   assert.equal(result.todayCount, 12);
   assert.equal(result.logs.length, 4);
   assert.equal(ended, true);
+  assert.deepEqual(receivedPoolConfig.ssl, { rejectUnauthorized: false });
+});
+
+test('DW settings enable SSL by default and sanitize encryption errors', async () => {
+  const previous = process.env.DW_DB_SSL;
+  delete process.env.DW_DB_SSL;
+  try {
+    assert.equal(getEffectiveConfiguration('dw').ssl, true);
+  } finally {
+    if (previous === undefined) delete process.env.DW_DB_SSL;
+    else process.env.DW_DB_SSL = previous;
+  }
+
+  const fakePool = {
+    async query() {
+      throw Object.assign(new Error('no pg_hba.conf entry for host, no encryption'), { code: '28000' });
+    },
+    async end() {},
+  };
+  const result = await testDwConnection(dwConfig, () => fakePool);
+  assert.equal(result.success, false);
+  assert.equal(result.error.code, '28000');
+  assert.match(result.error.message, /exige uma conexao SSL/i);
+  assert.equal(JSON.stringify(result).includes('pg_hba.conf'), false);
 });
 
 test('DW test sanitizes authentication failures', async () => {

@@ -556,7 +556,7 @@ function ProductionPlanning() {
         <div className="production-toolbar-actions">
           {canAccessSettings && (
             <Link
-              to="/planejamento-producao/configuracoes"
+              to="/admin/configuracoes?tab=production"
               className="production-settings-link"
               aria-label="Configurações do planejamento"
               title="Configurações"

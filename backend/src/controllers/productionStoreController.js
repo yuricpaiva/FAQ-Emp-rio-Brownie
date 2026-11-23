@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const { queryDw } = require('../services/dwDatabase');
+const { safeConnectionError } = require('../services/databaseConnectionSettings');
 
 const prisma = new PrismaClient();
 
@@ -131,8 +132,9 @@ async function syncProductionStores(req, res) {
       stores: stores.map(mapStore)
     });
   } catch (error) {
-    console.error('Falha ao sincronizar lojas de producao:', error);
-    return res.status(500).json({ error: 'Nao foi possivel buscar as lojas no banco de vendas.' });
+    const safeError = safeConnectionError(error);
+    console.error('Falha ao sincronizar lojas de producao:', safeError);
+    return res.status(502).json({ error: safeError.message, code: safeError.code });
   }
 }
 

@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import SystemNotification from "../components/SystemNotification";
 import BrowninhoSettings from "../components/settings/BrowninhoSettings";
 import SacSettings from "../components/settings/SacSettings";
 import TableReservationSettings from "../components/settings/TableReservationSettings";
+import ProductionPlanningSettings from "./ProductionPlanningSettings";
 import { parseMoneyToCents } from "../utils/purchaseOrders";
 
 const formatMoneyInput = (cents) => (Number(cents || 0) / 100).toFixed(2).replace(".", ",");
+const settingsTabs = [["general", "Geral"], ["production", "Produção"], ["forms", "Formulários"], ["purchases", "Compras"], ["reservations", "Reservas"], ["sac", "SAC"], ["browninho", "Browninho"]];
+const validSettingsTabs = new Set(settingsTabs.map(([value]) => value));
 
 function UserSelector({ users, selectedIds, onChange }) {
   const toggle = (userId) => onChange(selectedIds.includes(userId) ? selectedIds.filter((id) => id !== userId) : [...selectedIds, userId]);
@@ -15,7 +18,9 @@ function UserSelector({ users, selectedIds, onChange }) {
 }
 
 function AdminSettings() {
-  const [activeTab, setActiveTab] = useState("general");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab = validSettingsTabs.has(requestedTab) ? requestedTab : "general";
   const [poolEnabled, setPoolEnabled] = useState(true);
   const [powerBiEnabled, setPowerBiEnabled] = useState(true);
   const [powerBiUrl, setPowerBiUrl] = useState("");
@@ -42,6 +47,13 @@ function AdminSettings() {
         setPoolEnabled(poolResponse.data.poolEnabled); setPowerBiEnabled(powerBiResponse.data.enabled); setPowerBiUrl(powerBiResponse.data.url); setPowerBiRefreshIntervalSeconds(powerBiResponse.data.refreshIntervalSeconds ?? 300); setSelectedUserIds(powerBiResponse.data.userIds); setFormsUserIds(formsResponse.data.userIds); setPurchaseUserIds(purchaseResponse.data.userIds || []); setPurchaseSignatureThresholdInput(formatMoneyInput(purchaseResponse.data.signatureThresholdCents)); setPurchaseSignatureLabel(purchaseResponse.data.signatureLabel || ""); setUsers(usersResponse.data.filter((user) => user.active));
       }).catch(() => setMessage("Não foi possível carregar as configurações.")).finally(() => setLoading(false));
   }, []);
+
+  const selectTab = (value) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value === "general") nextParams.delete("tab");
+    else nextParams.set("tab", value);
+    setSearchParams(nextParams, { replace: true });
+  };
 
   const handlePoolToggle = async (event) => {
     const nextValue = event.target.checked; setPoolEnabled(nextValue); setSaving(true); setMessage("");
@@ -78,18 +90,17 @@ function AdminSettings() {
 
   const activeUsersWithoutAdmins = users.filter((user) => user.role !== "admin");
   const activeCreators = users.filter((user) => user.role === "creator");
-  const tabs = [["general", "Geral"], ["forms", "Formulários"], ["purchases", "Compras"], ["reservations", "Reservas"], ["sac", "SAC"], ["browninho", "Browninho"]];
   const handleTabKeyDown = (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const currentIndex = tabs.findIndex(([value]) => value === activeTab);
-    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-    setActiveTab(tabs[nextIndex][0]);
-    window.requestAnimationFrame(() => document.getElementById(`settings-tab-${tabs[nextIndex][0]}`)?.focus());
+    const currentIndex = settingsTabs.findIndex(([value]) => value === activeTab);
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? settingsTabs.length - 1 : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + settingsTabs.length) % settingsTabs.length;
+    selectTab(settingsTabs[nextIndex][0]);
+    window.requestAnimationFrame(() => document.getElementById(`settings-tab-${settingsTabs[nextIndex][0]}`)?.focus());
   };
   return <section className="page-stack settings-page">
     <div className="section-heading section-heading--split"><div><span className="eyebrow">Administração</span><h1>Configurações</h1><p className="section-copy">Controle os recursos disponíveis para os colaboradores.</p></div><Link to="/admin/dashboard" className="button button--ghost">Voltar ao painel</Link></div>
-    <div className="settings-tabs" role="tablist" aria-label="Áreas de configuração" onKeyDown={handleTabKeyDown}>{tabs.map(([value, label]) => <button key={value} id={`settings-tab-${value}`} type="button" role="tab" aria-selected={activeTab === value} aria-controls="settings-active-panel" tabIndex={activeTab === value ? 0 : -1} className={activeTab === value ? "active" : ""} onClick={() => setActiveTab(value)}>{label}</button>)}</div>
+    <div className="settings-tabs" role="tablist" aria-label="Áreas de configuração" onKeyDown={handleTabKeyDown}>{settingsTabs.map(([value, label]) => <button key={value} id={`settings-tab-${value}`} type="button" role="tab" aria-selected={activeTab === value} aria-controls="settings-active-panel" tabIndex={activeTab === value ? 0 : -1} className={activeTab === value ? "active" : ""} onClick={() => selectTab(value)}>{label}</button>)}</div>
     <div id="settings-active-panel" role="tabpanel" aria-labelledby={`settings-tab-${activeTab}`}>
 
     {activeTab === "general" && <div className="settings-tab-content">
@@ -99,6 +110,7 @@ function AdminSettings() {
 
     {activeTab === "forms" && <form className="surface-card settings-panel settings-tab-content" onSubmit={handleFormsSave}><div className="settings-panel__heading"><img src="/icon-forms.svg" alt="" /><div><h2>Formulários</h2><p>Escolha quais usuários poderão acessar modelos autorizados, preenchimentos e observações.</p></div></div><div className="settings-access"><div><strong>Usuários com acesso</strong><span>{formsUserIds.length} selecionados</span><small>Administradores sempre possuem acesso.</small></div><button type="button" className="button button--ghost" onClick={() => setShowFormsUserSelector((value) => !value)}>{showFormsUserSelector ? "Fechar seleção" : "Selecionar usuários"}</button></div>{showFormsUserSelector && <UserSelector users={activeUsersWithoutAdmins} selectedIds={formsUserIds} onChange={setFormsUserIds} />}<div className="settings-panel__actions"><button type="submit" className="button" disabled={loading || saving}>{saving ? "Salvando..." : "Salvar acessos de Formulários"}</button></div>{formsMessage && <SystemNotification variant={formsMessage.toLowerCase().includes("sucesso") ? "success" : "error"}>{formsMessage}</SystemNotification>}</form>}
     {activeTab === "purchases" && <form className="surface-card settings-panel settings-tab-content" onSubmit={handlePurchasesSave}><div className="settings-panel__heading"><img src="/icon-operacao.svg" alt="" /><div><h2>Compras</h2><p>Defina compradores autorizados e quando o Romaneio deve incluir uma assinatura adicional.</p></div></div><div className="settings-access"><div><strong>Compradores autorizados</strong><span>{purchaseUserIds.length} selecionado{purchaseUserIds.length === 1 ? "" : "s"}</span><small>Somente usuários com perfil Criador podem ser compradores. Administradores sempre possuem acesso.</small></div><button type="button" className="button button--ghost" onClick={() => setShowPurchaseUserSelector((value) => !value)}>{showPurchaseUserSelector ? "Fechar seleção" : "Selecionar compradores"}</button></div>{showPurchaseUserSelector && <UserSelector users={activeCreators} selectedIds={purchaseUserIds} onChange={setPurchaseUserIds} />}<div className="settings-purchase-grid"><label className="settings-field"><span>Valor mínimo do pedido</span><div className="settings-money-input"><span>R$</span><input inputMode="decimal" value={purchaseSignatureThresholdInput} onChange={(event) => setPurchaseSignatureThresholdInput(event.target.value)} placeholder="0,00" required /></div><small>Pedidos a partir deste valor exigirão a assinatura. Use 0,00 para desativar.</small></label><label className="settings-field"><span>Identificação da assinatura</span><input type="text" maxLength="80" value={purchaseSignatureLabel} onChange={(event) => setPurchaseSignatureLabel(event.target.value)} placeholder="Ex.: Gerente Financeiro" /><small>Este texto será exibido abaixo da linha de assinatura no Romaneio.</small></label></div><div className="settings-panel__actions"><button type="submit" className="button" disabled={loading || saving}>{saving ? "Salvando..." : "Salvar configurações de compras"}</button></div>{purchasesMessage && <SystemNotification variant={purchasesMessage.toLowerCase().includes("sucesso") ? "success" : "error"}>{purchasesMessage}</SystemNotification>}</form>}
+    {activeTab === "production" && <ProductionPlanningSettings />}
     {activeTab === "browninho" && <BrowninhoSettings />}
     {activeTab === "sac" && <SacSettings />}
     {activeTab === "reservations" && <TableReservationSettings />}

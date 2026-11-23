@@ -412,6 +412,7 @@
   .settings-user-item input { width: 20px; height: 20px; }
 }
 
+
 @media (max-width: 390px) {
   .forms-mobile-filters__body { grid-template-columns: 1fr; }
   .forms-mobile-filters__clear { grid-column: auto; }
@@ -527,6 +528,8 @@
   .not-found__actions { width: 100%; }
   .not-found__actions .button { width: 100%; justify-content: center; }
 }
+
+
 .reservation-calendar-period { display: block; margin-top: 0.45rem; color: #9a5a34; font-size: 0.75rem; font-weight: 800; text-transform: capitalize; }
 .reservation-view-switch { display: inline-grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid rgba(107, 70, 52, 0.15); border-radius: 9px; background: #e9ded4; }
 .reservation-view-switch button { min-width: 74px; border: 0; border-radius: 6px; padding: 0.42rem 0.72rem; background: transparent; color: #73594d; font-size: 0.75rem; font-weight: 800; cursor: pointer; }
@@ -7198,6 +7201,118 @@ textarea:focus {
   .week-event,
   .week-day__skeleton,
   .event-agenda__skeleton { animation: none; transition: none; }
+}
+
+/* Production planning inside the system settings shell */
+.production-settings-embedded {
+  width: auto;
+  gap: 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.production-settings-embedded > .settings-panel,
+.production-settings-embedded__content,
+.production-settings-embedded__panel {
+  min-width: 0;
+}
+
+.production-settings-section-tabs {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(107, 70, 52, 0.35) transparent;
+}
+
+.production-settings-embedded__panel {
+  display: grid;
+  gap: 1.25rem;
+  padding-top: 0.25rem;
+}
+
+.production-settings-embedded__panel:focus-visible {
+  outline: 3px solid rgba(128, 79, 55, 0.3);
+  outline-offset: 4px;
+}
+
+.production-settings-embedded__heading {
+  display: grid;
+  gap: 0.35rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.production-settings-embedded__heading h3,
+.production-settings-embedded__heading p {
+  margin: 0;
+}
+
+.production-settings-embedded__heading h3 {
+  color: var(--brand-strong);
+  font-size: 1.2rem;
+}
+
+.production-settings-embedded__heading p {
+  max-width: 72ch;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.production-settings-embedded .button {
+  border-color: var(--brand);
+  border-radius: 8px;
+  background: var(--brand);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(74, 42, 25, 0.12);
+}
+
+.production-settings-embedded .button--ghost,
+.production-settings-embedded .production-settings-icon-button {
+  border-color: var(--border);
+  border-radius: 8px;
+  background: #fffdfb;
+  color: var(--brand-strong);
+}
+
+.production-settings-embedded .production-table-shell,
+.production-settings-embedded .database-connection-log,
+.production-settings-embedded .production-products-settings-table input,
+.production-settings-embedded .production-products-settings-table select,
+.production-settings-embedded .database-connection-fields input {
+  border-color: var(--border);
+  border-radius: 8px;
+}
+
+.production-settings-embedded .production-table th {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.production-settings-embedded .production-table tbody tr:hover td {
+  background: rgba(238, 228, 220, 0.42);
+}
+
+.production-settings-embedded .production-products-settings-table input:focus,
+.production-settings-embedded .production-products-settings-table select:focus,
+.production-settings-embedded .database-connection-fields input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(128, 79, 55, 0.16);
+}
+
+.production-settings-embedded input[type="checkbox"] {
+  accent-color: var(--brand);
+}
+
+@media (max-width: 640px) {
+  .production-settings-embedded > .settings-panel {
+    padding: 1rem;
+  }
+
+  .production-settings-section-tabs button {
+    flex: 0 0 auto;
+  }
 }
 
 /* Accessibility and navigation refinements from the full UX audit. */

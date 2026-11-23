@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import api from "../services/api";
 import { normalizeDecimalInput } from "../utils/decimalInput";
 import { compareProductsByName, sortProductsByName } from "../utils/productSorting";
@@ -1147,6 +1146,7 @@ function ConnectionLog({ result }) {
 function DatabaseConnectionSection({ system, title, description, state, setState }) {
   const configuration = state.configuration || {};
   const isEverest = system === "everest";
+  const isDw = system === "dw";
 
   const updateField = (field, value) => {
     setState((current) => ({
@@ -1264,6 +1264,16 @@ function DatabaseConnectionSection({ system, title, description, state, setState
               onChange={(event) => updateField("enabled", event.target.checked)}
             />
             <span>Conexão ativa</span>
+          </label>
+        )}
+        {isDw && (
+          <label className="database-connection-enabled">
+            <input
+              type="checkbox"
+              checked={configuration.ssl !== false}
+              onChange={(event) => updateField("ssl", event.target.checked)}
+            />
+            <span>Usar conexão SSL</span>
           </label>
         )}
       </div>
@@ -1395,10 +1405,10 @@ function ProductionPlanningSettings() {
   };
 
   const handleTabKeyDown = (event) => {
-    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+    if (event.key === "ArrowRight") {
       event.preventDefault();
       selectTabByIndex(currentTabIndex + 1);
-    } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+    } else if (event.key === "ArrowLeft") {
       event.preventDefault();
       selectTabByIndex(currentTabIndex - 1);
     } else if (event.key === "Home") {
@@ -1411,77 +1421,54 @@ function ProductionPlanningSettings() {
   };
 
   return (
-    <section className="production-planning-page production-settings-page">
-      <nav className="production-settings-breadcrumb" aria-label="Navegação estrutural">
-        <Link to="/planejamento-producao">Planejamento de produção</Link>
-        <span aria-hidden="true">/</span>
-        <span aria-current="page">Configurações</span>
-      </nav>
-
-      <header className="production-settings-header">
-        <div className="production-settings-header__index" aria-hidden="true">04</div>
-        <div className="production-settings-header__copy">
-          <h1>Configurações do planejamento</h1>
-          <p>Gerencie as bases e regras que sustentam a sugestão de produção.</p>
+    <div className="settings-tab-content production-settings-page production-settings-embedded">
+      <section className="surface-card settings-panel">
+        <div className="settings-panel__heading">
+          <img src="/icon-configuracoes-planejamento.svg" alt="" />
+          <div>
+            <h2>Planejamento de produção</h2>
+            <p>Gerencie as lojas, o catálogo, as conversões e as integrações usadas no planejamento.</p>
+          </div>
         </div>
-        <Link to="/planejamento-producao" className="button production-settings-header__back">
-          Voltar
-        </Link>
-      </header>
 
-      <div className="production-settings-workspace">
-        <aside className="production-settings-nav" aria-label="Seções de configuração">
-          <div className="production-settings-nav__heading">
-            <span>Seções</span>
-            <span>{settingsTabs.length}</span>
-          </div>
-          <div
-            ref={tabListRef}
-            className="production-settings-tabs"
-            role="tablist"
-            aria-orientation="vertical"
-            aria-label="Configurações do planejamento"
-            onKeyDown={handleTabKeyDown}
-          >
-            {settingsTabs.map((tab, index) => (
-              <button
-                key={tab.id}
-                id={`production-settings-tab-${tab.id}`}
-                data-tab-id={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                aria-controls={`production-settings-panel-${tab.id}`}
-                tabIndex={activeTab === tab.id ? 0 : -1}
-                className={activeTab === tab.id ? "production-settings-tabs__item--active" : ""}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <span className="production-settings-tabs__number">{String(index + 1).padStart(2, "0")}</span>
-                <span className="production-settings-tabs__label">
-                  <strong>{tab.label}</strong>
-                  <small>{tab.description}</small>
-                </span>
-              </button>
-            ))}
-          </div>
-        </aside>
+        <div
+          ref={tabListRef}
+          className="settings-tabs production-settings-section-tabs"
+          role="tablist"
+          aria-label="Configurações do planejamento"
+          onKeyDown={handleTabKeyDown}
+        >
+          {settingsTabs.map((tab) => (
+            <button
+              key={tab.id}
+              id={`production-settings-tab-${tab.id}`}
+              data-tab-id={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={`production-settings-panel-${tab.id}`}
+              tabIndex={activeTab === tab.id ? 0 : -1}
+              className={activeTab === tab.id ? "active" : ""}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-        <section
+        <div
           id={`production-settings-panel-${activeTab}`}
-          className="production-settings-panel"
+          className="production-settings-embedded__panel"
           role="tabpanel"
           aria-labelledby={`production-settings-tab-${activeTab}`}
-          tabIndex="0"
+          tabIndex={0}
         >
-          <header className="production-settings-panel__header">
-            <span>{String(currentTabIndex + 1).padStart(2, "0")}</span>
-            <div>
-              <h2>{currentTab.title}</h2>
-              <p>{currentTab.description}</p>
-            </div>
+          <header className="production-settings-embedded__heading">
+            <h3>{currentTab.title}</h3>
+            <p>{currentTab.description}</p>
           </header>
 
-          <div className="production-settings-panel__content">
+          <div className="production-settings-embedded__content">
             {activeTab === "general" ? (
               <GeneralSettings />
             ) : activeTab === "products" ? (
@@ -1492,9 +1479,9 @@ function ProductionPlanningSettings() {
               <ConnectionsSettings />
             )}
           </div>
-        </section>
-      </div>
-    </section>
+        </div>
+      </section>
+    </div>
   );
 }
 
