@@ -27,6 +27,17 @@ function tableNames(tables) {
   return tables?.length ? tables.map((table) => table.name).join(", ") : "—";
 }
 
+function maskBrazilianPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 11);
+  if (!digits) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  const areaCode = `(${digits.slice(0, 2)})`;
+  const number = digits.slice(2);
+  if (number.length <= 4) return `${areaCode} ${number}`;
+  const firstPartLength = number.length > 8 ? 5 : 4;
+  return `${areaCode} ${number.slice(0, firstPartLength)}-${number.slice(firstPartLength)}`;
+}
+
 function SummaryStrip({ summary }) {
   return <section className="table-reservation-summary" aria-label="Resumo do dia">
     <div><span>Reservas</span><strong>{summary.reservations}</strong></div>
@@ -38,7 +49,7 @@ function SummaryStrip({ summary }) {
 function NewReservationDialog({ units, initialUnitId, initialDate, onClose, onCreated }) {
   const [form, setForm] = useState({
     unitId: String(initialUnitId || ""), reservationDate: initialDate, reservationTime: "",
-    customerName: "", customerEmail: "", peopleCount: "1",
+    customerName: "", customerEmail: "", customerPhone: "", peopleCount: "1",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -70,6 +81,7 @@ function NewReservationDialog({ units, initialUnitId, initialDate, onClose, onCr
       </div>
       <label><span>Nome completo</span><input maxLength="160" autoComplete="name" value={form.customerName} onChange={(event) => update("customerName", event.target.value)} required /></label>
       <label><span>E-mail</span><input type="email" maxLength="254" autoComplete="email" value={form.customerEmail} onChange={(event) => update("customerEmail", event.target.value)} required /></label>
+      <label><span>Número do cliente</span><input type="tel" inputMode="tel" maxLength="15" autoComplete="tel" placeholder="(85) 99999-9999" value={form.customerPhone} onChange={(event) => update("customerPhone", maskBrazilianPhone(event.target.value))} required /></label>
       <label><span>Quantidade de pessoas</span><input type="number" min="1" max="500" inputMode="numeric" value={form.peopleCount} onChange={(event) => update("peopleCount", event.target.value)} required /></label>
       <div className="table-reservation-form__actions"><button type="button" className="button button--ghost" onClick={onClose}>Cancelar</button><button className="button" disabled={saving}>{saving ? "Salvando..." : "Criar reserva"}</button></div>
     </form>

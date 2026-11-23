@@ -5,6 +5,8 @@ const SAO_PAULO_TIME_ZONE = 'America/Sao_Paulo';
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_INPUT_PATTERN = /^[\d\s()+.-]+$/;
+const PHONE_DIGITS_PATTERN = /^\d{10,11}$/;
 const STATUS = Object.freeze({ CONFIRMED: 'CONFIRMADA', CHECKED_IN: 'COMPARECEU' });
 
 class TableReservationError extends Error {
@@ -176,6 +178,11 @@ async function createReservation(data, user) {
   const customerName = requiredText(data?.customerName, 'Nome completo', 160);
   const customerEmail = requiredText(data?.customerEmail, 'E-mail', 254).toLowerCase();
   if (!EMAIL_PATTERN.test(customerEmail)) throw new TableReservationError(400, 'Informe um e-mail válido.');
+  const customerPhoneInput = requiredText(data?.customerPhone, 'Número do cliente', 24);
+  const customerPhone = customerPhoneInput.replace(/\D/g, '');
+  if (!PHONE_INPUT_PATTERN.test(customerPhoneInput) || !PHONE_DIGITS_PATTERN.test(customerPhone)) {
+    throw new TableReservationError(400, 'Informe um telefone válido com DDD.');
+  }
   const peopleCount = Number(data?.peopleCount);
   if (!Number.isInteger(peopleCount) || peopleCount < 1 || peopleCount > 500) {
     throw new TableReservationError(400, 'A quantidade de pessoas deve ser um número inteiro entre 1 e 500.');
@@ -183,7 +190,7 @@ async function createReservation(data, user) {
   const reservationAt = localInstant(String(data?.reservationDate || ''), String(data?.reservationTime || ''));
   if (reservationAt <= new Date()) throw new TableReservationError(400, 'Não é possível criar uma reserva no passado.');
   const created = await prisma.tableReservation.create({
-    data: { productionStoreId: store.id, customerName, customerEmail, reservationAt, peopleCount, createdById: user.id },
+    data: { productionStoreId: store.id, customerName, customerEmail, customerPhone, reservationAt, peopleCount, createdById: user.id },
     include: reservationInclude,
   });
   return serializeReservation(created);

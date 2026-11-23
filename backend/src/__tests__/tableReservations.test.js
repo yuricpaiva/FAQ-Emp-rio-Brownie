@@ -90,7 +90,7 @@ test('table reservation flow enforces access, unit scope and atomic check-in', a
 
   const payload = {
     unitId: storeA.id, customerName: 'Cliente Reserva', customerEmail: 'CLIENTE@EXAMPLE.COM',
-    reservationDate: '2099-11-23', reservationTime: '19:30', peopleCount: 8,
+    customerPhone: '(85) 99999-1234', reservationDate: '2099-11-23', reservationTime: '19:30', peopleCount: 8,
   };
   assert.equal((await request(base, '/table-reservations', { method: 'POST', cookie: viewerCookie, body: payload })).status, 403);
   assert.equal((await request(base, '/table-reservations', {
@@ -98,6 +98,9 @@ test('table reservation flow enforces access, unit scope and atomic check-in', a
   })).status, 404);
   assert.equal((await request(base, '/table-reservations', {
     method: 'POST', cookie: creatorCookie, body: { ...payload, customerEmail: 'email-invalido' },
+  })).status, 400);
+  assert.equal((await request(base, '/table-reservations', {
+    method: 'POST', cookie: creatorCookie, body: { ...payload, customerPhone: '1234' },
   })).status, 400);
   assert.equal((await request(base, '/table-reservations', {
     method: 'POST', cookie: creatorCookie, body: { ...payload, peopleCount: 0 },
@@ -112,6 +115,8 @@ test('table reservation flow enforces access, unit scope and atomic check-in', a
   assert.equal(reservation.status, 'CONFIRMADA');
   assert.equal(reservation.customerEmail, 'cliente@example.com');
   assert.deepEqual(reservation.tables, []);
+  const storedReservation = await prisma.tableReservation.findUnique({ where: { id: reservation.id }, select: { customerPhone: true } });
+  assert.equal(storedReservation.customerPhone, '85999991234');
 
   const list = await expectJson(await request(base, `/table-reservations?unitId=${storeA.id}&date=2099-11-23`, { cookie: viewerCookie }), 200);
   assert.equal(list.items.length, 1);

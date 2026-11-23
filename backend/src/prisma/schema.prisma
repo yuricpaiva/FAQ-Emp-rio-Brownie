@@ -485,6 +485,7 @@ model TableReservation {
   productionStoreId Int
   customerName      String
   customerEmail     String
+  customerPhone     String?
   reservationAt     DateTime
   peopleCount       Int
   status            String                       @default("CONFIRMADA")
