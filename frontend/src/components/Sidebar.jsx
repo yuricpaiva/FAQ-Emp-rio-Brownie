@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, BookOpen, CalendarCheck2, CalendarDays, CalendarRange, ChevronDown, ClipboardCheck, FileText, Home, LayoutDashboard, LogOut, Menu, MessageSquareWarning, PackageCheck, Settings, ShoppingCart, Trophy, Wrench } from "lucide-react";
+import { BarChart3, BookOpen, CalendarCheck2, CalendarDays, CalendarRange, ChevronDown, ClipboardCheck, FileText, Home, LayoutDashboard, LogOut, Menu, MessageSquareWarning, PackageCheck, PanelLeftClose, PanelLeftOpen, Settings, ShoppingCart, Trophy, Wrench } from "lucide-react";
 import api from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { getCategoryIcon } from "../constants/categoryIcons";
@@ -31,6 +31,7 @@ function Sidebar() {
   const wasMobileOpen = useRef(false);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const [desktopCollapseOverride, setDesktopCollapseOverride] = useState(null);
   const [sections, setSections] = useState(() => initialSectionState(window.location.pathname));
   const [categories, setCategories] = useState([]);
   const [poolEnabled, setPoolEnabled] = useState(false);
@@ -149,37 +150,53 @@ function Sidebar() {
   };
 
   const avatar = user?.photoUrl ? <img src={user.photoUrl} alt="" className="sidebar__avatar" /> : <span className="sidebar__avatar sidebar__avatar--fallback" aria-hidden="true">{initials}</span>;
-  const sidebarClasses = ["sidebar", isMobile ? "sidebar--mobile" : "", isMobile && navigationOpen ? "sidebar--mobile-open" : ""].filter(Boolean).join(" ");
+  const isPowerBiRoute = location.pathname === "/power-bi";
+  const isCollapsed = !isMobile && (desktopCollapseOverride ?? isPowerBiRoute);
+  const sidebarClasses = ["sidebar", isMobile ? "sidebar--mobile" : "", isMobile && navigationOpen ? "sidebar--mobile-open" : "", isCollapsed ? "sidebar--collapsed" : ""].filter(Boolean).join(" ");
   const operationActive = ["/planejamento-producao", "/contagem-estoque", "/forms", "/compras", "/sac", "/reservas-mesas"].some((path) => location.pathname.startsWith(path));
   const managementVisible = powerBiAccess || poolEnabled || hasRole(["creator", "admin"]);
 
+  const handleSidebarToggle = () => setDesktopCollapseOverride(!isCollapsed);
+  const handleSectionToggle = (name) => {
+    if (isCollapsed) {
+      setDesktopCollapseOverride(false);
+      setSections((current) => ({ ...current, [name]: true }));
+      return;
+    }
+    toggleSection(name);
+  };
+
   const sectionButton = (name, label, Icon, active = false) => (
-    <button type="button" className={`sidebar__link ${active ? "active" : ""}`} onClick={() => toggleSection(name)} aria-expanded={sections[name]} aria-controls={`${name}-menu`} aria-label={label} data-tooltip={label}>
+    <button type="button" className={`sidebar__link ${active ? "active" : ""}`} onClick={() => handleSectionToggle(name)} aria-expanded={!isCollapsed && sections[name]} aria-controls={`${name}-menu`} aria-label={label} title={isCollapsed ? label : undefined} data-tooltip={label}>
       <Icon className="sidebar__nav-icon" aria-hidden="true" /><span className="sidebar__label">{label}</span><ChevronDown size={14} className={`sidebar__chevron ${sections[name] ? "sidebar__chevron--open" : ""}`} aria-hidden="true" />
     </button>
   );
-  const sectionMenu = (name, content) => (
-    <div
-      id={`${name}-menu`}
-      className={`sidebar__submenu-shell ${sections[name] ? "sidebar__submenu-shell--open" : ""}`}
-      aria-hidden={!sections[name]}
-      inert={!sections[name] ? "" : undefined}
-    >
-      <div className="sidebar__submenu">{content}</div>
-    </div>
-  );
+  const sectionMenu = (name, content) => {
+    const menuVisible = sections[name] && !isCollapsed;
+    return (
+      <div
+        id={`${name}-menu`}
+        className={`sidebar__submenu-shell ${menuVisible ? "sidebar__submenu-shell--open" : ""}`}
+        aria-hidden={!menuVisible}
+        inert={!menuVisible ? "" : undefined}
+      >
+        <div className="sidebar__submenu">{content}</div>
+      </div>
+    );
+  };
 
   return <>
     <aside ref={sidebarRef} className={sidebarClasses}>
       <div className="sidebar__top">
         <Link to="/" className="sidebar__brand" onClick={closeNavigation}><span className="sidebar__brand-kicker">EMPÓRIO BROWNIE</span><strong>FAQ</strong></Link>
+        {!isMobile && <button type="button" className="sidebar__collapse-toggle" onClick={handleSidebarToggle} aria-expanded={!isCollapsed} aria-controls="sidebar-navigation" aria-label={isCollapsed ? "Expandir barra lateral" : "Retrair barra lateral"} title={isCollapsed ? "Expandir barra lateral" : "Retrair barra lateral"}>{isCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}</button>}
         {isMobile && <div className="sidebar__top-actions"><NotificationBell /><button type="button" className="sidebar__mobile-profile" onClick={openProfile} aria-label="Abrir perfil">{avatar}</button><button ref={toggleRef} type="button" className="sidebar__toggle" onClick={() => setNavigationOpen((value) => !value)} aria-expanded={navigationOpen} aria-controls="sidebar-navigation" aria-label={navigationOpen ? "Fechar menu" : "Abrir menu"}><Menu size={20} /></button></div>}
       </div>
 
       <nav ref={navRef} id="sidebar-navigation" className="sidebar__nav" aria-label="Navegação principal" aria-hidden={isMobile && !navigationOpen ? "true" : undefined}>
         <div className="sidebar__group sidebar__group--primary">
-          <NavLink to="/" end className="sidebar__link" onClick={closeNavigation} aria-label="Início" data-tooltip="Início"><Home className="sidebar__nav-icon" aria-hidden="true" /><span className="sidebar__label">Início</span></NavLink>
-          <NavLink to="/assistente" className="sidebar__link" onClick={closeNavigation} aria-label="Browninho" data-tooltip="Browninho"><span className="sidebar__nav-icon sidebar__browninho-icon" aria-hidden="true" /><span className="sidebar__label">Browninho</span></NavLink>
+          <NavLink to="/" end className="sidebar__link" onClick={closeNavigation} aria-label="Início" title={isCollapsed ? "Início" : undefined} data-tooltip="Início"><Home className="sidebar__nav-icon" aria-hidden="true" /><span className="sidebar__label">Início</span></NavLink>
+          <NavLink to="/assistente" className="sidebar__link" onClick={closeNavigation} aria-label="Browninho" title={isCollapsed ? "Browninho" : undefined} data-tooltip="Browninho"><span className="sidebar__nav-icon sidebar__browninho-icon" aria-hidden="true" /><span className="sidebar__label">Browninho</span></NavLink>
         </div>
         <div className="sidebar__group">
           {sectionButton("agenda", "Agenda", CalendarRange, location.pathname.startsWith("/eventos") || location.pathname.startsWith("/reservas"))}
@@ -203,7 +220,7 @@ function Sidebar() {
           </>)}</>}
         </div>
         <div className="sidebar__spacer" />
-        <div className="sidebar__footer">{!isMobile && <NotificationBell variant="navigation" />}<button type="button" className="sidebar__profile" onClick={openProfile} aria-label={`Editar perfil de ${user?.name || "usuário"}`}>{avatar}<span className="sidebar__profile-copy"><strong>{user?.name}</strong><small>Editar perfil</small></span></button><button type="button" className="sidebar__logout" onClick={handleLogout} aria-label="Sair"><LogOut className="sidebar__nav-icon" aria-hidden="true" /><span className="sidebar__label">Sair</span></button></div>
+        <div className="sidebar__footer">{!isMobile && <div title={isCollapsed ? "Notificações" : undefined}><NotificationBell variant="navigation" /></div>}<button type="button" className="sidebar__profile" onClick={openProfile} aria-label={`Editar perfil de ${user?.name || "usuário"}`} title={isCollapsed ? "Editar perfil" : undefined}>{avatar}<span className="sidebar__profile-copy"><strong>{user?.name}</strong><small>Editar perfil</small></span></button><button type="button" className="sidebar__logout" onClick={handleLogout} aria-label="Sair" title={isCollapsed ? "Sair" : undefined}><LogOut className="sidebar__nav-icon" aria-hidden="true" /><span className="sidebar__label">Sair</span></button></div>
       </nav>
     </aside>
     {isMobile && navigationOpen && <button type="button" className="sidebar__mobile-overlay" onClick={closeNavigation} aria-label="Fechar menu" />}
