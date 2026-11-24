@@ -227,14 +227,15 @@ const getAuditNavigation = handleAction(async (req, res) => {
 const updateComplaint = handleAction(async (req, res) => {
   const id = parseId(req.params.id);
   const before = await accessibleComplaint(id);
-  const isOwnerEditable = before.createdById === req.user.id && ['RASCUNHO', 'DEVOLVIDA'].includes(before.workflowStatus);
+  const isOwnerEditable = before.createdById === req.user.id && ['RASCUNHO', 'PENDENTE_AUDITORIA', 'DEVOLVIDA'].includes(before.workflowStatus);
   if (!isOwnerEditable && !req.sacCapabilities.canManage && !req.sacCapabilities.canAudit) fail(403, 'Esta reclamação não pode mais ser editada por você.');
   const data = await validatePayload(req.body);
   const changes = diffComplaint(before, data);
   const item = await prisma.$transaction(async (tx) => {
-    const updated = await tx.sacComplaint.update({ where: { id }, data, include: complaintInclude });
+    const result = await tx.sacComplaint.updateMany({ where: { id, workflowStatus: before.workflowStatus }, data });
+    if (result.count !== 1) fail(409, 'A reclamação foi alterada durante a edição. Recarregue a página e tente novamente.');
     if (Object.keys(changes).length) await tx.sacComplaintHistory.create({ data: { complaintId: id, actorId: req.user.id, action: 'EDITADA', changesJson: JSON.stringify(changes) } });
-    return updated;
+    return tx.sacComplaint.findUnique({ where: { id }, include: complaintInclude });
   });
   return res.json(serializeComplaint(item));
 }, 'Falha ao atualizar reclamação.');
@@ -242,9 +243,10 @@ const updateComplaint = handleAction(async (req, res) => {
 const deleteComplaint = handleAction(async (req, res) => {
   const id = parseId(req.params.id);
   const item = await accessibleComplaint(id);
-  if (item.workflowStatus !== 'RASCUNHO') fail(409, 'Somente rascunhos podem ser excluídos.');
-  if (item.createdById !== req.user.id && !req.sacCapabilities.canManage) fail(403, 'Você não pode excluir este rascunho.');
-  await prisma.sacComplaint.delete({ where: { id } });
+  if (!['RASCUNHO', 'PENDENTE_AUDITORIA'].includes(item.workflowStatus)) fail(409, 'Somente rascunhos ou reclamações pendentes podem ser excluídos.');
+  if (item.createdById !== req.user.id && !req.sacCapabilities.canManage) fail(403, 'Você não pode excluir esta reclamação.');
+  const result = await prisma.sacComplaint.deleteMany({ where: { id, workflowStatus: item.workflowStatus } });
+  if (result.count !== 1) fail(409, 'A reclamação foi alterada antes da exclusão. Recarregue a página e tente novamente.');
   return res.status(204).end();
 }, 'Falha ao excluir reclamação.');
 

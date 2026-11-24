@@ -12,6 +12,8 @@ router.get('/tables', controller.tables);
 router.get('/', controller.list);
 router.post('/', controller.create);
 router.post('/:id/check-in', controller.checkIn);
+router.put('/:id', controller.update);
+router.delete('/:id', controller.remove);
 router.get('/:id', controller.detail);
 
 module.exports = router;

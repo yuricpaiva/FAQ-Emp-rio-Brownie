@@ -31,6 +31,13 @@ module.exports = {
   units: action((req) => service.listUnits(req.user), 'Não foi possível listar as unidades.'),
   list: action((req) => service.listReservations(req.query, req.user), 'Não foi possível listar as reservas.'),
   create: action((req) => service.createReservation(req.body, req.user), 'Não foi possível criar a reserva.', 201),
+  update: action((req) => service.updateReservation(req.params.id, req.body, req.user), 'Não foi possível atualizar a reserva.'),
+  remove: async (req, res) => {
+    try {
+      await service.deleteReservation(req.params.id, req.user);
+      return res.status(204).end();
+    } catch (error) { return handle(res, error, 'Não foi possível excluir a reserva.'); }
+  },
   detail: action((req) => service.getReservation(req.params.id, req.user), 'Não foi possível consultar a reserva.'),
   tables: action((req) => service.listTables(req.query, req.user), 'Não foi possível listar as mesas.'),
   checkIn: action((req) => service.checkInReservation(req.params.id, req.body, req.user), 'Não foi possível confirmar o comparecimento.'),

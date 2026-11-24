@@ -73,8 +73,15 @@ test('SAC enforces access and preserves the complete complaint audit workflow', 
 
   const submitted = await request(base, `/sac/complaints/${complaint.id}/submit`, creatorCookie, { method: 'POST' });
   assert.equal(submitted.status, 200, await submitted.clone().text());
-  const lockedEdit = await request(base, `/sac/complaints/${complaint.id}`, creatorCookie, { method: 'PUT', body: JSON.stringify({ ...payload, customerName: 'Alterado' }) });
-  assert.equal(lockedEdit.status, 403);
+  const pendingEdit = await request(base, `/sac/complaints/${complaint.id}`, creatorCookie, { method: 'PUT', body: JSON.stringify({ ...payload, customerName: 'Cliente Alterada' }) });
+  assert.equal(pendingEdit.status, 200, await pendingEdit.clone().text());
+  const pendingEditPayload = await pendingEdit.json();
+  assert.equal(pendingEditPayload.workflowStatus, 'PENDENTE_AUDITORIA');
+  assert.equal(pendingEditPayload.customerName, 'Cliente Alterada');
+  const viewerEdit = await request(base, `/sac/complaints/${complaint.id}`, viewerCookie, { method: 'PUT', body: JSON.stringify({ ...payload, customerName: 'Alteração indevida' }) });
+  assert.equal(viewerEdit.status, 403);
+  const viewerDelete = await request(base, `/sac/complaints/${complaint.id}`, viewerCookie, { method: 'DELETE' });
+  assert.equal(viewerDelete.status, 403);
   const nonAuditorReturn = await request(base, `/sac/complaints/${complaint.id}/return`, adminCookie, { method: 'POST', body: JSON.stringify({ reason: 'Teste' }) });
   assert.equal(nonAuditorReturn.status, 403);
   const missingReason = await request(base, `/sac/complaints/${complaint.id}/return`, auditorCookie, { method: 'POST', body: JSON.stringify({ reason: '' }) });
@@ -101,18 +108,23 @@ test('SAC enforces access and preserves the complete complaint audit workflow', 
     assert.equal(queuePayload.next.id, secondComplaint.id);
     assert.equal(queuePayload.previous.id, secondComplaint.id);
   }
+  const deletedPending = await request(base, `/sac/complaints/${secondComplaint.id}`, creatorCookie, { method: 'DELETE' });
+  assert.equal(deletedPending.status, 204, await deletedPending.clone().text());
+  assert.equal((await request(base, `/sac/complaints/${secondComplaint.id}`, creatorCookie)).status, 404);
   const missingStore = await request(base, `/sac/complaints/${complaint.id}/audit`, auditorCookie, { method: 'POST', body: JSON.stringify({}) });
   assert.equal(missingStore.status, 400);
   const audited = await request(base, `/sac/complaints/${complaint.id}/audit`, auditorCookie, { method: 'POST', body: JSON.stringify({ offenderStoreId: offenderStore.id, reason: 'Origem confirmada.' }) });
   assert.equal(audited.status, 200, await audited.clone().text());
   assert.equal((await audited.json()).workflowStatus, 'AUDITADA');
+  const auditedDelete = await request(base, `/sac/complaints/${complaint.id}`, creatorCookie, { method: 'DELETE' });
+  assert.equal(auditedDelete.status, 409);
 
   const filtered = await request(base, '/sac/complaints?workflowStatus=AUDITADA&pageSize=50', viewerCookie);
   assert.equal(filtered.status, 200, await filtered.clone().text());
   assert.equal((await filtered.json()).items.some((item) => item.id === complaint.id), true);
   const detail = await request(base, `/sac/complaints/${complaint.id}`, viewerCookie);
   const detailPayload = await detail.json();
-  assert.deepEqual(detailPayload.history.map((entry) => entry.action).reverse(), ['CRIADA', 'ENVIADA', 'DEVOLVIDA', 'EDITADA', 'REENVIADA', 'AUDITADA']);
+  assert.deepEqual(detailPayload.history.map((entry) => entry.action).reverse(), ['CRIADA', 'ENVIADA', 'EDITADA', 'DEVOLVIDA', 'EDITADA', 'REENVIADA', 'AUDITADA']);
   assert.equal(detailPayload.offenderStore.id, offenderStore.id);
   const deactivated = await request(base, `/admin/sac-options/${complaintType.id}`, adminCookie, { method: 'PUT', body: JSON.stringify({ active: false }) });
   assert.equal(deactivated.status, 200, await deactivated.clone().text());

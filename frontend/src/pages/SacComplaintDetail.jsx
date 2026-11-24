@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Pencil, RotateCcw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
-import SystemNotification from "../components/SystemNotification";
+import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 import { useAuth } from "../context/AuthContext";
 import { formatSacDate, formatSacDateTime, sacHistoryLabels, sacStatusLabels } from "../utils/sac";
 
@@ -13,6 +13,7 @@ export default function SacComplaintDetail() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { confirm } = useSystemNotification();
   const [item, setItem] = useState(null);
   const [options, setOptions] = useState({});
   const [capabilities, setCapabilities] = useState({});
@@ -49,10 +50,23 @@ export default function SacComplaintDetail() {
     finally { setSaving(false); }
   };
 
+  const remove = async () => {
+    const isPending = item.workflowStatus === "PENDENTE_AUDITORIA";
+    const accepted = await confirm(`${isPending ? "A reclamação pendente" : "O rascunho"} de ${item.customerName} e todo o seu histórico serão excluídos definitivamente.`, { title: isPending ? "Excluir reclamação pendente?" : "Excluir rascunho?", confirmLabel: "Excluir definitivamente" });
+    if (!accepted) return;
+    setSaving(true); setNotice(null);
+    try {
+      await api.delete(`/sac/complaints/${id}`);
+      navigate("/sac/reclamacoes", { replace: true, state: { message: isPending ? "Reclamação pendente excluída." : "Rascunho excluído." } });
+    } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível excluir a reclamação." }); }
+    finally { setSaving(false); }
+  };
+
   if (!item) return <section className="sac-page">{notice ? <SystemNotification variant={notice.variant}>{notice.text}</SystemNotification> : <div className="sac-loading">Carregando reclamação...</div>}</section>;
-  const canEdit = capabilities.canManage || capabilities.canAudit || (item.createdBy.id === user?.id && ["RASCUNHO", "DEVOLVIDA"].includes(item.workflowStatus));
+  const canEdit = capabilities.canManage || capabilities.canAudit || (item.createdBy.id === user?.id && ["RASCUNHO", "PENDENTE_AUDITORIA", "DEVOLVIDA"].includes(item.workflowStatus));
+  const canDelete = ["RASCUNHO", "PENDENTE_AUDITORIA"].includes(item.workflowStatus) && (capabilities.canManage || item.createdBy.id === user?.id);
   return <section className="sac-page sac-detail">
-    <header className="sac-page__header"><div><div className="sac-detail__title-line"><h1>{item.customerName}</h1><span className={`sac-status sac-status--${item.workflowStatus.toLowerCase()}`}>{sacStatusLabels[item.workflowStatus]}</span></div><p>Ocorrência de {formatSacDate(item.occurrenceDate)} · cadastrada por {item.createdBy.name}</p></div><div className="sac-page__header-actions">{canEdit && <Link className="button" to={`/sac/reclamacoes/${id}/editar`}><Pencil size={17} />Editar</Link>}<Link className="button button--ghost" to="/sac/reclamacoes"><ArrowLeft size={17} />Voltar</Link></div></header>
+    <header className="sac-page__header"><div><div className="sac-detail__title-line"><h1>{item.customerName}</h1><span className={`sac-status sac-status--${item.workflowStatus.toLowerCase()}`}>{sacStatusLabels[item.workflowStatus]}</span></div><p>Ocorrência de {formatSacDate(item.occurrenceDate)} · cadastrada por {item.createdBy.name}</p></div><div className="sac-page__header-actions">{canEdit && <Link className="button" to={`/sac/reclamacoes/${id}/editar`}><Pencil size={17} />Editar</Link>}{canDelete && <button type="button" className="button button--danger" onClick={remove} disabled={saving}><Trash2 size={17} />Excluir</button>}<Link className="button button--ghost" to="/sac/reclamacoes"><ArrowLeft size={17} />Voltar</Link></div></header>
     {notice && <SystemNotification variant={notice.variant} onDismiss={() => setNotice(null)}>{notice.text}</SystemNotification>}
     {capabilities.canAudit && auditNavigation?.total > 0 && <nav className="sac-audit-navigation" aria-label="Navegação entre reclamações pendentes"><Link className={!auditNavigation.previous ? "is-disabled" : ""} aria-disabled={!auditNavigation.previous} to={auditNavigation.previous ? `/sac/reclamacoes/${auditNavigation.previous.id}` : "#"}><ChevronLeft size={18} /><span><small>Anterior pendente</small><strong>{auditNavigation.previous?.customerName || "Nenhuma"}</strong></span></Link><div><strong>{auditNavigation.position}</strong><span>de {auditNavigation.total} pendentes</span></div><Link className={!auditNavigation.next ? "is-disabled" : ""} aria-disabled={!auditNavigation.next} to={auditNavigation.next ? `/sac/reclamacoes/${auditNavigation.next.id}` : "#"}><span><small>Próxima pendente</small><strong>{auditNavigation.next?.customerName || "Nenhuma"}</strong></span><ChevronRight size={18} /></Link></nav>}
     <section className="sac-detail__section"><h2>Dados da ocorrência</h2><div className="sac-detail__grid"><DataItem label="Nome do cliente">{item.customerName}</DataItem><DataItem label="Data">{formatSacDate(item.occurrenceDate)}</DataItem><DataItem label="Tipo de problema">{item.problemType.label}</DataItem><DataItem label="Local">{item.location.label}</DataItem><DataItem label="Loja da compra">{item.purchaseStore.label}</DataItem><DataItem label="Loja origem sugerida">{item.suggestedOriginStore.label}</DataItem><DataItem label="Loja ofensora confirmada">{item.offenderStore?.label}</DataItem><DataItem label="Status da ocorrência">{item.occurrenceStatus.label}</DataItem><DataItem label="Tipo de reclamação">{item.complaintType.label}</DataItem><DataItem label="Responsável pela tratativa">{item.treatmentOwner}</DataItem><DataItem label="Reclamação" wide>{item.complaintText}</DataItem><DataItem label="Ação realizada" wide>{item.actionTaken}</DataItem><DataItem label="Observação" wide>{item.observation}</DataItem><DataItem label="Resolução" wide>{item.resolution}</DataItem></div></section>

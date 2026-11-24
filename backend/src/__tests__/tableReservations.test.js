@@ -119,9 +119,33 @@ test('table reservation flow enforces access, unit scope and atomic check-in', a
   assert.equal(storedReservation.customerPhone, '85999991234');
   const reservationDetail = await expectJson(await request(base, `/table-reservations/${reservation.id}`, { cookie: creatorCookie }), 200);
   assert.equal(reservationDetail.customerPhone, '85999991234');
+  assert.equal((await request(base, `/table-reservations/${reservation.id}`, {
+    method: 'PUT', cookie: viewerCookie, body: { ...payload, customerName: 'Alteração indevida' },
+  })).status, 403);
+  assert.equal((await request(base, `/table-reservations/${reservation.id}`, {
+    method: 'DELETE', cookie: viewerCookie,
+  })).status, 403);
+  assert.equal((await request(base, `/table-reservations/${reservation.id}`, {
+    method: 'PUT', cookie: storeBCookie, body: { ...payload, customerName: 'Outra loja' },
+  })).status, 403);
+  const updatedReservation = await expectJson(await request(base, `/table-reservations/${reservation.id}`, {
+    method: 'PUT', cookie: creatorCookie,
+    body: { ...payload, customerName: 'Cliente Reserva Atualizada', customerEmail: 'ATUALIZADA@EXAMPLE.COM', reservationTime: '19:45' },
+  }), 200);
+  assert.equal(updatedReservation.status, 'CONFIRMADA');
+  assert.equal(updatedReservation.customerName, 'Cliente Reserva Atualizada');
+  assert.equal(updatedReservation.customerEmail, 'atualizada@example.com');
+  assert.equal(updatedReservation.reservationTime, '19:45');
+
+  const removable = await expectJson(await request(base, '/table-reservations', {
+    method: 'POST', cookie: creatorCookie, body: { ...payload, customerName: 'Cliente Excluir', reservationTime: '20:00' },
+  }), 201);
+  assert.equal((await request(base, `/table-reservations/${removable.id}`, { method: 'DELETE', cookie: creatorCookie })).status, 204);
+  assert.equal((await request(base, `/table-reservations/${removable.id}`, { cookie: creatorCookie })).status, 404);
 
   const list = await expectJson(await request(base, `/table-reservations?unitId=${storeA.id}&date=2099-11-23`, { cookie: viewerCookie }), 200);
   assert.equal(list.items.length, 1);
+  assert.equal(list.items[0].customerName, 'Cliente Reserva Atualizada');
   assert.equal(Object.hasOwn(list.items[0], 'customerPhone'), false);
   assert.deepEqual(list.summary, { reservations: 1, expectedPeople: 8, checkedInPeople: 0 });
   assert.equal((await request(base, `/table-reservations?unitId=${storeB.id}&date=2099-11-23`, { cookie: storeACookie })).status, 403);
@@ -142,6 +166,12 @@ test('table reservation flow enforces access, unit scope and atomic check-in', a
   assert.equal(checkedIn.status, 'COMPARECEU');
   assert.equal(checkedIn.checkedInBy.id, storeUserA.id);
   assert.deepEqual(checkedIn.tables.map((table) => table.id).sort((a, b) => a - b), [tableA1.id, tableA2.id].sort((a, b) => a - b));
+  assert.equal((await request(base, `/table-reservations/${reservation.id}`, {
+    method: 'PUT', cookie: creatorCookie, body: payload,
+  })).status, 409);
+  assert.equal((await request(base, `/table-reservations/${reservation.id}`, {
+    method: 'DELETE', cookie: creatorCookie,
+  })).status, 409);
   assert.equal((await request(base, `/table-reservations/${reservation.id}/check-in`, {
     method: 'POST', cookie: adminCookie, body: { tableIds: [tableA1.id] },
   })).status, 409);

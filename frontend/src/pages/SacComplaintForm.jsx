@@ -49,7 +49,7 @@ export default function SacComplaintForm() {
         navigate(`/sac/reclamacoes/${response.data.id}`, { replace: true, state: { message: "Reclamação enviada para auditoria." } });
       } else {
         setExisting(response.data);
-        setNotice({ variant: "success", text: "Rascunho salvo com sucesso." });
+        setNotice({ variant: "success", text: response.data.workflowStatus === "RASCUNHO" ? "Rascunho salvo com sucesso." : "Alterações salvas com sucesso." });
         if (!id) navigate(`/sac/reclamacoes/${response.data.id}/editar`, { replace: true });
       }
     } catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível salvar a reclamação." }); }

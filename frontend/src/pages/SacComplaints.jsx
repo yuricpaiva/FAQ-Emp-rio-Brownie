@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, FileWarning, Pencil, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import api from "../services/api";
 import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 import { formatSacDate, sacStatusLabels } from "../utils/sac";
@@ -18,6 +18,7 @@ function OptionFilter({ value, onChange, options, allLabel = "Todos" }) {
 
 export default function SacComplaints() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { confirm } = useSystemNotification();
   const [filters, setFilters] = useState(emptyFilters);
@@ -26,7 +27,7 @@ export default function SacComplaints() {
   const [result, setResult] = useState({ items: [], page: 1, total: 0, totalPages: 1, pendingCount: 0 });
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState(null);
+  const [notice, setNotice] = useState(location.state?.message ? { variant: "success", text: location.state.message } : null);
   const query = useMemo(() => Object.fromEntries(Object.entries({ ...filters, page, pageSize: 50 }).filter(([, value]) => value !== "")), [filters, page]);
   const set = (field, value) => { setPage(1); setFilters((current) => ({ ...current, [field]: value })); };
 
@@ -41,14 +42,15 @@ export default function SacComplaints() {
   useEffect(() => { const timer = window.setTimeout(load, 220); return () => window.clearTimeout(timer); }, [load]);
 
   const remove = async (item) => {
-    const accepted = await confirm(`O rascunho de ${item.customerName} será excluído definitivamente.`, { title: "Excluir rascunho?", confirmLabel: "Excluir" });
+    const isPending = item.workflowStatus === "PENDENTE_AUDITORIA";
+    const accepted = await confirm(`${isPending ? "A reclamação pendente" : "O rascunho"} de ${item.customerName} e todo o seu histórico serão excluídos definitivamente.`, { title: isPending ? "Excluir reclamação pendente?" : "Excluir rascunho?", confirmLabel: "Excluir definitivamente" });
     if (!accepted) return;
-    try { await api.delete(`/sac/complaints/${item.id}`); setNotice({ variant: "success", text: "Rascunho excluído." }); load(); }
-    catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível excluir o rascunho." }); }
+    try { await api.delete(`/sac/complaints/${item.id}`); setNotice({ variant: "success", text: isPending ? "Reclamação pendente excluída." : "Rascunho excluído." }); load(); }
+    catch (error) { setNotice({ variant: "error", text: error.response?.data?.error || "Não foi possível excluir a reclamação." }); }
   };
   const textFilter = (field, placeholder) => <div className="sac-filter-search"><Search size={14} /><input className="faq-table-filter" value={filters[field]} onChange={(event) => set(field, event.target.value)} placeholder={placeholder} /></div>;
-  const canEdit = (item) => capabilities.canManage || capabilities.canAudit || (item.createdBy.id === user?.id && ["RASCUNHO", "DEVOLVIDA"].includes(item.workflowStatus));
-  const canDelete = (item) => item.workflowStatus === "RASCUNHO" && (capabilities.canManage || item.createdBy.id === user?.id);
+  const canEdit = (item) => capabilities.canManage || capabilities.canAudit || (item.createdBy.id === user?.id && ["RASCUNHO", "PENDENTE_AUDITORIA", "DEVOLVIDA"].includes(item.workflowStatus));
+  const canDelete = (item) => ["RASCUNHO", "PENDENTE_AUDITORIA"].includes(item.workflowStatus) && (capabilities.canManage || item.createdBy.id === user?.id);
   const activeCount = Object.values(filters).filter(Boolean).length;
 
   return <section className="sac-page">

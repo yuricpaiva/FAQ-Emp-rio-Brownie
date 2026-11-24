@@ -172,9 +172,7 @@ async function listReservations(query, user) {
   };
 }
 
-async function createReservation(data, user) {
-  const capabilities = await capabilitiesFor(user);
-  if (!capabilities.canCreate) throw new TableReservationError(403, 'Você não possui permissão para criar reservas.');
+async function reservationData(data, user, { currentReservationAt = null } = {}) {
   const store = await getActiveStore(data?.unitId, user);
   const customerName = requiredText(data?.customerName, 'Nome completo', 160);
   const customerEmail = requiredText(data?.customerEmail, 'E-mail', 254).toLowerCase();
@@ -189,12 +187,57 @@ async function createReservation(data, user) {
     throw new TableReservationError(400, 'A quantidade de pessoas deve ser um número inteiro entre 1 e 500.');
   }
   const reservationAt = localInstant(String(data?.reservationDate || ''), String(data?.reservationTime || ''));
-  if (reservationAt <= new Date()) throw new TableReservationError(400, 'Não é possível criar uma reserva no passado.');
+  const preservesExistingPastTime = currentReservationAt && reservationAt.getTime() === currentReservationAt.getTime();
+  if (reservationAt <= new Date() && !preservesExistingPastTime) throw new TableReservationError(400, 'Não é possível agendar uma reserva no passado.');
+  return { productionStoreId: store.id, customerName, customerEmail, customerPhone, reservationAt, peopleCount };
+}
+
+async function createReservation(data, user) {
+  const capabilities = await capabilitiesFor(user);
+  if (!capabilities.canCreate) throw new TableReservationError(403, 'Você não possui permissão para criar reservas.');
+  const normalized = await reservationData(data, user);
   const created = await prisma.tableReservation.create({
-    data: { productionStoreId: store.id, customerName, customerEmail, customerPhone, reservationAt, peopleCount, createdById: user.id },
+    data: { ...normalized, createdById: user.id },
     include: reservationInclude,
   });
   return serializeReservation(created);
+}
+
+async function mutableReservation(id, user) {
+  const reservationId = positiveId(id, 'Reserva');
+  const current = await prisma.tableReservation.findUnique({
+    where: { id: reservationId },
+    select: { id: true, productionStoreId: true, reservationAt: true, status: true, checkedInAt: true },
+  });
+  if (!current) throw new TableReservationError(404, 'Reserva não encontrada.');
+  const { capabilities } = await assertStoreAccess(current.productionStoreId, user);
+  if (!capabilities.canCreate) throw new TableReservationError(403, 'Você não possui permissão para alterar reservas.');
+  if (current.status !== STATUS.CONFIRMED || current.checkedInAt) {
+    throw new TableReservationError(409, 'Esta reserva não pode mais ser alterada porque o comparecimento já foi confirmado.');
+  }
+  return current;
+}
+
+async function updateReservation(id, data, user) {
+  const current = await mutableReservation(id, user);
+  const normalized = await reservationData(data, user, { currentReservationAt: current.reservationAt });
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.tableReservation.updateMany({
+      where: { id: current.id, status: STATUS.CONFIRMED, checkedInAt: null },
+      data: normalized,
+    });
+    if (result.count !== 1) throw new TableReservationError(409, 'O comparecimento foi confirmado durante a edição. Recarregue a reserva.');
+    return tx.tableReservation.findUnique({ where: { id: current.id }, include: reservationInclude });
+  });
+  return serializeReservation(updated, { includeCustomerPhone: true });
+}
+
+async function deleteReservation(id, user) {
+  const current = await mutableReservation(id, user);
+  const result = await prisma.tableReservation.deleteMany({
+    where: { id: current.id, status: STATUS.CONFIRMED, checkedInAt: null },
+  });
+  if (result.count !== 1) throw new TableReservationError(409, 'O comparecimento foi confirmado antes da exclusão. Recarregue a reserva.');
 }
 
 async function getReservation(id, user) {
@@ -334,6 +377,6 @@ async function saveTable(data, id) {
 
 module.exports = {
   STATUS, SAO_PAULO_TIME_ZONE, TableReservationError, capabilitiesFor, listUnits, listReservations,
-  createReservation, getReservation, listTables, checkInReservation, getAccessSettings,
+  createReservation, updateReservation, deleteReservation, getReservation, listTables, checkInReservation, getAccessSettings,
   updateAccessSettings, adminListTables, saveTable,
 };

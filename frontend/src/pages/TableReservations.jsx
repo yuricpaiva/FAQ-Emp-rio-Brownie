@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, ChevronRight, Clock3, Mail, MapPin, Phone, Plus, Users, Utensils, X } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, Clock3, Mail, MapPin, Pencil, Phone, Plus, Save, Trash2, Users, Utensils, X } from "lucide-react";
 import AccessibleDialog from "../components/AccessibleDialog";
-import SystemNotification from "../components/SystemNotification";
+import SystemNotification, { useSystemNotification } from "../components/SystemNotification";
 import api from "../services/api";
 import "../styles/table-reservations.css";
 
@@ -46,6 +46,20 @@ function SummaryStrip({ summary }) {
   </section>;
 }
 
+function ReservationFormFields({ form, units, update, minDate }) {
+  return <>
+    <div className="table-reservation-form__context">
+      <label><span>Unidade</span><select value={form.unitId} onChange={(event) => update("unitId", event.target.value)} required><option value="">Selecione</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
+      <label><span>Data</span><input type="date" min={minDate} value={form.reservationDate} onChange={(event) => update("reservationDate", event.target.value)} required /></label>
+      <label><span>Horário</span><input type="time" value={form.reservationTime} onChange={(event) => update("reservationTime", event.target.value)} required /></label>
+    </div>
+    <label><span>Nome completo</span><input maxLength="160" autoComplete="name" value={form.customerName} onChange={(event) => update("customerName", event.target.value)} required /></label>
+    <label><span>E-mail</span><input type="email" maxLength="254" autoComplete="email" value={form.customerEmail} onChange={(event) => update("customerEmail", event.target.value)} required /></label>
+    <label><span>Número do cliente</span><input type="tel" inputMode="tel" maxLength="15" autoComplete="tel" placeholder="(85) 99999-9999" value={form.customerPhone} onChange={(event) => update("customerPhone", maskBrazilianPhone(event.target.value))} required /></label>
+    <label><span>Quantidade de pessoas</span><input type="number" min="1" max="500" inputMode="numeric" value={form.peopleCount} onChange={(event) => update("peopleCount", event.target.value)} required /></label>
+  </>;
+}
+
 function NewReservationDialog({ units, initialUnitId, initialDate, onClose, onCreated }) {
   const [form, setForm] = useState({
     unitId: String(initialUnitId || ""), reservationDate: initialDate, reservationTime: "",
@@ -74,26 +88,20 @@ function NewReservationDialog({ units, initialUnitId, initialDate, onClose, onCr
     </div>
     <form className="table-reservation-form" onSubmit={submit}>
       {error && <SystemNotification variant="error">{error}</SystemNotification>}
-      <div className="table-reservation-form__context">
-        <label><span>Unidade</span><select value={form.unitId} onChange={(event) => update("unitId", event.target.value)} required><option value="">Selecione</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
-        <label><span>Data</span><input type="date" min={localDateValue()} value={form.reservationDate} onChange={(event) => update("reservationDate", event.target.value)} required /></label>
-        <label><span>Horário</span><input type="time" value={form.reservationTime} onChange={(event) => update("reservationTime", event.target.value)} required /></label>
-      </div>
-      <label><span>Nome completo</span><input maxLength="160" autoComplete="name" value={form.customerName} onChange={(event) => update("customerName", event.target.value)} required /></label>
-      <label><span>E-mail</span><input type="email" maxLength="254" autoComplete="email" value={form.customerEmail} onChange={(event) => update("customerEmail", event.target.value)} required /></label>
-      <label><span>Número do cliente</span><input type="tel" inputMode="tel" maxLength="15" autoComplete="tel" placeholder="(85) 99999-9999" value={form.customerPhone} onChange={(event) => update("customerPhone", maskBrazilianPhone(event.target.value))} required /></label>
-      <label><span>Quantidade de pessoas</span><input type="number" min="1" max="500" inputMode="numeric" value={form.peopleCount} onChange={(event) => update("peopleCount", event.target.value)} required /></label>
+      <ReservationFormFields form={form} units={units} update={update} minDate={localDateValue()} />
       <div className="table-reservation-form__actions"><button type="button" className="button button--ghost" onClick={onClose}>Cancelar</button><button className="button" disabled={saving}>{saving ? "Salvando..." : "Criar reserva"}</button></div>
     </form>
   </AccessibleDialog>;
 }
 
-function ReservationDetailDialog({ reservationId, capabilities, onClose, onChanged }) {
+function ReservationDetailDialog({ reservationId, capabilities, units, onClose, onChanged }) {
+  const { confirm } = useSystemNotification();
   const [reservation, setReservation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("detail");
   const [tables, setTables] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [editForm, setEditForm] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -112,19 +120,51 @@ function ReservationDetailDialog({ reservationId, capabilities, onClose, onChang
     catch (requestError) { setError(requestError.response?.data?.error || "Não foi possível carregar as mesas."); }
   };
 
+  const openEdit = () => {
+    setError(""); setMode("edit");
+    setEditForm({
+      unitId: String(reservation.unitId), reservationDate: reservation.reservationDate, reservationTime: reservation.reservationTime,
+      customerName: reservation.customerName, customerEmail: reservation.customerEmail,
+      customerPhone: maskBrazilianPhone(reservation.customerPhone), peopleCount: String(reservation.peopleCount),
+    });
+  };
+
+  const updateEdit = (field, value) => setEditForm((current) => ({ ...current, [field]: value }));
+  const saveEdit = async (event) => {
+    event.preventDefault(); setSaving(true); setError("");
+    try {
+      const response = await api.put(`/table-reservations/${reservation.id}`, {
+        ...editForm, unitId: Number(editForm.unitId), peopleCount: Number(editForm.peopleCount),
+      });
+      setReservation(response.data); setMode("detail"); await onChanged("updated", response.data);
+    } catch (requestError) { setError(requestError.response?.data?.error || "Não foi possível atualizar a reserva."); }
+    finally { setSaving(false); }
+  };
+
+  const remove = async () => {
+    const accepted = await confirm(`A reserva de ${reservation.customerName} será excluída definitivamente.`, { title: "Excluir reserva?", confirmLabel: "Excluir definitivamente", cancelLabel: "Manter reserva" });
+    if (!accepted) return;
+    setSaving(true); setError("");
+    try {
+      await api.delete(`/table-reservations/${reservation.id}`);
+      await onChanged("deleted", reservation); onClose();
+    } catch (requestError) { setError(requestError.response?.data?.error || "Não foi possível excluir a reserva."); }
+    finally { setSaving(false); }
+  };
+
   const toggleTable = (id) => setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
   const confirmCheckIn = async (event) => {
     event.preventDefault(); setSaving(true); setError("");
     try {
       const response = await api.post(`/table-reservations/${reservation.id}/check-in`, { tableIds: selectedIds });
-      setReservation(response.data); setMode("detail"); onChanged(response.data);
+      setReservation(response.data); setMode("detail"); await onChanged("checked-in", response.data);
     } catch (requestError) { setError(requestError.response?.data?.error || "Não foi possível confirmar o comparecimento."); }
     finally { setSaving(false); }
   };
 
   return <AccessibleDialog labelId="table-reservation-detail-title" onClose={onClose} className="table-reservation-dialog table-reservation-detail-dialog" backdropClassName="table-reservation-backdrop">
     <div className="modal-card__header">
-      <div><h2 id="table-reservation-detail-title">{mode === "check-in" ? "Confirmar comparecimento" : "Detalhes da reserva"}</h2>{reservation && <p>{reservation.unit.name} · {formatDate(reservation.reservationDate)} às {reservation.reservationTime}</p>}</div>
+      <div><h2 id="table-reservation-detail-title">{mode === "check-in" ? "Confirmar comparecimento" : mode === "edit" ? "Editar reserva" : "Detalhes da reserva"}</h2>{reservation && <p>{reservation.unit.name} · {formatDate(reservation.reservationDate)} às {reservation.reservationTime}</p>}</div>
       <button type="button" onClick={onClose} aria-label="Fechar detalhes"><X size={19} /></button>
     </div>
     {error && <SystemNotification variant="error">{error}</SystemNotification>}
@@ -151,8 +191,12 @@ function ReservationDetailDialog({ reservationId, capabilities, onClose, onChang
         {reservation.checkedInAt && <div><dt>Comparecimento</dt><dd>{formatDateTime(reservation.checkedInAt)}</dd></div>}
         {reservation.checkedInBy && <div><dt>Confirmado por</dt><dd>{reservation.checkedInBy.name}</dd></div>}
       </dl>
-      <div className="table-reservation-detail__actions"><button type="button" className="button button--ghost" onClick={onClose}>Fechar</button>{reservation.status === "CONFIRMADA" && capabilities.canCheckIn && <button type="button" className="button" onClick={openCheckIn}>Confirmar comparecimento</button>}</div>
+      <div className="table-reservation-detail__actions"><button type="button" className="button button--ghost" onClick={onClose}>Fechar</button>{reservation.status === "CONFIRMADA" && capabilities.canCreate && <><button type="button" className="button button--danger" onClick={remove} disabled={saving}><Trash2 size={16} />Excluir</button><button type="button" className="button button--ghost" onClick={openEdit}><Pencil size={16} />Editar</button></>}{reservation.status === "CONFIRMADA" && capabilities.canCheckIn && <button type="button" className="button" onClick={openCheckIn}>Confirmar comparecimento</button>}</div>
     </>}
+    {!loading && reservation && mode === "edit" && editForm && <form className="table-reservation-form" onSubmit={saveEdit}>
+      <ReservationFormFields form={editForm} units={units} update={updateEdit} minDate={reservation.reservationDate < localDateValue() ? reservation.reservationDate : localDateValue()} />
+      <div className="table-reservation-form__actions"><button type="button" className="button button--ghost" onClick={() => { setMode("detail"); setError(""); }}>Cancelar</button><button className="button" disabled={saving}><Save size={16} />{saving ? "Salvando..." : "Salvar alterações"}</button></div>
+    </form>}
     {!loading && reservation && mode === "check-in" && <form className="table-reservation-checkin" onSubmit={confirmCheckIn}>
       <p>Selecione uma ou mais mesas usadas por <strong>{reservation.customerName}</strong>.</p>
       <div className="table-reservation-table-picker">
@@ -201,7 +245,15 @@ export default function TableReservations() {
   const selectedUnit = useMemo(() => units.find((unit) => String(unit.id) === String(unitId)), [units, unitId]);
 
   const created = async () => { setShowNew(false); setNotice({ variant: "success", text: "Reserva criada e confirmada com sucesso." }); await loadReservations(); };
-  const checkedIn = async () => { setNotice({ variant: "success", text: "Comparecimento confirmado e mesas registradas." }); await loadReservations(); };
+  const changed = async (action) => {
+    const messages = {
+      "checked-in": "Comparecimento confirmado e mesas registradas.",
+      updated: "Reserva atualizada com sucesso.",
+      deleted: "Reserva excluída com sucesso.",
+    };
+    setNotice({ variant: "success", text: messages[action] });
+    await loadReservations();
+  };
 
   return <section className="table-reservations-page">
     <header className="table-reservations-header">
@@ -228,6 +280,6 @@ export default function TableReservations() {
     </section>
 
     {showNew && <NewReservationDialog units={units} initialUnitId={unitId} initialDate={date} onClose={() => setShowNew(false)} onCreated={created} />}
-    {selectedId && capabilities && <ReservationDetailDialog reservationId={selectedId} capabilities={capabilities} onClose={() => setSelectedId(null)} onChanged={checkedIn} />}
+    {selectedId && capabilities && <ReservationDetailDialog reservationId={selectedId} capabilities={capabilities} units={units} onClose={() => setSelectedId(null)} onChanged={changed} />}
   </section>;
 }
