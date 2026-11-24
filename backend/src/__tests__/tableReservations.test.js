@@ -117,9 +117,12 @@ test('table reservation flow enforces access, unit scope and atomic check-in', a
   assert.deepEqual(reservation.tables, []);
   const storedReservation = await prisma.tableReservation.findUnique({ where: { id: reservation.id }, select: { customerPhone: true } });
   assert.equal(storedReservation.customerPhone, '85999991234');
+  const reservationDetail = await expectJson(await request(base, `/table-reservations/${reservation.id}`, { cookie: creatorCookie }), 200);
+  assert.equal(reservationDetail.customerPhone, '85999991234');
 
   const list = await expectJson(await request(base, `/table-reservations?unitId=${storeA.id}&date=2099-11-23`, { cookie: viewerCookie }), 200);
   assert.equal(list.items.length, 1);
+  assert.equal(Object.hasOwn(list.items[0], 'customerPhone'), false);
   assert.deepEqual(list.summary, { reservations: 1, expectedPeople: 8, checkedInPeople: 0 });
   assert.equal((await request(base, `/table-reservations?unitId=${storeB.id}&date=2099-11-23`, { cookie: storeACookie })).status, 403);
   assert.equal((await request(base, `/table-reservations/${reservation.id}`, { cookie: storeBCookie })).status, 403);

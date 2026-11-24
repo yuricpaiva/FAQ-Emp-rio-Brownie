@@ -113,7 +113,7 @@ function serializeTable(table) {
   };
 }
 
-function serializeReservation(item) {
+function serializeReservation(item, { includeCustomerPhone = false } = {}) {
   const local = formatLocalParts(item.reservationAt);
   return {
     id: item.id,
@@ -121,6 +121,7 @@ function serializeReservation(item) {
     unit: { id: item.productionStore.id, name: item.productionStore.displayName },
     customerName: item.customerName,
     customerEmail: item.customerEmail,
+    ...(includeCustomerPhone ? { customerPhone: item.customerPhone } : {}),
     reservationAt: item.reservationAt,
     reservationDate: local.date,
     reservationTime: local.time,
@@ -201,7 +202,7 @@ async function getReservation(id, user) {
   const item = await prisma.tableReservation.findUnique({ where: { id: reservationId }, include: reservationInclude });
   if (!item) throw new TableReservationError(404, 'Reserva não encontrada.');
   await assertStoreAccess(item.productionStoreId, user);
-  return serializeReservation(item);
+  return serializeReservation(item, { includeCustomerPhone: true });
 }
 
 async function listTables(query, user) {
@@ -241,7 +242,7 @@ async function checkInReservation(id, data, user) {
       });
       return tx.tableReservation.findUnique({ where: { id: reservationId }, include: reservationInclude });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 5000, timeout: 5000 });
-    return serializeReservation(checkedIn);
+    return serializeReservation(checkedIn, { includeCustomerPhone: true });
   } catch (error) {
     if (error instanceof TableReservationError) throw error;
     if (error?.code === 'P2002') throw new TableReservationError(409, 'O comparecimento desta reserva já foi confirmado.');

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, ChevronRight, Clock3, Mail, MapPin, Plus, Users, Utensils, X } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, Clock3, Mail, MapPin, Phone, Plus, Users, Utensils, X } from "lucide-react";
 import AccessibleDialog from "../components/AccessibleDialog";
 import SystemNotification from "../components/SystemNotification";
 import api from "../services/api";
@@ -131,7 +131,14 @@ function ReservationDetailDialog({ reservationId, capabilities, onClose, onChang
     {loading && <div className="table-reservation-dialog__loading">Carregando detalhes...</div>}
     {!loading && reservation && mode === "detail" && <>
       <div className="table-reservation-detail__lead">
-        <div><span>Cliente</span><strong>{reservation.customerName}</strong><a href={`mailto:${reservation.customerEmail}`}><Mail size={15} />{reservation.customerEmail}</a></div>
+        <div>
+          <span>Cliente</span>
+          <strong>{reservation.customerName}</strong>
+          <a href={`mailto:${reservation.customerEmail}`}><Mail size={15} />{reservation.customerEmail}</a>
+          {reservation.customerPhone
+            ? <a href={`tel:${reservation.customerPhone}`}><Phone size={15} />{maskBrazilianPhone(reservation.customerPhone)}</a>
+            : <span className="table-reservation-detail__contact-empty"><Phone size={15} />Telefone não informado</span>}
+        </div>
         <span className={`table-reservation-status table-reservation-status--${reservation.status.toLowerCase()}`}>{statusLabels[reservation.status] || reservation.status}</span>
       </div>
       <dl className="table-reservation-detail__grid">

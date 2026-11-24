@@ -108,6 +108,7 @@
 .table-reservation-detail__lead > div > span { color: #806559; font-size: .67rem; font-weight: 850; text-transform: uppercase; }
 .table-reservation-detail__lead strong { color: #3f291f; font-size: 1.08rem; overflow-wrap: anywhere; }
 .table-reservation-detail__lead a { display: inline-flex; align-items: center; gap: .35rem; min-width: 0; color: #7d4c31; font-size: .75rem; overflow-wrap: anywhere; text-underline-offset: 3px; }
+.table-reservation-detail__contact-empty { display: inline-flex; align-items: center; gap: .35rem; color: #80675b !important; font-size: .75rem !important; font-weight: 650 !important; text-transform: none !important; }
 .table-reservation-detail__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 1rem 1.15rem 0; border-block: 1px solid rgba(107,70,52,.12); }
 .table-reservation-detail__grid > div { padding: .75rem .2rem; border-bottom: 1px solid rgba(107,70,52,.09); }
 .table-reservation-detail__grid > div:nth-child(odd) { padding-right: .85rem; }
