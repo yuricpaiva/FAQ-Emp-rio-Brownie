@@ -4,7 +4,7 @@ export const categoryIcons = {
   ti: "/icon-ti.svg",
   "controladoria-financeiro": "/icon-controladoria-financeiro.svg",
   comercial: "/icon-comercial.svg",
-  marketing: "/icon-marketing.svg",
+  marketing: "/icon-marketing.svg?v=e2600a2",
   "producao-expedicao": "/icon-producao-expedicao.svg",
   default: "/icon-ti.svg",
 };
